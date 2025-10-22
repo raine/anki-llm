@@ -6,21 +6,13 @@ import pRetry from 'p-retry';
 import pLimit from 'p-limit';
 import cliProgress from 'cli-progress';
 import chalk from 'chalk';
+import { parseConfig, type Config, type SupportedChatModel } from './config.js';
 
-// Supported models and their pricing
+// Model pricing
 type ModelPricing = {
   inputCostPerMillion: number;
   outputCostPerMillion: number;
 };
-
-type SupportedChatModel =
-  | 'gpt-4.1'
-  | 'gpt-4o'
-  | 'gpt-4o-mini'
-  | 'gpt-5-nano'
-  | 'gemini-2.0-flash'
-  | 'gemini-2.5-flash'
-  | 'gemini-2.5-flash-lite-preview-06-17';
 
 const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
   'gpt-4.1': {
@@ -80,31 +72,8 @@ const CliArgs = z.tuple([
   z.string().min(1, 'Input file is required'),
   z.string().min(1, 'Output file is required'),
   CsvFieldName,
-  z.string().min(1, 'Prompt template is required'),
+  z.string().min(1, 'Prompt file is required'),
 ]);
-
-// Configuration schema
-const SupportedModelSchema = z.enum([
-  'gpt-4.1',
-  'gpt-4o',
-  'gpt-4o-mini',
-  'gpt-5-nano',
-  'gemini-2.0-flash',
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite-preview-06-17',
-]);
-
-const Config = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
-  apiBaseUrl: z.string().optional(),
-  model: SupportedModelSchema.default('gpt-4o-mini'),
-  batchSize: z.number().int().positive().default(5),
-  dryRun: z.boolean().default(false),
-  maxTokens: z.number().int().positive().optional(),
-  temperature: z.number().min(0).max(2).default(0.3),
-  retries: z.number().int().min(0).default(3),
-});
-type Config = z.infer<typeof Config>;
 
 // Parse and validate CLI arguments
 function parseCliArgs(): [string, string, CsvFieldName, string] {
@@ -129,7 +98,9 @@ function parseCliArgs(): [string, string, CsvFieldName, string] {
       '  OPENAI_API_BASE or API_BASE_URL - Optional: Base URL for API',
     );
     console.error('  MODEL - Optional: Model to use (default: gpt-4o-mini)');
-    console.error(`    Supported: ${SupportedModelSchema.options.join(', ')}`);
+    console.error(
+      '    Supported: gpt-4.1, gpt-4o, gpt-4o-mini, gpt-5-nano, gemini-2.0-flash, gemini-2.5-flash, gemini-2.5-flash-lite-preview-06-17',
+    );
     console.error(
       '  BATCH_SIZE - Optional: Number of concurrent requests (default: 5)',
     );
@@ -146,121 +117,14 @@ function parseCliArgs(): [string, string, CsvFieldName, string] {
     process.exit(1);
   }
 
-  try {
-    return CliArgs.parse(args);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      console.error(chalk.red('Invalid arguments:'));
-      for (const issue of error.issues) {
-        console.error(
-          chalk.red(`  - ${issue.path.join('.')}: ${issue.message}`),
-        );
-      }
-    }
-    process.exit(1);
-  }
-}
-
-/**
- * Determines the provider and base URL based on the model name
- */
-function getProviderConfig(model: SupportedChatModel): {
-  baseURL?: string;
-  recommendedApiKeyEnv: string;
-} {
-  if (model.startsWith('gpt-')) {
-    return {
-      recommendedApiKeyEnv: 'OPENAI_API_KEY',
-    };
-  } else if (model.startsWith('gemini-')) {
-    return {
-      baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-      recommendedApiKeyEnv: 'GEMINI_API_KEY',
-    };
-  }
-  return {
-    recommendedApiKeyEnv: 'OPENAI_API_KEY',
-  };
-}
-
-// Parse and validate configuration from environment
-function parseConfig(): Config {
-  const dryRun = process.env.DRY_RUN === 'true';
-
-  // Get model first to determine which API key to look for
-  const modelStr = process.env.MODEL || 'gpt-4o-mini';
-  let model: SupportedChatModel;
-  try {
-    model = SupportedModelSchema.parse(modelStr);
-  } catch {
-    console.error(chalk.red(`Invalid MODEL: ${modelStr}`));
-    console.error(
-      chalk.yellow(
-        `Supported models: ${SupportedModelSchema.options.join(', ')}`,
-      ),
-    );
+  const result = CliArgs.safeParse(args);
+  if (!result.success) {
+    console.error(chalk.red('❌ Invalid arguments:'));
+    console.error(z.prettifyError(result.error));
     process.exit(1);
   }
 
-  const providerConfig = getProviderConfig(model);
-
-  // Check for API key
-  const apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
-
-  // Skip API key check in dry run mode
-  if (!dryRun && !apiKey) {
-    console.error(
-      chalk.red(
-        'Error: OPENAI_API_KEY or GEMINI_API_KEY environment variable is required',
-      ),
-    );
-    console.error(
-      chalk.yellow(
-        `Tip: For model '${model}', set ${providerConfig.recommendedApiKeyEnv}`,
-      ),
-    );
-    console.error(
-      chalk.yellow('Or set DRY_RUN=true to preview without an API key'),
-    );
-    process.exit(1);
-  }
-
-  // Determine base URL: explicit override > provider default > undefined
-  const apiBaseUrl =
-    process.env.OPENAI_API_BASE ||
-    process.env.API_BASE_URL ||
-    providerConfig.baseURL;
-
-  try {
-    return Config.parse({
-      apiKey: apiKey || 'dummy-key-for-dry-run',
-      apiBaseUrl,
-      model,
-      batchSize: process.env.BATCH_SIZE
-        ? parseInt(process.env.BATCH_SIZE, 10)
-        : undefined,
-      dryRun,
-      maxTokens: process.env.MAX_TOKENS
-        ? parseInt(process.env.MAX_TOKENS, 10)
-        : undefined,
-      temperature: process.env.TEMPERATURE
-        ? parseFloat(process.env.TEMPERATURE)
-        : undefined,
-      retries: process.env.RETRIES
-        ? parseInt(process.env.RETRIES, 10)
-        : undefined,
-    });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      console.error(chalk.red('Invalid configuration:'));
-      for (const issue of error.issues) {
-        console.error(
-          chalk.red(`  - ${issue.path.join('.')}: ${issue.message}`),
-        );
-      }
-    }
-    process.exit(1);
-  }
+  return result.data;
 }
 
 /**
@@ -564,13 +428,13 @@ async function main(): Promise<void> {
 // Run main and handle errors
 main().catch((error) => {
   if (error instanceof Error) {
-    console.error(chalk.red(`\n✗ Error: ${error.message}`));
+    console.error(chalk.red(`\n❌ Error: ${error.message}`));
     if (error instanceof z.ZodError) {
       console.error(chalk.red('Validation details:'));
-      console.error(z.flattenError(error));
+      console.error(z.prettifyError(error));
     }
   } else {
-    console.error(chalk.red('\n✗ An unknown error occurred:'), error);
+    console.error(chalk.red('\n❌ An unknown error occurred:'), error);
   }
   process.exit(1);
 });
