@@ -102,7 +102,6 @@ const Config = z.object({
   dryRun: z.boolean().default(false),
   maxTokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2).default(0.3),
-  systemPrompt: z.string().optional(),
   retries: z.number().int().min(0).default(3),
 });
 type Config = z.infer<typeof Config>;
@@ -137,9 +136,6 @@ function parseCliArgs(): [string, string, CsvFieldName, string] {
     console.error('  MAX_TOKENS - Optional: Maximum tokens per completion');
     console.error(
       '  TEMPERATURE - Optional: Temperature for sampling (default: 0.3)',
-    );
-    console.error(
-      '  SYSTEM_PROMPT - Optional: System message to include before user prompt',
     );
     console.error(
       '  RETRIES - Optional: Number of retries on failure (default: 3)',
@@ -250,7 +246,6 @@ function parseConfig(): Config {
       temperature: process.env.TEMPERATURE
         ? parseFloat(process.env.TEMPERATURE)
         : undefined,
-      systemPrompt: process.env.SYSTEM_PROMPT,
       retries: process.env.RETRIES
         ? parseInt(process.env.RETRIES, 10)
         : undefined,
@@ -294,22 +289,14 @@ async function processRow(
 ): Promise<string> {
   const prompt = fillTemplate(promptTemplate, row);
 
-  // Build messages array - only include system prompt if provided
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-  if (config.systemPrompt) {
-    messages.push({
-      role: 'system',
-      content: config.systemPrompt,
-    });
-  }
-  messages.push({
-    role: 'user',
-    content: prompt,
-  });
-
   const response = await client.chat.completions.create({
     model: config.model,
-    messages,
+    messages: [
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
     temperature: config.temperature,
     ...(config.maxTokens && { max_tokens: config.maxTokens }),
   });
