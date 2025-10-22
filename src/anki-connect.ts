@@ -57,7 +57,7 @@ export async function ankiRequest<
     return validatedResponse.result;
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('Zod validation error:', error.flatten());
+      console.error('Zod validation error:', z.flattenError(error));
       throw new Error('AnkiConnect response validation failed.');
     }
     if (error instanceof Error && error.message.includes('fetch')) {

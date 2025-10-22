@@ -112,7 +112,7 @@ async function exportDeckToCsv(): Promise<void> {
     if (error instanceof Error) {
       console.log(`\n✗ Error: ${error.message}`);
       if (error instanceof z.ZodError) {
-        console.log('Validation details:', error.flatten());
+        console.log('Validation details:', z.flattenError(error));
       }
     } else {
       console.log('\n✗ An unknown error occurred:', error);
