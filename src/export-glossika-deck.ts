@@ -1,6 +1,9 @@
 import { writeFile } from 'fs/promises';
 import { z } from 'zod';
 import { ankiRequest, NoteInfo } from './anki-connect.js';
+import * as path from 'path';
+import * as yaml from 'js-yaml';
+import Papa from 'papaparse';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
@@ -19,40 +22,22 @@ type CsvRow = {
 };
 
 /**
- * Converts an array of rows to CSV format.
+ * Converts an array of rows to the appropriate format based on file extension.
  */
-function rowsToCsv(rows: CsvRow[]): string {
-  const fieldNames: (keyof CsvRow)[] = [
-    'id',
-    'english',
-    'japanese',
-    'ka',
-    'ROM',
-    'explanation',
-  ];
+function serializeRows(rows: CsvRow[], filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
 
-  // CSV header
-  const header = fieldNames.join(',');
-
-  // CSV rows
-  const csvRows = rows.map((row) => {
-    return fieldNames
-      .map((field) => {
-        const value = row[field];
-        // Escape quotes and wrap in quotes if the value contains comma, quote, or newline
-        if (
-          value.includes(',') ||
-          value.includes('"') ||
-          value.includes('\n')
-        ) {
-          return `"${value.replace(/"/g, '""')}"`;
-        }
-        return value;
-      })
-      .join(',');
-  });
-
-  return [header, ...csvRows].join('\n');
+  if (ext === '.yaml' || ext === '.yml') {
+    // Use js-yaml with lineWidth: -1 to prevent line wrapping
+    return yaml.dump(rows, { lineWidth: -1 });
+  } else if (ext === '.csv') {
+    // Use papaparse for robust CSV generation
+    return Papa.unparse(rows);
+  } else {
+    throw new Error(
+      `Unsupported file format: ${ext}. Please use .csv, .yaml, or .yml extension.`,
+    );
+  }
 }
 
 /**
@@ -100,11 +85,11 @@ async function exportDeckToCsv(): Promise<void> {
       };
     });
 
-    // Write to CSV
+    // Write to file (CSV or YAML)
     console.log(`\nWriting to ${OUTPUT_FILE}...`);
-    const csvContent = rowsToCsv(rows);
+    const content = serializeRows(rows, OUTPUT_FILE);
 
-    await writeFile(OUTPUT_FILE, csvContent, 'utf-8');
+    await writeFile(OUTPUT_FILE, content, 'utf-8');
     console.log(
       `✓ Successfully exported ${notesInfo.length} notes to ${OUTPUT_FILE}`,
     );

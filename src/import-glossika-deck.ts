@@ -2,6 +2,8 @@ import { readFile } from 'fs/promises';
 import Papa from 'papaparse';
 import { z } from 'zod';
 import { ankiRequest } from './anki-connect.js';
+import * as path from 'path';
+import * as yaml from 'js-yaml';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
@@ -19,6 +21,8 @@ const CsvRow = z.object({
   explanation: z.string(),
 });
 type CsvRow = z.infer<typeof CsvRow>;
+
+const CsvRowArray = z.array(CsvRow);
 
 const AnkiNote = z.object({
   deckName: z.string(),
@@ -42,21 +46,35 @@ async function importCsvToAnki(): Promise<void> {
   console.log('='.repeat(60));
 
   try {
-    // Read and Parse CSV
+    // Read and Parse file (CSV or YAML)
     console.log(`\nReading and parsing ${INPUT_FILE}...`);
     const fileContent = await readFile(INPUT_FILE, 'utf-8');
-    const parseResult = Papa.parse<CsvRow>(fileContent, {
-      header: true,
-      skipEmptyLines: true,
-    });
+    const ext = path.extname(INPUT_FILE).toLowerCase();
 
-    if (parseResult.errors.length > 0) {
+    let rows: CsvRow[];
+
+    if (ext === '.yaml' || ext === '.yml') {
+      const parsedData = yaml.load(fileContent);
+      // Validate YAML data with Zod
+      rows = CsvRowArray.parse(parsedData);
+    } else if (ext === '.csv') {
+      const parseResult = Papa.parse<CsvRow>(fileContent, {
+        header: true,
+        skipEmptyLines: true,
+      });
+
+      if (parseResult.errors.length > 0) {
+        throw new Error(
+          `CSV parsing errors: ${JSON.stringify(parseResult.errors)}`,
+        );
+      }
+      rows = parseResult.data;
+    } else {
       throw new Error(
-        `CSV parsing errors: ${JSON.stringify(parseResult.errors)}`,
+        `Unsupported file format: ${ext}. Please use .csv, .yaml, or .yml extension.`,
       );
     }
-    const rows = parseResult.data;
-    console.log(`✓ Found ${rows.length} rows in CSV.`);
+    console.log(`✓ Found ${rows.length} rows in ${INPUT_FILE}.`);
 
     if (rows.length === 0) {
       console.log('No rows to import. Exiting.');
