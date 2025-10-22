@@ -28,6 +28,14 @@ const AnkiNote = z.object({
 });
 type AnkiNote = z.infer<typeof AnkiNote>;
 
+const NoteFieldValue = z.object({ value: z.string(), order: z.number() });
+
+const AnkiNoteInfo = z.object({
+  noteId: z.number(),
+  fields: z.record(z.string(), NoteFieldValue.optional()),
+});
+type AnkiNoteInfo = z.infer<typeof AnkiNoteInfo>;
+
 async function importCsvToAnki(): Promise<void> {
   console.log('='.repeat(60));
   console.log(`Importing from ${INPUT_FILE} to deck: ${DECK_NAME}`);
@@ -55,83 +63,119 @@ async function importCsvToAnki(): Promise<void> {
       return;
     }
 
-    // Transform CSV rows to Anki note format
-    const notesToImport: AnkiNote[] = rows.map((row) => ({
-      deckName: DECK_NAME,
-      modelName: MODEL_NAME,
-      fields: {
+    // Fetch existing notes from the deck to create an ID -> noteId map
+    console.log(`\nFetching existing notes from deck '${DECK_NAME}'...`);
+    const existingNoteIds = await ankiRequest(
+      'findNotes',
+      z.array(z.number()),
+      {
+        query: `deck:"${DECK_NAME}"`,
+      },
+    );
+
+    const idToNoteIdMap = new Map<string, number>();
+
+    if (existingNoteIds.length > 0) {
+      const notesInfo = await ankiRequest('notesInfo', z.array(AnkiNoteInfo), {
+        notes: existingNoteIds,
+      });
+
+      for (const note of notesInfo) {
+        if (note.fields.Id?.value) {
+          idToNoteIdMap.set(note.fields.Id.value, note.noteId);
+        }
+      }
+    }
+    console.log(
+      `✓ Found ${idToNoteIdMap.size} existing notes with an 'Id' field.`,
+    );
+
+    // Partition CSV rows into notes to add and notes to update
+    console.log('\nPartitioning notes for insert or update...');
+    const notesToAdd: AnkiNote[] = [];
+    const notesToUpdate: { id: number; fields: Record<string, string> }[] = [];
+
+    const allNotesFromCsv = rows.map((row) => CsvRow.parse(row));
+
+    for (const row of allNotesFromCsv) {
+      const fields = {
         Id: row.id,
         English: row.english,
         Japanese: row.japanese,
         か: row.ka,
         ROM: row.ROM,
         Explanation: row.explanation,
-      },
-      tags: ['glossika-import-script'],
-    }));
+      };
 
-    // Pre-flight check for duplicates
-    console.log('\nPerforming pre-flight check for duplicates...');
-    const canAddResult = await ankiRequest(
-      'canAddNotes',
-      z.array(z.boolean()),
-      {
-        notes: notesToImport,
-      },
-    );
+      const existingNoteId = idToNoteIdMap.get(row.id);
 
-    const notesToAdd: AnkiNote[] = [];
-    let duplicateCount = 0;
-    canAddResult.forEach((canAdd: boolean, index: number) => {
-      if (canAdd) {
-        notesToAdd.push(notesToImport[index]);
+      if (existingNoteId) {
+        notesToUpdate.push({
+          id: existingNoteId,
+          fields,
+        });
       } else {
-        duplicateCount++;
-        console.warn(
-          `- Skipping duplicate (row ${index + 2}): ${notesToImport[index].fields['English']}`,
-        );
+        notesToAdd.push({
+          deckName: DECK_NAME,
+          modelName: MODEL_NAME,
+          fields,
+          tags: ['glossika-import-script'],
+        });
       }
-    });
+    }
 
-    if (duplicateCount > 0) {
-      console.log(
-        `✓ Pre-flight complete. Found and skipped ${duplicateCount} duplicates.`,
+    console.log(`✓ Partitioning complete:`);
+    console.log(`  - ${notesToAdd.length} new notes to add.`);
+    console.log(`  - ${notesToUpdate.length} existing notes to update.`);
+
+    // Add new notes (if any)
+    if (notesToAdd.length > 0) {
+      console.log(`\nAdding ${notesToAdd.length} new notes...`);
+      const addResult = await ankiRequest(
+        'addNotes',
+        z.array(z.number().nullable()),
+        { notes: notesToAdd },
       );
-    } else {
-      console.log('✓ Pre-flight complete. No duplicates found.');
-    }
-
-    if (notesToAdd.length === 0) {
-      console.log('\nNo new notes to import. Exiting.');
-      return;
-    }
-
-    // Add Notes to Anki
-    console.log(`\nImporting ${notesToAdd.length} new notes...`);
-    const addNotesResult = await ankiRequest(
-      'addNotes',
-      z.array(z.number().nullable()),
-      {
-        notes: notesToAdd,
-      },
-    );
-
-    let successCount = 0;
-    let failureCount = 0;
-    addNotesResult.forEach((result: number | null, index: number) => {
-      if (result === null) {
-        failureCount++;
-        console.error(
-          `✗ Failed to import row for note: ${notesToAdd[index].fields['English']}`,
+      const successes = addResult.filter((r) => r !== null).length;
+      const failures = addResult.length - successes;
+      console.log(
+        `✓ Add operation complete: ${successes} succeeded, ${failures} failed.`,
+      );
+      if (failures > 0) {
+        console.warn(
+          '  - Some notes failed to add. Check Anki for possible reasons.',
         );
-      } else {
-        successCount++;
       }
-    });
+    }
 
-    console.log(`\n✓ Import finished.`);
-    console.log(`  - Successful: ${successCount}`);
-    console.log(`  - Failed:     ${failureCount}`);
+    // Update existing notes (if any)
+    if (notesToUpdate.length > 0) {
+      console.log(`\nUpdating ${notesToUpdate.length} existing notes...`);
+      const updateActions = notesToUpdate.map((note) => ({
+        action: 'updateNoteFields',
+        params: { note },
+      }));
+
+      const updateResult = await ankiRequest('multi', z.array(z.unknown()), {
+        actions: updateActions,
+      });
+
+      // The result of a 'multi' call is an array of results for each action.
+      // A successful 'updateNoteFields' action returns null.
+      const failures = updateResult.filter((r) => r !== null);
+      if (failures.length > 0) {
+        console.error(
+          `✗ Update operation failed for ${failures.length} notes.`,
+        );
+        console.error('  - Failure details:', failures);
+      } else {
+        console.log(
+          `✓ Update operation complete: ${notesToUpdate.length} notes updated successfully.`,
+        );
+      }
+    }
+
+    console.log('\nImport process finished.');
   } catch (error) {
     if (error instanceof Error) {
       console.error(`\n✗ Fatal Error: ${error.message}`);
