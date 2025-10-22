@@ -1,32 +1,11 @@
 import { writeFile } from 'fs/promises';
 import { z } from 'zod';
-
-const ANKI_CONNECT_URL = 'http://127.0.0.1:8765';
+import { ankiRequest, NoteInfo } from './anki-connect.js';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
 const DECK_NAME = args[0] || 'Glossika-ENJA [2001-3000]';
 const OUTPUT_FILE = args[1] || 'glossika_deck_export.csv';
-
-// Zod schemas
-function AnkiConnectResponse<T extends z.ZodTypeAny>(resultSchema: T) {
-  return z.object({
-    result: resultSchema.nullable(),
-    error: z.string().nullable(),
-  });
-}
-
-const NoteField = z.object({
-  value: z.string(),
-  order: z.number(),
-});
-
-const NoteInfo = z.object({
-  noteId: z.number(),
-  fields: z.record(z.string(), NoteField.optional()),
-  tags: z.array(z.string()),
-  modelName: z.string(),
-});
 
 // Type inference from Zod schemas
 type NoteInfo = z.infer<typeof NoteInfo>;
@@ -38,64 +17,6 @@ type CsvRow = {
   ROM: string;
   explanation: string;
 };
-
-/**
- * Helper function to send requests to AnkiConnect with schema validation.
- */
-async function ankiRequest<
-  R,
-  P extends Record<string, unknown> = Record<string, never>,
->(action: string, resultSchema: z.ZodType<R>, params?: P): Promise<R> {
-  const payload = {
-    action,
-    params: params ?? {},
-    version: 6,
-  };
-
-  try {
-    const response = await fetch(ANKI_CONNECT_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const responseJson = await response.json();
-
-    // Use the generic schema for consistent validation
-    const validatedResponse =
-      AnkiConnectResponse(resultSchema).parse(responseJson);
-
-    if (validatedResponse.error) {
-      throw new Error(`AnkiConnect API error: ${validatedResponse.error}`);
-    }
-
-    if (validatedResponse.result === null) {
-      throw new Error('AnkiConnect returned null result');
-    }
-
-    return validatedResponse.result;
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw error;
-    }
-    if (error instanceof Error) {
-      if (error.message.includes('fetch')) {
-        throw new Error(
-          `Network error: Could not connect to AnkiConnect. Is Anki running? Details: ${error.message}`,
-        );
-      }
-      throw error;
-    }
-    throw error;
-  }
-}
 
 /**
  * Converts an array of rows to CSV format.
@@ -168,7 +89,7 @@ async function exportDeckToCsv(): Promise<void> {
     console.log(`✓ Retrieved information for ${notesInfo.length} notes.`);
 
     // Convert notes to CSV rows
-    const rows: CsvRow[] = notesInfo.map((note) => {
+    const rows: CsvRow[] = notesInfo.map((note: NoteInfo) => {
       return {
         id: getFieldValue(note.fields, 'Id'),
         english: getFieldValue(note.fields, 'English'),
