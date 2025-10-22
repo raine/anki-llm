@@ -9,27 +9,27 @@ const DECK_NAME = args[0] || 'Glossika-ENJA [2001-3000]';
 const OUTPUT_FILE = args[1] || 'glossika_deck_export.csv';
 
 // Zod schemas
-function AnkiConnectResponseSchema<T extends z.ZodTypeAny>(resultSchema: T) {
+function AnkiConnectResponse<T extends z.ZodTypeAny>(resultSchema: T) {
   return z.object({
     result: resultSchema.nullable(),
     error: z.string().nullable(),
   });
 }
 
-const NoteFieldSchema = z.object({
+const NoteField = z.object({
   value: z.string(),
   order: z.number(),
 });
 
-const NoteInfoSchema = z.object({
+const NoteInfo = z.object({
   noteId: z.number(),
-  fields: z.record(z.string(), NoteFieldSchema.optional()),
+  fields: z.record(z.string(), NoteField.optional()),
   tags: z.array(z.string()),
   modelName: z.string(),
 });
 
 // Type inference from Zod schemas
-type NoteInfo = z.infer<typeof NoteInfoSchema>;
+type NoteInfo = z.infer<typeof NoteInfo>;
 type CsvRow = {
   id: string;
   english: string;
@@ -70,7 +70,7 @@ async function ankiRequest<
 
     // Use the generic schema for consistent validation
     const validatedResponse =
-      AnkiConnectResponseSchema(resultSchema).parse(responseJson);
+      AnkiConnectResponse(resultSchema).parse(responseJson);
 
     if (validatedResponse.error) {
       throw new Error(`AnkiConnect API error: ${validatedResponse.error}`);
@@ -162,7 +162,7 @@ async function exportDeckToCsv(): Promise<void> {
 
     // Get detailed info for all notes
     console.log(`\nFetching note details...`);
-    const notesInfo = await ankiRequest('notesInfo', z.array(NoteInfoSchema), {
+    const notesInfo = await ankiRequest('notesInfo', z.array(NoteInfo), {
       notes: noteIds,
     });
     console.log(`✓ Retrieved information for ${notesInfo.length} notes.`);
