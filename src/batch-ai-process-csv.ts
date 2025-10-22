@@ -7,6 +7,52 @@ import pLimit from 'p-limit';
 import cliProgress from 'cli-progress';
 import chalk from 'chalk';
 
+// Supported models and their pricing
+type ModelPricing = {
+  inputCostPerMillion: number;
+  outputCostPerMillion: number;
+};
+
+type SupportedChatModel =
+  | 'gpt-4.1'
+  | 'gpt-4o'
+  | 'gpt-4o-mini'
+  | 'gpt-5-nano'
+  | 'gemini-2.0-flash'
+  | 'gemini-2.5-flash'
+  | 'gemini-2.5-flash-lite-preview-06-17';
+
+const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
+  'gpt-4.1': {
+    inputCostPerMillion: 2.5,
+    outputCostPerMillion: 10,
+  },
+  'gpt-4o': {
+    inputCostPerMillion: 2.5,
+    outputCostPerMillion: 10,
+  },
+  'gpt-4o-mini': {
+    inputCostPerMillion: 0.15,
+    outputCostPerMillion: 0.6,
+  },
+  'gpt-5-nano': {
+    inputCostPerMillion: 0.05,
+    outputCostPerMillion: 0.4,
+  },
+  'gemini-2.0-flash': {
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
+  },
+  'gemini-2.5-flash': {
+    inputCostPerMillion: 0.15,
+    outputCostPerMillion: 0.6,
+  },
+  'gemini-2.5-flash-lite-preview-06-17': {
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
+  },
+};
+
 // Zod schema for CSV rows
 const CsvRow = z.object({
   id: z.string(),
@@ -38,21 +84,25 @@ const CliArgs = z.tuple([
 ]);
 
 // Configuration schema
+const SupportedModelSchema = z.enum([
+  'gpt-4.1',
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gpt-5-nano',
+  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite-preview-06-17',
+]);
+
 const Config = z.object({
   apiKey: z.string().min(1, 'API key is required'),
   apiBaseUrl: z.string().optional(),
-  model: z.string().default('gpt-4o-mini'),
+  model: SupportedModelSchema.default('gpt-4o-mini'),
   batchSize: z.number().int().positive().default(5),
   dryRun: z.boolean().default(false),
   maxTokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2).default(0.3),
-  systemPrompt: z.string().default(
-    `You are an assistant for translating Japanese to English.
-
-- Translate the given sentence into English as accurately as possible, preserving the original nuance and meaning.
-- Do not say at the start that below is translation of the sentence, just proceed to translation
-- Try to incorporate nuances of Japanese language into the translation, so that it's easier to figure out the original Japanese sentence based on the English translation`,
-  ),
+  systemPrompt: z.string().optional(),
   retries: z.number().int().min(0).default(3),
 });
 type Config = z.infer<typeof Config>;
@@ -64,12 +114,12 @@ function parseCliArgs(): [string, string, CsvFieldName, string] {
   if (args.length < 4) {
     console.error(
       chalk.red(
-        'Usage: tsx src/batch-ai-process-csv.ts <input.csv> <output.csv> <field_to_process> <prompt_template>',
+        'Usage: tsx src/batch-ai-process-csv.ts <input.csv> <output.csv> <field_to_process> <prompt_file>',
       ),
     );
     console.error('\nExample:');
     console.error(
-      '  tsx src/batch-ai-process-csv.ts input.csv output.csv english "Translate: {japanese}"',
+      '  tsx src/batch-ai-process-csv.ts input.csv output.csv english src/prompts/translation-japanese-to-english.txt',
     );
     console.error('\nValid fields:', CsvFieldName.options.join(', '));
     console.error('\nEnvironment variables:');
@@ -80,6 +130,7 @@ function parseCliArgs(): [string, string, CsvFieldName, string] {
       '  OPENAI_API_BASE or API_BASE_URL - Optional: Base URL for API',
     );
     console.error('  MODEL - Optional: Model to use (default: gpt-4o-mini)');
+    console.error(`    Supported: ${SupportedModelSchema.options.join(', ')}`);
     console.error(
       '  BATCH_SIZE - Optional: Number of concurrent requests (default: 5)',
     );
@@ -87,7 +138,9 @@ function parseCliArgs(): [string, string, CsvFieldName, string] {
     console.error(
       '  TEMPERATURE - Optional: Temperature for sampling (default: 0.3)',
     );
-    console.error('  SYSTEM_PROMPT - Optional: Custom system prompt');
+    console.error(
+      '  SYSTEM_PROMPT - Optional: System message to include before user prompt',
+    );
     console.error(
       '  RETRIES - Optional: Number of retries on failure (default: 3)',
     );
@@ -112,11 +165,51 @@ function parseCliArgs(): [string, string, CsvFieldName, string] {
   }
 }
 
+/**
+ * Determines the provider and base URL based on the model name
+ */
+function getProviderConfig(model: SupportedChatModel): {
+  baseURL?: string;
+  recommendedApiKeyEnv: string;
+} {
+  if (model.startsWith('gpt-')) {
+    return {
+      recommendedApiKeyEnv: 'OPENAI_API_KEY',
+    };
+  } else if (model.startsWith('gemini-')) {
+    return {
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      recommendedApiKeyEnv: 'GEMINI_API_KEY',
+    };
+  }
+  return {
+    recommendedApiKeyEnv: 'OPENAI_API_KEY',
+  };
+}
+
 // Parse and validate configuration from environment
 function parseConfig(): Config {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
-  const apiBaseUrl = process.env.OPENAI_API_BASE || process.env.API_BASE_URL;
   const dryRun = process.env.DRY_RUN === 'true';
+
+  // Get model first to determine which API key to look for
+  const modelStr = process.env.MODEL || 'gpt-4o-mini';
+  let model: SupportedChatModel;
+  try {
+    model = SupportedModelSchema.parse(modelStr);
+  } catch {
+    console.error(chalk.red(`Invalid MODEL: ${modelStr}`));
+    console.error(
+      chalk.yellow(
+        `Supported models: ${SupportedModelSchema.options.join(', ')}`,
+      ),
+    );
+    process.exit(1);
+  }
+
+  const providerConfig = getProviderConfig(model);
+
+  // Check for API key
+  const apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
 
   // Skip API key check in dry run mode
   if (!dryRun && !apiKey) {
@@ -126,16 +219,27 @@ function parseConfig(): Config {
       ),
     );
     console.error(
-      chalk.yellow('Tip: Set DRY_RUN=true to preview without an API key'),
+      chalk.yellow(
+        `Tip: For model '${model}', set ${providerConfig.recommendedApiKeyEnv}`,
+      ),
+    );
+    console.error(
+      chalk.yellow('Or set DRY_RUN=true to preview without an API key'),
     );
     process.exit(1);
   }
+
+  // Determine base URL: explicit override > provider default > undefined
+  const apiBaseUrl =
+    process.env.OPENAI_API_BASE ||
+    process.env.API_BASE_URL ||
+    providerConfig.baseURL;
 
   try {
     return Config.parse({
       apiKey: apiKey || 'dummy-key-for-dry-run',
       apiBaseUrl,
-      model: process.env.MODEL,
+      model,
       batchSize: process.env.BATCH_SIZE
         ? parseInt(process.env.BATCH_SIZE, 10)
         : undefined,
@@ -190,18 +294,22 @@ async function processRow(
 ): Promise<string> {
   const prompt = fillTemplate(promptTemplate, row);
 
+  // Build messages array - only include system prompt if provided
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+  if (config.systemPrompt) {
+    messages.push({
+      role: 'system',
+      content: config.systemPrompt,
+    });
+  }
+  messages.push({
+    role: 'user',
+    content: prompt,
+  });
+
   const response = await client.chat.completions.create({
     model: config.model,
-    messages: [
-      {
-        role: 'system',
-        content: config.systemPrompt,
-      },
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
+    messages,
     temperature: config.temperature,
     ...(config.maxTokens && { max_tokens: config.maxTokens }),
   });
@@ -342,15 +450,23 @@ function printSummary(
     `  Total tokens:  ${(tokenStats.input + tokenStats.output).toLocaleString()}`,
   );
 
-  // Rough cost estimation (update these rates as needed)
-  const inputCostPer1M = 0.15; // GPT-4o-mini default
-  const outputCostPer1M = 0.6;
-  const estimatedCost =
-    (tokenStats.input / 1_000_000) * inputCostPer1M +
-    (tokenStats.output / 1_000_000) * outputCostPer1M;
+  // Get model-specific pricing
+  const pricing = MODEL_PRICING[config.model];
+  const inputCost =
+    (tokenStats.input / 1_000_000) * pricing.inputCostPerMillion;
+  const outputCost =
+    (tokenStats.output / 1_000_000) * pricing.outputCostPerMillion;
+  const totalCost = inputCost + outputCost;
+
+  console.log(`\n${chalk.bold('Cost Breakdown:')}`);
+  console.log(`  Model: ${config.model}`);
   console.log(
-    `  ${chalk.bold('Estimated cost:')} $${estimatedCost.toFixed(4)}`,
+    `  Input cost:  $${inputCost.toFixed(4)} (${pricing.inputCostPerMillion.toFixed(2)}/M tokens)`,
   );
+  console.log(
+    `  Output cost: $${outputCost.toFixed(4)} (${pricing.outputCostPerMillion.toFixed(2)}/M tokens)`,
+  );
+  console.log(chalk.bold(`  Total cost:  $${totalCost.toFixed(4)}`));
 
   console.log(`\n${chalk.bold('Performance:')}`);
   console.log(`  Total time: ${(elapsedMs / 1000).toFixed(2)}s`);
@@ -363,9 +479,12 @@ async function main(): Promise<void> {
   const startTime = Date.now();
 
   // Parse CLI arguments and configuration
-  const [INPUT_FILE, OUTPUT_FILE, FIELD_TO_PROCESS, PROMPT_TEMPLATE] =
+  const [INPUT_FILE, OUTPUT_FILE, FIELD_TO_PROCESS, PROMPT_FILE] =
     parseCliArgs();
   const config = parseConfig();
+
+  // Read prompt template from file
+  const PROMPT_TEMPLATE = await readFile(PROMPT_FILE, 'utf-8');
 
   console.log(chalk.bold('='.repeat(60)));
   console.log(chalk.bold('Batch AI CSV Processing'));
@@ -461,8 +580,7 @@ main().catch((error) => {
     console.error(chalk.red(`\n✗ Error: ${error.message}`));
     if (error instanceof z.ZodError) {
       console.error(chalk.red('Validation details:'));
-      const flattened = error.flatten();
-      console.error(JSON.stringify(flattened, null, 2));
+      console.error(z.flattenError(error));
     }
   } else {
     console.error(chalk.red('\n✗ An unknown error occurred:'), error);
