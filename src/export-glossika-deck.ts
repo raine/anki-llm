@@ -2,10 +2,14 @@ import { writeFile } from 'fs/promises';
 import { z } from 'zod';
 
 const ANKI_CONNECT_URL = 'http://127.0.0.1:8765';
-const DECK_NAME = 'Glossika-ENJA [2001-3000]';
-const OUTPUT_FILE = 'glossika_deck_export.csv';
+
+// Parse command-line arguments
+const args = process.argv.slice(2);
+const DECK_NAME = args[0] || 'Glossika-ENJA [2001-3000]';
+const OUTPUT_FILE = args[1] || 'glossika_deck_export.csv';
 
 // Zod schemas
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const AnkiConnectPayloadSchema = z.object({
   action: z.string(),
   params: z.record(z.string(), z.unknown()),
@@ -31,6 +35,7 @@ const NoteInfoSchema = z.object({
   modelName: z.string(),
 });
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CsvRowSchema = z.object({
   id: z.string(),
   english: z.string(),
@@ -42,6 +47,7 @@ const CsvRowSchema = z.object({
 
 // Type inference from Zod schemas
 type AnkiConnectPayload = z.infer<typeof AnkiConnectPayloadSchema>;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type NoteField = z.infer<typeof NoteFieldSchema>;
 type NoteInfo = z.infer<typeof NoteInfoSchema>;
 type CsvRow = z.infer<typeof CsvRowSchema>;
@@ -69,33 +75,34 @@ async function ankiRequest<T extends z.ZodTypeAny>(
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const responseJson = await response.json();
 
-    // Validate the overall response structure
-    const baseResponseSchema = z.object({
-      result: z.unknown().nullable(),
-      error: z.string().nullable(),
-    });
-    const validatedBase = baseResponseSchema.parse(responseJson);
+    // Use the generic schema for consistent validation
+    const validatedResponse = AnkiConnectResponseSchema(resultSchema).parse(
+      responseJson,
+    ) as { result: z.infer<T> | null; error: string | null };
 
-    if (validatedBase.error) {
-      throw new Error(`AnkiConnect API error: ${validatedBase.error}`);
+    if (validatedResponse.error) {
+      throw new Error(`AnkiConnect API error: ${validatedResponse.error}`);
     }
 
-    if (validatedBase.result === null) {
+    if (validatedResponse.result === null) {
       throw new Error('AnkiConnect returned null result');
     }
 
-    // Now validate the result with the specific schema
-    return resultSchema.parse(validatedBase.result);
+    return validatedResponse.result;
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw new Error(`Invalid response from AnkiConnect: ${error.message}`);
+      throw error;
     }
     if (error instanceof Error) {
-      throw new Error(
-        `Could not connect to AnkiConnect. Is Anki running? Error: ${error.message}`,
-      );
+      if (error.message.includes('fetch')) {
+        throw new Error(
+          `Network error: Could not connect to AnkiConnect. Is Anki running? Details: ${error.message}`,
+        );
+      }
+      throw error;
     }
     throw error;
   }
@@ -138,6 +145,14 @@ function rowsToCsv(rows: CsvRow[]): string {
   return [header, ...csvRows].join('\n');
 }
 
+/**
+ * Helper function to safely extract and clean field values from a note.
+ */
+function getFieldValue(fields: NoteInfo['fields'], fieldName: string): string {
+  const rawValue = fields[fieldName]?.value ?? '';
+  return rawValue.replace(/\r/g, '');
+}
+
 async function exportDeckToCsv(): Promise<void> {
   console.log('='.repeat(60));
   console.log(`Exporting deck: ${DECK_NAME}`);
@@ -165,14 +180,13 @@ async function exportDeckToCsv(): Promise<void> {
 
     // Convert notes to CSV rows
     const rows: CsvRow[] = notesInfo.map((note) => {
-      const fields = note.fields;
       return {
-        id: fields.Id?.value?.replace(/\r/g, '') || '',
-        english: fields.English?.value?.replace(/\r/g, '') || '',
-        japanese: fields.Japanese?.value?.replace(/\r/g, '') || '',
-        ka: fields['か']?.value?.replace(/\r/g, '') || '',
-        ROM: fields.ROM?.value?.replace(/\r/g, '') || '',
-        explanation: fields.Explanation?.value?.replace(/\r/g, '') || '',
+        id: getFieldValue(note.fields, 'Id'),
+        english: getFieldValue(note.fields, 'English'),
+        japanese: getFieldValue(note.fields, 'Japanese'),
+        ka: getFieldValue(note.fields, 'か'),
+        ROM: getFieldValue(note.fields, 'ROM'),
+        explanation: getFieldValue(note.fields, 'Explanation'),
       };
     });
 
@@ -185,7 +199,14 @@ async function exportDeckToCsv(): Promise<void> {
       `✓ Successfully exported ${notesInfo.length} notes to ${OUTPUT_FILE}`,
     );
   } catch (error) {
-    console.log(`\n✗ Error: ${error}`);
+    if (error instanceof Error) {
+      console.log(`\n✗ Error: ${error.message}`);
+      if (error instanceof z.ZodError) {
+        console.log('Validation details:', error.flatten());
+      }
+    } else {
+      console.log('\n✗ An unknown error occurred:', error);
+    }
     console.log('\nMake sure:');
     console.log('  1. Anki Desktop is running');
     console.log('  2. AnkiConnect add-on is installed (code: 2055492159)');
@@ -193,4 +214,4 @@ async function exportDeckToCsv(): Promise<void> {
   }
 }
 
-exportDeckToCsv();
+void exportDeckToCsv();
