@@ -6,6 +6,8 @@ import pRetry from 'p-retry';
 import pLimit from 'p-limit';
 import cliProgress from 'cli-progress';
 import chalk from 'chalk';
+import * as path from 'path';
+import * as yaml from 'js-yaml';
 import { parseConfig, type Config, type SupportedChatModel } from './config.js';
 
 // Model pricing
@@ -45,8 +47,8 @@ const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
   },
 };
 
-// Zod schema for CSV rows
-const CsvRow = z.object({
+// Zod schema for data rows
+const RowData = z.object({
   id: z.string(),
   english: z.string(),
   japanese: z.string(),
@@ -54,10 +56,12 @@ const CsvRow = z.object({
   ROM: z.string(),
   explanation: z.string(),
 });
-type CsvRow = z.infer<typeof CsvRow>;
+type RowData = z.infer<typeof RowData>;
+
+const RowDataArray = z.array(RowData);
 
 // Define valid field names for type safety
-const CsvFieldName = z.enum([
+const FieldName = z.enum([
   'id',
   'english',
   'japanese',
@@ -65,31 +69,34 @@ const CsvFieldName = z.enum([
   'ROM',
   'explanation',
 ]);
-type CsvFieldName = z.infer<typeof CsvFieldName>;
+type FieldName = z.infer<typeof FieldName>;
 
 // CLI arguments schema
 const CliArgs = z.tuple([
   z.string().min(1, 'Input file is required'),
   z.string().min(1, 'Output file is required'),
-  CsvFieldName,
+  FieldName,
   z.string().min(1, 'Prompt file is required'),
 ]);
 
 // Parse and validate CLI arguments
-function parseCliArgs(): [string, string, CsvFieldName, string] {
+function parseCliArgs(): [string, string, FieldName, string] {
   const args = process.argv.slice(2);
 
   if (args.length < 4) {
     console.error(
       chalk.red(
-        'Usage: tsx src/batch-ai-process-csv.ts <input.csv> <output.csv> <field_to_process> <prompt_file>',
+        'Usage: tsx src/batch-ai-process.ts <input_file> <output_file> <field_to_process> <prompt_file>',
       ),
     );
-    console.error('\nExample:');
+    console.error('\nExamples:');
     console.error(
-      '  tsx src/batch-ai-process-csv.ts input.csv output.csv english src/prompts/translation-japanese-to-english.txt',
+      '  tsx src/batch-ai-process.ts input.csv output.csv english src/prompts/translation-japanese-to-english.txt',
     );
-    console.error('\nValid fields:', CsvFieldName.options.join(', '));
+    console.error(
+      '  tsx src/batch-ai-process.ts input.yaml output.yaml english src/prompts/translation-japanese-to-english.txt',
+    );
+    console.error('\nValid fields:', FieldName.options.join(', '));
     console.error('\nEnvironment variables:');
     console.error(
       '  OPENAI_API_KEY or GEMINI_API_KEY - Required: API key for the LLM provider',
@@ -131,7 +138,7 @@ function parseCliArgs(): [string, string, CsvFieldName, string] {
  * Safely replaces placeholders in template with values from row
  * Uses simple string splitting to avoid regex replacement pattern issues
  */
-function fillTemplate(template: string, row: CsvRow): string {
+function fillTemplate(template: string, row: RowData): string {
   let result = template;
   for (const [key, value] of Object.entries(row)) {
     // Use split/join to avoid regex replacement pattern issues with $ and \
@@ -144,8 +151,8 @@ function fillTemplate(template: string, row: CsvRow): string {
  * Processes a single row using the LLM with retry logic
  */
 async function processRow(
-  row: CsvRow,
-  fieldToProcess: CsvFieldName,
+  row: RowData,
+  fieldToProcess: FieldName,
   promptTemplate: string,
   config: Config,
   client: OpenAI,
@@ -177,16 +184,16 @@ async function processRow(
 }
 
 /**
- * Enhanced CSV row with error tracking
+ * Enhanced row with error tracking
  */
-type ProcessedRow = CsvRow & { _error?: string };
+type ProcessedRow = RowData & { _error?: string };
 
 /**
  * Process rows with concurrency control and retry logic
  */
 async function processAllRows(
-  rows: CsvRow[],
-  fieldToProcess: CsvFieldName,
+  rows: RowData[],
+  fieldToProcess: FieldName,
   promptTemplate: string,
   config: Config,
   client: OpenAI,
@@ -260,14 +267,56 @@ async function processAllRows(
 }
 
 /**
- * Converts rows to CSV using Papa.unparse for proper escaping
+ * Parses a data file (CSV or YAML) into an array of row objects.
  */
-function rowsToCsv(rows: ProcessedRow[]): string {
-  return Papa.unparse(rows, {
-    quotes: true,
-    newline: '\n',
-    header: true,
-  });
+async function parseDataFile(filePath: string): Promise<RowData[]> {
+  const fileContent = await readFile(filePath, 'utf-8');
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (extension === '.csv') {
+    const parseResult = Papa.parse<RowData>(fileContent, {
+      header: true,
+      skipEmptyLines: true,
+    });
+    if (parseResult.errors.length > 0) {
+      throw new Error(
+        `CSV parsing errors: ${JSON.stringify(parseResult.errors)}`,
+      );
+    }
+    return parseResult.data.map((row) => RowData.parse(row));
+  } else if (extension === '.yml' || extension === '.yaml') {
+    const data = yaml.load(fileContent);
+    // Ensure the YAML content is an array of objects
+    if (!Array.isArray(data)) {
+      throw new Error('YAML content is not an array');
+    }
+    return RowDataArray.parse(data);
+  } else {
+    throw new Error(
+      `Unsupported file extension: ${extension}. Use .csv, .yaml, or .yml`,
+    );
+  }
+}
+
+/**
+ * Serializes an array of row objects to a string (CSV or YAML).
+ */
+function serializeData(rows: ProcessedRow[], filePath: string): string {
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (extension === '.csv') {
+    return Papa.unparse(rows, {
+      quotes: true,
+      newline: '\n',
+      header: true,
+    });
+  } else if (extension === '.yml' || extension === '.yaml') {
+    return yaml.dump(rows, { lineWidth: -1 });
+  } else {
+    throw new Error(
+      `Unsupported file extension: ${extension}. Use .csv, .yaml, or .yml`,
+    );
+  }
 }
 
 /**
@@ -338,7 +387,7 @@ async function main(): Promise<void> {
   const PROMPT_TEMPLATE = await readFile(PROMPT_FILE, 'utf-8');
 
   console.log(chalk.bold('='.repeat(60)));
-  console.log(chalk.bold('Batch AI CSV Processing'));
+  console.log(chalk.bold('Batch AI Data Processing'));
   console.log(chalk.bold('='.repeat(60)));
   console.log(`Input file:        ${INPUT_FILE}`);
   console.log(`Output file:       ${OUTPUT_FILE}`);
@@ -353,22 +402,11 @@ async function main(): Promise<void> {
   console.log(`Dry run:           ${config.dryRun}`);
   console.log(chalk.bold('='.repeat(60)));
 
-  // Read and parse CSV
+  // Read and parse data file
   console.log(`\n${chalk.cyan('Reading')} ${INPUT_FILE}...`);
-  const fileContent = await readFile(INPUT_FILE, 'utf-8');
-  const parseResult = Papa.parse<CsvRow>(fileContent, {
-    header: true,
-    skipEmptyLines: true,
-  });
-
-  if (parseResult.errors.length > 0) {
-    throw new Error(
-      `CSV parsing errors: ${JSON.stringify(parseResult.errors)}`,
-    );
-  }
-
-  const rows = parseResult.data.map((row) => CsvRow.parse(row));
-  console.log(chalk.green(`✓ Found ${rows.length} rows in CSV`));
+  const rows = await parseDataFile(INPUT_FILE);
+  const inputFormat = path.extname(INPUT_FILE).substring(1).toUpperCase();
+  console.log(chalk.green(`✓ Found ${rows.length} rows in ${inputFormat}`));
 
   if (rows.length === 0) {
     console.log(chalk.yellow('No rows to process. Exiting.'));
@@ -378,7 +416,7 @@ async function main(): Promise<void> {
   // Validate field exists
   if (rows.length > 0 && !(FIELD_TO_PROCESS in rows[0])) {
     throw new Error(
-      `Field "${FIELD_TO_PROCESS}" not found in CSV. Available fields: ${Object.keys(rows[0]).join(', ')}`,
+      `Field "${FIELD_TO_PROCESS}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`,
     );
   }
 
@@ -410,10 +448,10 @@ async function main(): Promise<void> {
     client,
   );
 
-  // Write results to CSV
+  // Write results to output file
   console.log(`\n${chalk.cyan('Writing')} results to ${OUTPUT_FILE}...`);
-  const csvContent = rowsToCsv(processedRows);
-  await writeFile(OUTPUT_FILE, csvContent, 'utf-8');
+  const outputContent = serializeData(processedRows, OUTPUT_FILE);
+  await writeFile(OUTPUT_FILE, outputContent, 'utf-8');
   console.log(
     chalk.green(
       `✓ Successfully wrote ${processedRows.length} rows to ${OUTPUT_FILE}`,
