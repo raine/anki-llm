@@ -9,13 +9,6 @@ const DECK_NAME = args[0] || 'Glossika-ENJA [2001-3000]';
 const OUTPUT_FILE = args[1] || 'glossika_deck_export.csv';
 
 // Zod schemas
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const AnkiConnectPayloadSchema = z.object({
-  action: z.string(),
-  params: z.record(z.string(), z.unknown()),
-  version: z.number(),
-});
-
 function AnkiConnectResponseSchema<T extends z.ZodTypeAny>(resultSchema: T) {
   return z.object({
     result: resultSchema.nullable(),
@@ -35,32 +28,29 @@ const NoteInfoSchema = z.object({
   modelName: z.string(),
 });
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const CsvRowSchema = z.object({
-  id: z.string(),
-  english: z.string(),
-  japanese: z.string(),
-  ka: z.string(),
-  ROM: z.string(),
-  explanation: z.string(),
-});
-
 // Type inference from Zod schemas
-type AnkiConnectPayload = z.infer<typeof AnkiConnectPayloadSchema>;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type NoteField = z.infer<typeof NoteFieldSchema>;
 type NoteInfo = z.infer<typeof NoteInfoSchema>;
-type CsvRow = z.infer<typeof CsvRowSchema>;
+type CsvRow = {
+  id: string;
+  english: string;
+  japanese: string;
+  ka: string;
+  ROM: string;
+  explanation: string;
+};
 
 /**
  * Helper function to send requests to AnkiConnect with schema validation.
  */
-async function ankiRequest<T extends z.ZodTypeAny>(
-  action: string,
-  resultSchema: T,
-  params: Record<string, unknown> = {},
-): Promise<z.infer<T>> {
-  const payload: AnkiConnectPayload = { action, params, version: 6 };
+async function ankiRequest<
+  R,
+  P extends Record<string, unknown> = Record<string, never>,
+>(action: string, resultSchema: z.ZodType<R>, params?: P): Promise<R> {
+  const payload = {
+    action,
+    params: params ?? {},
+    version: 6,
+  };
 
   try {
     const response = await fetch(ANKI_CONNECT_URL, {
@@ -79,9 +69,8 @@ async function ankiRequest<T extends z.ZodTypeAny>(
     const responseJson = await response.json();
 
     // Use the generic schema for consistent validation
-    const validatedResponse = AnkiConnectResponseSchema(resultSchema).parse(
-      responseJson,
-    ) as { result: z.infer<T> | null; error: string | null };
+    const validatedResponse =
+      AnkiConnectResponseSchema(resultSchema).parse(responseJson);
 
     if (validatedResponse.error) {
       throw new Error(`AnkiConnect API error: ${validatedResponse.error}`);
