@@ -29,6 +29,7 @@
     "typescript-eslint": "^8.46.2"
   },
   "dependencies": {
+    "openai": "^6.6.0",
     "papaparse": "^5.5.3",
     "zod": "^4.1.12"
   }

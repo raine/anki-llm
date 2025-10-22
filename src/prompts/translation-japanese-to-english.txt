@@ -1,0 +1,11 @@
+Translate this Japanese sentence to English: {japanese}
+
+The current English translation is: {english}
+
+Provide an improved translation that:
+- Preserves the original nuance and meaning
+- Incorporates nuances of the Japanese language
+- Makes it easier to figure out the original Japanese sentence based on the English translation
+- Is natural and idiomatic in English
+
+Only output the improved English translation, nothing else.
