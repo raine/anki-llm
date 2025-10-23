@@ -71,8 +71,8 @@ export function parseConfig(cliArgs: {
   const model = modelResult.data;
   const providerConfig = getProviderConfig(model);
 
-  // Check for API key
-  const apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
+  // Check for API key based on the model's provider
+  const apiKey = process.env[providerConfig.recommendedApiKeyEnv];
 
   // Skip API key check in dry run mode
   if (!dryRun && !apiKey) {
