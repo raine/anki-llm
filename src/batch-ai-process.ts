@@ -9,6 +9,8 @@ import chalk from 'chalk';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { parseConfig, type Config, type SupportedChatModel } from './config.js';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
 
 // Model pricing
 type ModelPricing = {
@@ -47,92 +49,57 @@ const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
   },
 };
 
-// Zod schema for data rows
-const RowData = z.object({
-  id: z.string(),
-  english: z.string(),
-  japanese: z.string(),
-  ka: z.string(),
-  ROM: z.string(),
-  explanation: z.string(),
-});
-type RowData = z.infer<typeof RowData>;
+// Generic row data type - can hold any fields
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RowData = Record<string, any>;
 
-const RowDataArray = z.array(RowData);
-
-// Define valid field names for type safety
-const FieldName = z.enum([
-  'id',
-  'english',
-  'japanese',
-  'ka',
-  'ROM',
-  'explanation',
-]);
-type FieldName = z.infer<typeof FieldName>;
-
-// CLI arguments schema
-const CliArgs = z.tuple([
-  z.string().min(1, 'Input file is required'),
-  z.string().min(1, 'Output file is required'),
-  FieldName,
-  z.string().min(1, 'Prompt file is required'),
-]);
-
-// Parse and validate CLI arguments
-function parseCliArgs(): [string, string, FieldName, string] {
-  const args = process.argv.slice(2);
-
-  if (args.length < 4) {
-    console.error(
-      chalk.red(
-        'Usage: tsx src/batch-ai-process.ts <input_file> <output_file> <field_to_process> <prompt_file>',
-      ),
-    );
-    console.error('\nExamples:');
-    console.error(
-      '  tsx src/batch-ai-process.ts input.csv output.csv english src/prompts/translation-japanese-to-english.txt',
-    );
-    console.error(
-      '  tsx src/batch-ai-process.ts input.yaml output.yaml english src/prompts/translation-japanese-to-english.txt',
-    );
-    console.error('\nValid fields:', FieldName.options.join(', '));
-    console.error('\nEnvironment variables:');
-    console.error(
-      '  OPENAI_API_KEY or GEMINI_API_KEY - Required: API key for the LLM provider',
-    );
-    console.error(
-      '  OPENAI_API_BASE or API_BASE_URL - Optional: Base URL for API',
-    );
-    console.error('  MODEL - Optional: Model to use (default: gpt-4o-mini)');
-    console.error(
-      '    Supported: gpt-4.1, gpt-4o, gpt-4o-mini, gpt-5-nano, gemini-2.0-flash, gemini-2.5-flash, gemini-2.5-flash-lite-preview-06-17',
-    );
-    console.error(
-      '  BATCH_SIZE - Optional: Number of concurrent requests (default: 5)',
-    );
-    console.error('  MAX_TOKENS - Optional: Maximum tokens per completion');
-    console.error(
-      '  TEMPERATURE - Optional: Temperature for sampling (default: 0.3)',
-    );
-    console.error(
-      '  RETRIES - Optional: Number of retries on failure (default: 3)',
-    );
-    console.error(
-      '  DRY_RUN - Optional: Set to "true" to preview without making changes',
-    );
-    process.exit(1);
-  }
-
-  const result = CliArgs.safeParse(args);
-  if (!result.success) {
-    console.error(chalk.red('❌ Invalid arguments:'));
-    console.error(z.prettifyError(result.error));
-    process.exit(1);
-  }
-
-  return result.data;
-}
+// Parse command-line arguments
+const argv = yargs(hideBin(process.argv))
+  .usage('Usage: $0 <input> <output> <field> <prompt>')
+  .command(
+    '$0 <input> <output> <field> <prompt>',
+    'Process a field in a CSV/YAML file using AI',
+  )
+  .positional('input', {
+    describe: 'Input file path (CSV or YAML)',
+    type: 'string',
+    demandOption: true,
+  })
+  .positional('output', {
+    describe: 'Output file path (CSV or YAML)',
+    type: 'string',
+    demandOption: true,
+  })
+  .positional('field', {
+    describe: 'Field name to process with AI',
+    type: 'string',
+    demandOption: true,
+  })
+  .positional('prompt', {
+    describe: 'Path to prompt template file',
+    type: 'string',
+    demandOption: true,
+  })
+  .example(
+    '$0 input.csv output.csv english prompt.txt',
+    'Process english field',
+  )
+  .example(
+    '$0 data.yaml result.yaml description prompt.txt',
+    'Process YAML file',
+  )
+  .epilogue(
+    'Environment variables:\n' +
+      '  OPENAI_API_KEY or GEMINI_API_KEY - API key for LLM provider\n' +
+      '  MODEL - Model to use (default: gpt-4o-mini)\n' +
+      '  BATCH_SIZE - Concurrent requests (default: 5)\n' +
+      '  MAX_TOKENS - Maximum tokens per completion\n' +
+      '  TEMPERATURE - Sampling temperature (default: 0.3)\n' +
+      '  RETRIES - Retries on failure (default: 3)\n' +
+      '  DRY_RUN - Set to "true" to preview without changes',
+  )
+  .help()
+  .parseSync();
 
 /**
  * Safely replaces placeholders in template with values from row
@@ -142,7 +109,7 @@ function fillTemplate(template: string, row: RowData): string {
   let result = template;
   for (const [key, value] of Object.entries(row)) {
     // Use split/join to avoid regex replacement pattern issues with $ and \
-    result = result.split(`{${key}}`).join(value);
+    result = result.split(`{${key}}`).join(String(value ?? ''));
   }
   return result;
 }
@@ -152,7 +119,7 @@ function fillTemplate(template: string, row: RowData): string {
  */
 async function processRow(
   row: RowData,
-  fieldToProcess: FieldName,
+  fieldToProcess: string,
   promptTemplate: string,
   config: Config,
   client: OpenAI,
@@ -193,7 +160,7 @@ type ProcessedRow = RowData & { _error?: string };
  */
 async function processAllRows(
   rows: RowData[],
-  fieldToProcess: FieldName,
+  fieldToProcess: string,
   promptTemplate: string,
   config: Config,
   client: OpenAI,
@@ -236,9 +203,13 @@ async function processAllRows(
               retries: config.retries,
               onFailedAttempt: (error) => {
                 // Log retry attempts
+                // Try to get an identifier from the row (id, noteId, or first field)
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                const rowId =
+                  row.id || row.noteId || Object.values(row)[0] || 'unknown';
                 console.log(
                   chalk.yellow(
-                    `\n  Retry ${error.attemptNumber}/${config.retries + 1} for row ${row.id}`,
+                    `\n  Retry ${error.attemptNumber}/${config.retries + 1} for row ${String(rowId)}`,
                   ),
                 );
               },
@@ -283,14 +254,15 @@ async function parseDataFile(filePath: string): Promise<RowData[]> {
         `CSV parsing errors: ${JSON.stringify(parseResult.errors)}`,
       );
     }
-    return parseResult.data.map((row) => RowData.parse(row));
+    return parseResult.data;
   } else if (extension === '.yml' || extension === '.yaml') {
     const data = yaml.load(fileContent);
     // Ensure the YAML content is an array of objects
     if (!Array.isArray(data)) {
       throw new Error('YAML content is not an array');
     }
-    return RowDataArray.parse(data);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return data;
   } else {
     throw new Error(
       `Unsupported file extension: ${extension}. Use .csv, .yaml, or .yml`,
@@ -339,7 +311,9 @@ function printSummary(
     console.log(chalk.red(`✗ Failed: ${failures.length}`));
     console.log(chalk.yellow('\nFailed rows:'));
     failures.forEach((row) => {
-      console.log(chalk.yellow(`  - Row ${row.id}: ${row._error}`));
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const rowId = row.id || row.noteId || Object.values(row)[0] || 'unknown';
+      console.log(chalk.yellow(`  - Row ${String(rowId)}: ${row._error}`));
     });
   }
 
@@ -378,20 +352,18 @@ function printSummary(
 async function main(): Promise<void> {
   const startTime = Date.now();
 
-  // Parse CLI arguments and configuration
-  const [INPUT_FILE, OUTPUT_FILE, FIELD_TO_PROCESS, PROMPT_FILE] =
-    parseCliArgs();
+  // Parse configuration
   const config = parseConfig();
 
   // Read prompt template from file
-  const PROMPT_TEMPLATE = await readFile(PROMPT_FILE, 'utf-8');
+  const promptTemplate = await readFile(argv.prompt, 'utf-8');
 
   console.log(chalk.bold('='.repeat(60)));
   console.log(chalk.bold('Batch AI Data Processing'));
   console.log(chalk.bold('='.repeat(60)));
-  console.log(`Input file:        ${INPUT_FILE}`);
-  console.log(`Output file:       ${OUTPUT_FILE}`);
-  console.log(`Field to process:  ${FIELD_TO_PROCESS}`);
+  console.log(`Input file:        ${argv.input}`);
+  console.log(`Output file:       ${argv.output}`);
+  console.log(`Field to process:  ${argv.field}`);
   console.log(`Model:             ${config.model}`);
   console.log(`Batch size:        ${config.batchSize}`);
   console.log(`Retries:           ${config.retries}`);
@@ -403,9 +375,9 @@ async function main(): Promise<void> {
   console.log(chalk.bold('='.repeat(60)));
 
   // Read and parse data file
-  console.log(`\n${chalk.cyan('Reading')} ${INPUT_FILE}...`);
-  const rows = await parseDataFile(INPUT_FILE);
-  const inputFormat = path.extname(INPUT_FILE).substring(1).toUpperCase();
+  console.log(`\n${chalk.cyan('Reading')} ${argv.input}...`);
+  const rows = await parseDataFile(argv.input);
+  const inputFormat = path.extname(argv.input).substring(1).toUpperCase();
   console.log(chalk.green(`✓ Found ${rows.length} rows in ${inputFormat}`));
 
   if (rows.length === 0) {
@@ -414,9 +386,9 @@ async function main(): Promise<void> {
   }
 
   // Validate field exists
-  if (rows.length > 0 && !(FIELD_TO_PROCESS in rows[0])) {
+  if (rows.length > 0 && !(argv.field in rows[0])) {
     throw new Error(
-      `Field "${FIELD_TO_PROCESS}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`,
+      `Field "${argv.field}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`,
     );
   }
 
@@ -424,11 +396,11 @@ async function main(): Promise<void> {
     console.log(chalk.yellow('\n⚠️  DRY RUN MODE - No changes will be saved'));
     console.log(`Would process ${rows.length} rows`);
     console.log(`\n${chalk.bold('Prompt template:')}`);
-    console.log(PROMPT_TEMPLATE);
+    console.log(promptTemplate);
     console.log(`\n${chalk.bold('Sample row:')}`);
     console.log(JSON.stringify(rows[0], null, 2));
     console.log(`\n${chalk.bold('Sample prompt:')}`);
-    console.log(fillTemplate(PROMPT_TEMPLATE, rows[0]));
+    console.log(fillTemplate(promptTemplate, rows[0]));
     return;
   }
 
@@ -442,19 +414,19 @@ async function main(): Promise<void> {
   console.log(`\n${chalk.cyan('Processing')} ${rows.length} rows...`);
   const { rows: processedRows, tokenStats } = await processAllRows(
     rows,
-    FIELD_TO_PROCESS,
-    PROMPT_TEMPLATE,
+    argv.field,
+    promptTemplate,
     config,
     client,
   );
 
   // Write results to output file
-  console.log(`\n${chalk.cyan('Writing')} results to ${OUTPUT_FILE}...`);
-  const outputContent = serializeData(processedRows, OUTPUT_FILE);
-  await writeFile(OUTPUT_FILE, outputContent, 'utf-8');
+  console.log(`\n${chalk.cyan('Writing')} results to ${argv.output}...`);
+  const outputContent = serializeData(processedRows, argv.output);
+  await writeFile(argv.output, outputContent, 'utf-8');
   console.log(
     chalk.green(
-      `✓ Successfully wrote ${processedRows.length} rows to ${OUTPUT_FILE}`,
+      `✓ Successfully wrote ${processedRows.length} rows to ${argv.output}`,
     ),
   );
 
