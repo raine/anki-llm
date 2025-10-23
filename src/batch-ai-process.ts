@@ -40,8 +40,8 @@ const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
     outputCostPerMillion: 0.4,
   },
   'gemini-2.5-flash': {
-    inputCostPerMillion: 0.15,
-    outputCostPerMillion: 0.6,
+    inputCostPerMillion: 0.3,
+    outputCostPerMillion: 2.5,
   },
   'gemini-2.5-flash-lite': {
     inputCostPerMillion: 0.1,
@@ -92,7 +92,7 @@ const argv = yargs(hideBin(process.argv))
       'gpt-5-nano',
       'gemini-2.0-flash',
       'gemini-2.5-flash',
-      'gemini-2.5-flash-lite-preview-06-17',
+      'gemini-2.5-flash-lite',
     ],
   })
   .option('batch-size', {
