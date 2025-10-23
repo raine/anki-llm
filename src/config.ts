@@ -7,7 +7,7 @@ const SupportedModelSchema = z.enum([
   'gpt-5-nano',
   'gemini-2.0-flash',
   'gemini-2.5-flash',
-  'gemini-2.5-flash-lite-preview-06-17',
+  'gemini-2.5-flash-lite',
 ]);
 
 export type SupportedChatModel = z.infer<typeof SupportedModelSchema>;

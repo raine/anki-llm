@@ -43,7 +43,7 @@ const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
     inputCostPerMillion: 0.15,
     outputCostPerMillion: 0.6,
   },
-  'gemini-2.5-flash-lite-preview-06-17': {
+  'gemini-2.5-flash-lite': {
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
   },
