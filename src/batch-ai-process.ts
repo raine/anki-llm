@@ -80,23 +80,64 @@ const argv = yargs(hideBin(process.argv))
     type: 'string',
     demandOption: true,
   })
+  .option('model', {
+    alias: 'm',
+    describe: 'AI model to use',
+    type: 'string',
+    default: 'gpt-4o-mini',
+    choices: [
+      'gpt-4.1',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-5-nano',
+      'gemini-2.0-flash',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite-preview-06-17',
+    ],
+  })
+  .option('batch-size', {
+    alias: 'b',
+    describe: 'Number of concurrent requests',
+    type: 'number',
+    default: 5,
+  })
+  .option('max-tokens', {
+    describe: 'Maximum tokens per completion',
+    type: 'number',
+  })
+  .option('temperature', {
+    alias: 't',
+    describe: 'Sampling temperature (0-2)',
+    type: 'number',
+    default: 0.3,
+  })
+  .option('retries', {
+    alias: 'r',
+    describe: 'Number of retries on failure',
+    type: 'number',
+    default: 3,
+  })
+  .option('dry-run', {
+    alias: 'd',
+    describe: 'Preview without making changes',
+    type: 'boolean',
+    default: false,
+  })
   .example(
     '$0 input.csv output.csv english prompt.txt',
-    'Process english field',
+    'Process english field with defaults',
   )
   .example(
-    '$0 data.yaml result.yaml description prompt.txt',
-    'Process YAML file',
+    '$0 input.yaml out.yaml text prompt.txt -m gpt-4o -t 0.7 -b 10',
+    'Custom model, temperature, and batch size',
+  )
+  .example(
+    '$0 data.csv result.csv field prompt.txt --dry-run',
+    'Preview without processing',
   )
   .epilogue(
     'Environment variables:\n' +
-      '  OPENAI_API_KEY or GEMINI_API_KEY - API key for LLM provider\n' +
-      '  MODEL - Model to use (default: gpt-4o-mini)\n' +
-      '  BATCH_SIZE - Concurrent requests (default: 5)\n' +
-      '  MAX_TOKENS - Maximum tokens per completion\n' +
-      '  TEMPERATURE - Sampling temperature (default: 0.3)\n' +
-      '  RETRIES - Retries on failure (default: 3)\n' +
-      '  DRY_RUN - Set to "true" to preview without changes',
+      '  OPENAI_API_KEY or GEMINI_API_KEY - Required: API key for LLM provider',
   )
   .help()
   .parseSync();
@@ -352,8 +393,15 @@ function printSummary(
 async function main(): Promise<void> {
   const startTime = Date.now();
 
-  // Parse configuration
-  const config = parseConfig();
+  // Parse configuration from CLI args
+  const config = parseConfig({
+    model: argv.model,
+    batchSize: argv.batchSize,
+    maxTokens: argv.maxTokens,
+    temperature: argv.temperature,
+    retries: argv.retries,
+    dryRun: argv.dryRun,
+  });
 
   // Read prompt template from file
   const promptTemplate = await readFile(argv.prompt, 'utf-8');

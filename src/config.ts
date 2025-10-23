@@ -47,11 +47,17 @@ function getProviderConfig(model: SupportedChatModel): {
   };
 }
 
-export function parseConfig(): Config {
-  const dryRun = process.env.DRY_RUN === 'true';
+export function parseConfig(cliArgs: {
+  model: string;
+  batchSize: number;
+  maxTokens?: number;
+  temperature: number;
+  retries: number;
+  dryRun: boolean;
+}): Config {
+  const { model: modelStr, dryRun } = cliArgs;
 
-  // Get model first to determine which API key to look for
-  const modelStr = process.env.MODEL || 'gpt-4o-mini';
+  // Validate model
   const modelResult = SupportedModelSchema.safeParse(modelStr);
 
   if (!modelResult.success) {
@@ -76,31 +82,22 @@ export function parseConfig(): Config {
     console.error(
       `Tip: For model '${model}', set ${providerConfig.recommendedApiKeyEnv}`,
     );
-    console.error('Or set DRY_RUN=true to preview without an API key');
+    console.error('Or use --dry-run to preview without an API key');
     process.exit(1);
   }
 
-  // Determine base URL: explicit override > provider default > undefined
-  const apiBaseUrl =
-    process.env.OPENAI_API_BASE ||
-    process.env.API_BASE_URL ||
-    providerConfig.baseURL;
+  // Use provider-specific base URL
+  const apiBaseUrl = providerConfig.baseURL;
 
   const result = Config.safeParse({
     apiKey: apiKey || 'dummy-key-for-dry-run',
     apiBaseUrl,
     model,
-    batchSize: process.env.BATCH_SIZE
-      ? parseInt(process.env.BATCH_SIZE, 10)
-      : 5,
+    batchSize: cliArgs.batchSize,
     dryRun,
-    maxTokens: process.env.MAX_TOKENS
-      ? parseInt(process.env.MAX_TOKENS, 10)
-      : undefined,
-    temperature: process.env.TEMPERATURE
-      ? parseFloat(process.env.TEMPERATURE)
-      : 0.3,
-    retries: process.env.RETRIES ? parseInt(process.env.RETRIES, 10) : 3,
+    maxTokens: cliArgs.maxTokens,
+    temperature: cliArgs.temperature,
+    retries: cliArgs.retries,
   });
 
   if (!result.success) {
