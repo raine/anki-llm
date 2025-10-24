@@ -297,6 +297,23 @@ function fillTemplate(template: string, row: RowData): string {
 }
 
 /**
+ * Wraps a promise with a timeout. If the promise doesn't resolve within the timeout,
+ * it rejects with a timeout error.
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs),
+    ),
+  ]);
+}
+
+/**
  * Extracts content from <result></result> XML tags in the response.
  * Throws an error if no tags are found, triggering a retry.
  */
@@ -345,17 +362,23 @@ async function processRow(
   await log(`Row ${rowId}: Generated prompt (${prompt.length} chars)`, true);
 
   await log(`Row ${rowId}: Sending request to ${config.model}`, true);
-  const response = await client.chat.completions.create({
-    model: config.model,
-    messages: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-    temperature: config.temperature,
-    ...(config.maxTokens && { max_tokens: config.maxTokens }),
-  });
+
+  // Add 60 second timeout to API request to prevent infinite hangs
+  const response = await withTimeout(
+    client.chat.completions.create({
+      model: config.model,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      temperature: config.temperature,
+      ...(config.maxTokens && { max_tokens: config.maxTokens }),
+    }),
+    60000, // 60 second timeout
+    `Request timeout after 60 seconds for row ${rowId}`,
+  );
 
   const rawResult = response.choices[0]?.message?.content?.trim() || '';
   await log(
