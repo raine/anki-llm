@@ -1,4 +1,4 @@
-import { readFile, writeFile, rename, mkdtemp } from 'fs/promises';
+import { readFile, writeFile, rename, mkdtemp, appendFile } from 'fs/promises';
 import Papa from 'papaparse';
 import { z } from 'zod';
 import OpenAI from 'openai';
@@ -53,6 +53,31 @@ const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
 // Generic row data type - can hold any fields
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RowData = Record<string, any>;
+
+// Global log file path (set during main())
+let logFilePath: string | null = null;
+
+/**
+ * Logs a message to both console and log file
+ */
+async function log(message: string, skipConsole = false): Promise<void> {
+  const timestamp = new Date().toISOString();
+  const logEntry = `[${timestamp}] ${message}\n`;
+
+  if (!skipConsole) {
+    console.log(message);
+  }
+
+  if (logFilePath) {
+    try {
+      await appendFile(logFilePath, logEntry, 'utf-8');
+    } catch (error) {
+      // Don't let log failures crash the program
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(chalk.red(`Failed to write to log file: ${errorMsg}`));
+    }
+  }
+}
 
 /**
  * Atomically writes a file by writing to a temp file first, then renaming.
@@ -275,12 +300,27 @@ function fillTemplate(template: string, row: RowData): string {
  * Extracts content from <result></result> XML tags in the response.
  * Throws an error if no tags are found, triggering a retry.
  */
-function parseXmlResult(response: string): string {
+async function parseXmlResult(
+  response: string,
+  rowId: string,
+): Promise<string> {
   const match = response.match(/<result>([\s\S]*?)<\/result>/);
   if (match && match[1]) {
-    return match[1].trim();
+    const result = match[1].trim();
+    await log(
+      `Row ${rowId}: Successfully parsed result (${result.length} chars)`,
+      true,
+    );
+    return result;
   }
-  // No XML tags found - throw error to trigger retry
+  // No XML tags found - log and throw error to trigger retry
+  const errorMsg = `Row ${rowId}: Response missing <result></result> tags. Full response: ${response}`;
+  await log(errorMsg, true);
+  console.log(
+    chalk.yellow(
+      `\n  ⚠️  Response missing <result></result> tags. Full response:\n${chalk.gray(response)}`,
+    ),
+  );
   throw new Error(
     `Response missing required <result></result> tags. Response preview: ${response.substring(0, 100)}...`,
   );
@@ -297,8 +337,14 @@ async function processRow(
   client: OpenAI,
   tokenStats: { input: number; output: number },
 ): Promise<string> {
-  const prompt = fillTemplate(promptTemplate, row);
+  const rowId = requireNoteId(row);
 
+  await log(`Row ${rowId}: Starting processing`, true);
+
+  const prompt = fillTemplate(promptTemplate, row);
+  await log(`Row ${rowId}: Generated prompt (${prompt.length} chars)`, true);
+
+  await log(`Row ${rowId}: Sending request to ${config.model}`, true);
   const response = await client.chat.completions.create({
     model: config.model,
     messages: [
@@ -312,16 +358,25 @@ async function processRow(
   });
 
   const rawResult = response.choices[0]?.message?.content?.trim() || '';
+  await log(
+    `Row ${rowId}: Received response (${rawResult.length} chars)`,
+    true,
+  );
 
   // Track token usage
   if (response.usage) {
     tokenStats.input += response.usage.prompt_tokens;
     tokenStats.output += response.usage.completion_tokens;
+    await log(
+      `Row ${rowId}: Token usage - Input: ${response.usage.prompt_tokens}, Output: ${response.usage.completion_tokens}`,
+      true,
+    );
   }
 
   // Parse XML to extract result from <result></result> tags
-  const result = parseXmlResult(rawResult);
+  const result = await parseXmlResult(rawResult, rowId);
 
+  await log(`Row ${rowId}: Processing complete`, true);
   return result;
 }
 
@@ -331,7 +386,7 @@ async function processRow(
 type ProcessedRow = RowData & { _error?: string };
 
 /**
- * Process rows with concurrency control and retry logic
+ * Process rows with concurrency control and retry logic without batch-blocking.
  */
 async function processAllRows(
   rows: RowData[],
@@ -351,7 +406,6 @@ async function processAllRows(
   const limit = pLimit(config.batchSize);
   const tokenStats = { input: 0, output: 0 };
 
-  // Create progress bar
   const progressBar = new cliProgress.SingleBar({
     format:
       'Processing |' +
@@ -364,96 +418,111 @@ async function processAllRows(
 
   progressBar.start(rows.length, 0);
 
-  const processedRows: ProcessedRow[] = [];
+  // This array will store results in the original order.
+  const orderedResults: ProcessedRow[] = new Array<ProcessedRow>(rows.length);
+
+  // --- Logic for buffered incremental writing ---
   const processedMap = new Map<string, RowData>();
+  const completedBuffer: ProcessedRow[] = [];
 
-  // Process in batches and write incrementally
-  for (let i = 0; i < rows.length; i += config.batchSize) {
-    const batch = rows.slice(i, i + config.batchSize);
+  const performIncrementalWrite = async () => {
+    if (!options?.outputPath || !options?.allRows || !options?.existingRowsMap)
+      return;
 
-    const batchResults = await Promise.all(
-      batch.map((row) =>
-        limit(async (): Promise<ProcessedRow> => {
-          try {
-            const processedValue = await pRetry(
-              async () => {
-                return await processRow(
-                  row,
-                  fieldToProcess,
-                  promptTemplate,
-                  config,
-                  client,
-                  tokenStats,
-                );
-              },
-              {
-                retries: config.retries,
-                onFailedAttempt: (error) => {
-                  // Log retry attempts
-                  // Try to get an identifier from the row (id, noteId, or first field)
-                  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                  const rowId =
-                    row.id || row.noteId || Object.values(row)[0] || 'unknown';
-                  console.log(
-                    chalk.yellow(
-                      `\n  Retry ${error.attemptNumber}/${config.retries + 1} for row ${String(rowId)}`,
-                    ),
-                  );
-                },
-                // Exponential backoff with jitter
-                minTimeout: 1000,
-                maxTimeout: 30000,
-                factor: 2,
-              },
-            );
+    // Update the central map with the buffered results
+    for (const row of completedBuffer) {
+      processedMap.set(requireNoteId(row), row);
+    }
+    completedBuffer.length = 0; // Clear buffer
 
-            progressBar.increment();
-            return { ...row, [fieldToProcess]: processedValue };
-          } catch (error) {
-            progressBar.increment();
-            // Bubble up AbortError - it indicates configuration issues that should stop everything
-            if (error instanceof AbortError) {
-              throw error;
-            }
-            const errorMessage =
-              error instanceof Error ? error.message : 'Unknown error';
-            return { ...row, _error: errorMessage };
-          }
-        }),
-      ),
-    );
+    // Merge new results with existing ones to create the full output file.
+    // Note: This preserves the existing behavior of only writing rows that
+    // have a processed result (from this run or a previous one).
+    const finalRows: RowData[] = [];
+    for (const row of options.allRows) {
+      const noteId = requireNoteId(row);
+      const processedRow =
+        processedMap.get(noteId) || options.existingRowsMap.get(noteId);
+      if (processedRow) {
+        finalRows.push(processedRow);
+      }
+    }
 
-    processedRows.push(...batchResults);
+    // Write to file atomically
+    const outputContent = serializeData(finalRows, options.outputPath);
+    await atomicWriteFile(options.outputPath, outputContent);
+  };
+  // --- End of incremental writing logic ---
 
-    // Write incrementally if output path is provided
-    if (options?.outputPath && options?.allRows && options?.existingRowsMap) {
-      // Update processed map with newly processed rows
-      for (const row of batchResults) {
-        const noteId = requireNoteId(row);
-        processedMap.set(noteId, row);
+  const allPromises = rows.map((row, index) =>
+    limit(async () => {
+      let result: ProcessedRow;
+      try {
+        const processedValue = await pRetry(
+          () =>
+            processRow(
+              row,
+              fieldToProcess,
+              promptTemplate,
+              config,
+              client,
+              tokenStats,
+            ),
+          {
+            retries: config.retries,
+            onFailedAttempt: async (error) => {
+              const rowId = requireNoteId(row);
+              const errorMsg =
+                error instanceof Error ? error.message : 'Unknown error';
+              const retryMsg = `Retry ${error.attemptNumber}/${config.retries + 1} for row ${rowId}: ${errorMsg}`;
+              console.log(chalk.yellow(`\n  ${retryMsg}`));
+              await log(retryMsg, true);
+            },
+            minTimeout: 1000,
+            maxTimeout: 30000,
+            factor: 2,
+          },
+        );
+        result = { ...row, [fieldToProcess]: processedValue };
+      } catch (error) {
+        if (error instanceof AbortError) {
+          throw error; // Critical error, stop everything
+        }
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        const rowId = requireNoteId(row);
+        await log(
+          `Row ${rowId}: FAILED after all retries - ${errorMessage}`,
+          true,
+        );
+        result = { ...row, _error: errorMessage };
       }
 
-      // Merge: combine newly processed rows with existing rows (from previous runs)
-      // Only include rows that have actually been processed
-      const finalRows: RowData[] = [];
-      for (const row of options.allRows) {
-        const noteId = requireNoteId(row);
-        const processedRow =
-          processedMap.get(noteId) || options.existingRowsMap.get(noteId);
-        if (processedRow) {
-          finalRows.push(processedRow);
+      // Store result in order and handle incremental writing
+      orderedResults[index] = result;
+
+      if (options?.outputPath) {
+        completedBuffer.push(result);
+        if (completedBuffer.length >= config.batchSize) {
+          await performIncrementalWrite();
         }
       }
 
-      // Write to file atomically
-      const outputContent = serializeData(finalRows, options.outputPath);
-      await atomicWriteFile(options.outputPath, outputContent);
-    }
+      progressBar.increment();
+    }),
+  );
+
+  // Wait for all queued promises to complete
+  await Promise.all(allPromises);
+
+  // Write any remaining items in the buffer
+  if (completedBuffer.length > 0) {
+    await performIncrementalWrite();
   }
 
   progressBar.stop();
 
-  return { rows: processedRows, tokenStats };
+  return { rows: orderedResults, tokenStats };
 }
 
 /**
@@ -592,6 +661,18 @@ function printSummary(
 async function main(): Promise<void> {
   const startTime = Date.now();
 
+  // Initialize log file path
+  const outputDir = path.dirname(argv.output);
+  const outputName = path.basename(argv.output, path.extname(argv.output));
+  logFilePath = path.join(outputDir, `${outputName}.log`);
+
+  // Clear previous log file
+  await writeFile(logFilePath, '', 'utf-8');
+
+  await log('='.repeat(60));
+  await log('Batch AI Data Processing - Session Started');
+  await log('='.repeat(60));
+
   // Parse configuration from CLI args
   const config = parseConfig({
     model: argv.model,
@@ -602,14 +683,29 @@ async function main(): Promise<void> {
     dryRun: argv.dryRun,
   });
 
+  await log(`Log file: ${logFilePath}`);
+  await log(`Input file: ${argv.input}`);
+  await log(`Output file: ${argv.output}`);
+  await log(`Field to process: ${argv.field}`);
+  await log(`Model: ${config.model}`);
+  await log(`Batch size: ${config.batchSize}`);
+  await log(`Retries: ${config.retries}`);
+  await log(`Temperature: ${config.temperature}`);
+  if (config.maxTokens) {
+    await log(`Max tokens: ${config.maxTokens}`);
+  }
+  await log(`Dry run: ${config.dryRun}`);
+
   // Read prompt template from file
   const promptTemplate = await readFile(argv.prompt, 'utf-8');
+  await log(`Prompt template loaded (${promptTemplate.length} chars)`);
 
   console.log(chalk.bold('='.repeat(60)));
   console.log(chalk.bold('Batch AI Data Processing'));
   console.log(chalk.bold('='.repeat(60)));
   console.log(`Input file:        ${argv.input}`);
   console.log(`Output file:       ${argv.output}`);
+  console.log(`Log file:          ${logFilePath}`);
   console.log(`Field to process:  ${argv.field}`);
   console.log(`Model:             ${config.model}`);
   console.log(`Batch size:        ${config.batchSize}`);
@@ -623,33 +719,40 @@ async function main(): Promise<void> {
 
   // Read and parse data file
   console.log(`\n${chalk.cyan('Reading')} ${argv.input}...`);
+  await log(`Reading input file: ${argv.input}`);
   const rows = await parseDataFile(argv.input);
   const inputFormat = path.extname(argv.input).substring(1).toUpperCase();
   console.log(chalk.green(`✓ Found ${rows.length} rows in ${inputFormat}`));
+  await log(`Parsed ${rows.length} rows from ${inputFormat} file`);
 
   if (rows.length === 0) {
     console.log(chalk.yellow('No rows to process. Exiting.'));
+    await log('No rows found. Exiting.');
     return;
   }
 
   // Validate field exists
+  await log('Validating field exists in input data');
   if (rows.length > 0 && !(argv.field in rows[0])) {
-    throw new Error(
-      `Field "${argv.field}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`,
-    );
+    const error = `Field "${argv.field}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`;
+    await log(`ERROR: ${error}`);
+    throw new Error(error);
   }
+  await log(`Field "${argv.field}" validated successfully`);
 
   // Validate no duplicate noteIds in input
+  await log('Validating no duplicate noteIds in input');
   const seenIds = new Set<string>();
   for (let i = 0; i < rows.length; i++) {
     const noteId = requireNoteId(rows[i]);
     if (seenIds.has(noteId)) {
-      throw new AbortError(
-        `Duplicate noteId "${noteId}" detected in input (first seen at row ${seenIds.size + 1}, duplicate at row ${i + 1})`,
-      );
+      const error = `Duplicate noteId "${noteId}" detected in input (first seen at row ${seenIds.size + 1}, duplicate at row ${i + 1})`;
+      await log(`ERROR: ${error}`);
+      throw new AbortError(error);
     }
     seenIds.add(noteId);
   }
+  await log('No duplicate noteIds found');
 
   // Load existing output and filter rows (always enabled unless --force)
   const force = argv.force;
@@ -659,12 +762,14 @@ async function main(): Promise<void> {
 
   if (!force) {
     console.log(`\n${chalk.cyan('Loading')} existing output...`);
+    await log('Loading existing output to skip already-processed rows');
     existingRowsMap = await loadExistingOutput(argv.output);
 
     if (existingRowsMap.size > 0) {
       console.log(
         chalk.green(`✓ Found ${existingRowsMap.size} already-processed rows`),
       );
+      await log(`Found ${existingRowsMap.size} already-processed rows`);
 
       // Filter out rows that are already processed (skip rows with errors - retry them)
       rowsToProcess = rows.filter((row) => {
@@ -679,14 +784,22 @@ async function main(): Promise<void> {
         console.log(
           chalk.yellow(`⏭  Skipping ${skippedCount} already-processed rows`),
         );
+        await log(`Skipping ${skippedCount} already-processed rows`);
       }
+    } else {
+      await log('No existing output found, will process all rows');
     }
+  } else {
+    await log('Force mode enabled, will re-process all rows');
   }
 
   if (rowsToProcess.length === 0) {
     console.log(chalk.green('\n✓ All rows already processed. Nothing to do.'));
+    await log('All rows already processed. Exiting.');
     return;
   }
+
+  await log(`Total rows to process: ${rowsToProcess.length}`);
 
   if (config.dryRun) {
     console.log(chalk.yellow('\n⚠️  DRY RUN MODE - No changes will be saved'));
@@ -697,10 +810,12 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(rowsToProcess[0], null, 2));
     console.log(`\n${chalk.bold('Sample prompt:')}`);
     console.log(fillTemplate(promptTemplate, rowsToProcess[0]));
+    await log('Dry run complete. Exiting.');
     return;
   }
 
   // Initialize OpenAI client
+  await log(`Initializing OpenAI client for model: ${config.model}`);
   const client = new OpenAI({
     apiKey: config.apiKey,
     ...(config.apiBaseUrl && { baseURL: config.apiBaseUrl }),
@@ -708,6 +823,7 @@ async function main(): Promise<void> {
 
   // Process remaining rows with incremental writing
   console.log(`\n${chalk.cyan('Processing')} ${rowsToProcess.length} rows...`);
+  await log(`Starting batch processing of ${rowsToProcess.length} rows`);
   const { rows: processedRows, tokenStats } = await processAllRows(
     rowsToProcess,
     argv.field,
@@ -722,22 +838,40 @@ async function main(): Promise<void> {
   );
 
   console.log(chalk.green(`\n✓ Processing complete`));
+  await log('Batch processing complete');
 
   // Print summary
   const elapsedMs = Date.now() - startTime;
   printSummary(processedRows, tokenStats, config, elapsedMs);
+
+  // Log summary to file
+  const failures = processedRows.filter((r) => r._error);
+  const successes = processedRows.length - failures.length;
+  await log(`Summary: ${successes} successful, ${failures.length} failed`);
+  await log(
+    `Total tokens: ${tokenStats.input + tokenStats.output} (input: ${tokenStats.input}, output: ${tokenStats.output})`,
+  );
+  await log(`Total time: ${(elapsedMs / 1000).toFixed(2)}s`);
+  await log('Session completed successfully');
 }
 
 // Run main and handle errors
-main().catch((error) => {
+main().catch(async (error) => {
   if (error instanceof Error) {
     console.error(chalk.red(`\n❌ Error: ${error.message}`));
+    if (logFilePath) {
+      await log(`FATAL ERROR: ${error.message}`);
+      await log(`Stack trace: ${error.stack}`);
+    }
     if (error instanceof z.ZodError) {
       console.error(chalk.red('Validation details:'));
       console.error(z.prettifyError(error));
     }
   } else {
     console.error(chalk.red('\n❌ An unknown error occurred:'), error);
+    if (logFilePath) {
+      await log(`FATAL ERROR: Unknown error - ${String(error)}`);
+    }
   }
   process.exit(1);
 });
