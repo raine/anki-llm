@@ -314,6 +314,21 @@ function withTimeout<T>(
 }
 
 /**
+ * Calculate total cost from token stats and model pricing
+ */
+function calculateCost(
+  tokenStats: { input: number; output: number },
+  model: SupportedChatModel,
+): number {
+  const pricing = MODEL_PRICING[model];
+  const inputCost =
+    (tokenStats.input / 1_000_000) * pricing.inputCostPerMillion;
+  const outputCost =
+    (tokenStats.output / 1_000_000) * pricing.outputCostPerMillion;
+  return inputCost + outputCost;
+}
+
+/**
  * Extracts content from <result></result> XML tags in the response.
  * Throws an error if no tags are found, triggering a retry.
  */
@@ -451,6 +466,7 @@ async function processAllRows(
   // --- Logic for buffered incremental writing ---
   const processedMap = new Map<string, RowData>();
   const completedBuffer: ProcessedRow[] = [];
+  let completedCount = 0; // Track how many rows have completed
 
   const performIncrementalWrite = async () => {
     if (!options?.outputPath || !options?.allRows || !options?.existingRowsMap)
@@ -527,6 +543,16 @@ async function processAllRows(
 
       // Store result in order and handle incremental writing
       orderedResults[index] = result;
+      completedCount++;
+
+      // Log cost every 10 completed rows
+      if (completedCount % 10 === 0) {
+        const currentCost = calculateCost(tokenStats, config.model);
+        await log(
+          `Progress: ${completedCount} rows completed | Tokens: ${tokenStats.input + tokenStats.output} (in: ${tokenStats.input}, out: ${tokenStats.output}) | Cost so far: $${currentCost.toFixed(4)}`,
+          true,
+        );
+      }
 
       if (options?.outputPath) {
         completedBuffer.push(result);
