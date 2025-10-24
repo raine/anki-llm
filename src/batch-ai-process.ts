@@ -53,6 +53,39 @@ const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RowData = Record<string, any>;
 
+/**
+ * Extracts noteId from a row, ensuring it's a valid string or number.
+ * Checks multiple possible field names: noteId, id, Id
+ * Returns undefined only during validation. After validation, all rows are guaranteed to have an ID.
+ */
+function getNoteId(row: RowData): string | number | undefined {
+  // Check each possible field name in order
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const noteId = row.noteId ?? row.id ?? row.Id;
+
+  // Ensure the value is actually a string or number (not an object, array, etc.)
+  if (typeof noteId === 'string' || typeof noteId === 'number') {
+    return noteId;
+  }
+
+  // No valid identifier found, or the value is an unexpected type
+  return undefined;
+}
+
+/**
+ * Same as getNoteId but throws if no ID is found.
+ * Use this after validation when all rows are guaranteed to have IDs.
+ */
+function requireNoteId(row: RowData): string | number {
+  const noteId = getNoteId(row);
+  if (noteId === undefined) {
+    throw new Error(
+      `Row missing required identifier (noteId, id, or Id). This should not happen after validation. Fields: ${Object.keys(row).join(', ')}`,
+    );
+  }
+  return noteId;
+}
+
 // Parse command-line arguments
 const argv = yargs(hideBin(process.argv))
   .usage('Usage: $0 <input> <output> <field> <prompt>')
@@ -123,6 +156,12 @@ const argv = yargs(hideBin(process.argv))
     type: 'boolean',
     default: false,
   })
+  .option('force', {
+    alias: 'f',
+    describe: 'Force re-processing of all rows (ignore existing output)',
+    type: 'boolean',
+    default: false,
+  })
   .example(
     '$0 input.csv output.csv english prompt.txt',
     'Process english field with defaults',
@@ -134,6 +173,10 @@ const argv = yargs(hideBin(process.argv))
   .example(
     '$0 data.csv result.csv field prompt.txt --dry-run',
     'Preview without processing',
+  )
+  .example(
+    '$0 data.yaml out.yaml field prompt.txt --force',
+    'Re-process all rows (ignore existing output)',
   )
   .epilogue(
     'Environment variables:\n' +
@@ -264,6 +307,11 @@ async function processAllRows(
   promptTemplate: string,
   config: Config,
   client: OpenAI,
+  options?: {
+    allRows?: RowData[];
+    existingRowsMap?: Map<string | number, RowData>;
+    outputPath?: string;
+  },
 ): Promise<{
   rows: ProcessedRow[];
   tokenStats: { input: number; output: number };
@@ -284,57 +332,111 @@ async function processAllRows(
 
   progressBar.start(rows.length, 0);
 
-  const processedRows = await Promise.all(
-    rows.map((row) =>
-      limit(async (): Promise<ProcessedRow> => {
-        try {
-          const processedValue = await pRetry(
-            async () => {
-              return await processRow(
-                row,
-                fieldToProcess,
-                promptTemplate,
-                config,
-                client,
-                tokenStats,
-              );
-            },
-            {
-              retries: config.retries,
-              onFailedAttempt: (error) => {
-                // Log retry attempts
-                // Try to get an identifier from the row (id, noteId, or first field)
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                const rowId =
-                  row.id || row.noteId || Object.values(row)[0] || 'unknown';
-                console.log(
-                  chalk.yellow(
-                    `\n  Retry ${error.attemptNumber}/${config.retries + 1} for row ${String(rowId)}`,
-                  ),
+  const processedRows: ProcessedRow[] = [];
+  const processedMap = new Map<string | number, RowData>();
+
+  // Process in batches and write incrementally
+  for (let i = 0; i < rows.length; i += config.batchSize) {
+    const batch = rows.slice(i, i + config.batchSize);
+
+    const batchResults = await Promise.all(
+      batch.map((row) =>
+        limit(async (): Promise<ProcessedRow> => {
+          try {
+            const processedValue = await pRetry(
+              async () => {
+                return await processRow(
+                  row,
+                  fieldToProcess,
+                  promptTemplate,
+                  config,
+                  client,
+                  tokenStats,
                 );
               },
-              // Exponential backoff with jitter
-              minTimeout: 1000,
-              maxTimeout: 30000,
-              factor: 2,
-            },
-          );
+              {
+                retries: config.retries,
+                onFailedAttempt: (error) => {
+                  // Log retry attempts
+                  // Try to get an identifier from the row (id, noteId, or first field)
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                  const rowId =
+                    row.id || row.noteId || Object.values(row)[0] || 'unknown';
+                  console.log(
+                    chalk.yellow(
+                      `\n  Retry ${error.attemptNumber}/${config.retries + 1} for row ${String(rowId)}`,
+                    ),
+                  );
+                },
+                // Exponential backoff with jitter
+                minTimeout: 1000,
+                maxTimeout: 30000,
+                factor: 2,
+              },
+            );
 
-          progressBar.increment();
-          return { ...row, [fieldToProcess]: processedValue };
-        } catch (error) {
-          progressBar.increment();
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
-          return { ...row, _error: errorMessage };
-        }
-      }),
-    ),
-  );
+            progressBar.increment();
+            return { ...row, [fieldToProcess]: processedValue };
+          } catch (error) {
+            progressBar.increment();
+            const errorMessage =
+              error instanceof Error ? error.message : 'Unknown error';
+            return { ...row, _error: errorMessage };
+          }
+        }),
+      ),
+    );
+
+    processedRows.push(...batchResults);
+
+    // Write incrementally if output path is provided
+    if (options?.outputPath && options?.allRows && options?.existingRowsMap) {
+      // Update processed map with newly processed rows
+      for (const row of batchResults) {
+        const noteId = requireNoteId(row);
+        processedMap.set(noteId, row);
+      }
+
+      // Merge with existing rows
+      const finalRows = options.allRows.map((row) => {
+        const noteId = requireNoteId(row);
+        return (
+          processedMap.get(noteId) ||
+          options.existingRowsMap!.get(noteId) ||
+          row
+        );
+      });
+
+      // Write to file
+      const outputContent = serializeData(finalRows, options.outputPath);
+      await writeFile(options.outputPath, outputContent, 'utf-8');
+    }
+  }
 
   progressBar.stop();
 
   return { rows: processedRows, tokenStats };
+}
+
+/**
+ * Loads existing output file and creates a map of rows by noteId
+ * Returns empty map if file doesn't exist
+ */
+async function loadExistingOutput(
+  filePath: string,
+): Promise<Map<string | number, RowData>> {
+  try {
+    const rows = await parseDataFile(filePath);
+    const map = new Map<string | number, RowData>();
+    for (const row of rows) {
+      const noteId = requireNoteId(row);
+      map.set(noteId, row);
+    }
+    return map;
+  } catch {
+    // File doesn't exist or can't be parsed - return empty map
+    return new Map();
+  }
 }
 
 /**
@@ -499,15 +601,50 @@ async function main(): Promise<void> {
     );
   }
 
+  // Load existing output and filter rows (always enabled unless --force)
+  const force = argv.force;
+
+  let existingRowsMap = new Map<string | number, RowData>();
+  let rowsToProcess = rows;
+
+  if (!force) {
+    console.log(`\n${chalk.cyan('Loading')} existing output...`);
+    existingRowsMap = await loadExistingOutput(argv.output);
+
+    if (existingRowsMap.size > 0) {
+      console.log(
+        chalk.green(`✓ Found ${existingRowsMap.size} already-processed rows`),
+      );
+
+      // Filter out rows that are already processed
+      rowsToProcess = rows.filter((row) => {
+        const noteId = requireNoteId(row);
+        return !existingRowsMap.has(noteId);
+      });
+
+      const skippedCount = rows.length - rowsToProcess.length;
+      if (skippedCount > 0) {
+        console.log(
+          chalk.yellow(`⏭  Skipping ${skippedCount} already-processed rows`),
+        );
+      }
+    }
+  }
+
+  if (rowsToProcess.length === 0) {
+    console.log(chalk.green('\n✓ All rows already processed. Nothing to do.'));
+    return;
+  }
+
   if (config.dryRun) {
     console.log(chalk.yellow('\n⚠️  DRY RUN MODE - No changes will be saved'));
-    console.log(`Would process ${rows.length} rows`);
+    console.log(`Would process ${rowsToProcess.length} rows`);
     console.log(`\n${chalk.bold('Prompt template:')}`);
     console.log(promptTemplate);
     console.log(`\n${chalk.bold('Sample row:')}`);
-    console.log(JSON.stringify(rows[0], null, 2));
+    console.log(JSON.stringify(rowsToProcess[0], null, 2));
     console.log(`\n${chalk.bold('Sample prompt:')}`);
-    console.log(fillTemplate(promptTemplate, rows[0]));
+    console.log(fillTemplate(promptTemplate, rowsToProcess[0]));
     return;
   }
 
@@ -517,25 +654,22 @@ async function main(): Promise<void> {
     ...(config.apiBaseUrl && { baseURL: config.apiBaseUrl }),
   });
 
-  // Process all rows
-  console.log(`\n${chalk.cyan('Processing')} ${rows.length} rows...`);
+  // Process remaining rows with incremental writing
+  console.log(`\n${chalk.cyan('Processing')} ${rowsToProcess.length} rows...`);
   const { rows: processedRows, tokenStats } = await processAllRows(
-    rows,
+    rowsToProcess,
     argv.field,
     promptTemplate,
     config,
     client,
+    {
+      allRows: rows,
+      existingRowsMap: existingRowsMap,
+      outputPath: argv.output,
+    },
   );
 
-  // Write results to output file
-  console.log(`\n${chalk.cyan('Writing')} results to ${argv.output}...`);
-  const outputContent = serializeData(processedRows, argv.output);
-  await writeFile(argv.output, outputContent, 'utf-8');
-  console.log(
-    chalk.green(
-      `✓ Successfully wrote ${processedRows.length} rows to ${argv.output}`,
-    ),
-  );
+  console.log(chalk.green(`\n✓ Processing complete`));
 
   // Print summary
   const elapsedMs = Date.now() - startTime;
