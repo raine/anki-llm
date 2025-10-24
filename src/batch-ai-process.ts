@@ -272,6 +272,21 @@ function fillTemplate(template: string, row: RowData): string {
 }
 
 /**
+ * Extracts content from <result></result> XML tags in the response.
+ * Throws an error if no tags are found, triggering a retry.
+ */
+function parseXmlResult(response: string): string {
+  const match = response.match(/<result>([\s\S]*?)<\/result>/);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+  // No XML tags found - throw error to trigger retry
+  throw new Error(
+    `Response missing required <result></result> tags. Response preview: ${response.substring(0, 100)}...`,
+  );
+}
+
+/**
  * Processes a single row using the LLM with retry logic
  */
 async function processRow(
@@ -296,13 +311,16 @@ async function processRow(
     ...(config.maxTokens && { max_tokens: config.maxTokens }),
   });
 
-  const result = response.choices[0]?.message?.content?.trim() || '';
+  const rawResult = response.choices[0]?.message?.content?.trim() || '';
 
   // Track token usage
   if (response.usage) {
     tokenStats.input += response.usage.prompt_tokens;
     tokenStats.output += response.usage.completion_tokens;
   }
+
+  // Parse XML to extract result from <result></result> tags
+  const result = parseXmlResult(rawResult);
 
   return result;
 }

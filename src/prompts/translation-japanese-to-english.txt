@@ -8,4 +8,12 @@ Guidelines:
 - Make it easier to infer the original Japanese from the English
 - Be natural and idiomatic in English
 
-Provide only the improved English translation, nothing else.
+Instructions:
+1. First, analyze the sentence structure and key elements
+2. Think through the translation choices and any nuances
+3. Provide your final translation wrapped in <result></result> XML tags
+
+Format your response like this:
+- Analysis: [your analysis of the sentence]
+- Translation considerations: [your thought process]
+- <result>[your final English translation here]</result>
