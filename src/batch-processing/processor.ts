@@ -6,8 +6,8 @@ import chalk from 'chalk';
 import type { Config } from '../config.js';
 import type { RowData, ProcessedRow, TokenStats } from './types.js';
 import { requireNoteId } from './util.js';
-import { log } from './logger.js';
-import { processSingleRow } from './llm.service.js';
+import { logDebug } from './logger.js';
+import { processSingleRow } from './llm.js';
 import { serializeData, atomicWriteFile } from './data-io.js';
 import { calculateCost } from './reporting.js';
 
@@ -102,7 +102,7 @@ export async function processAllRows(
                 error instanceof Error ? error.message : 'Unknown error';
               const retryMsg = `Retry ${error.attemptNumber}/${config.retries + 1} for row ${rowId}: ${errorMsg}`;
               console.log(chalk.yellow(`\n  ${retryMsg}`));
-              await log(retryMsg, true);
+              await logDebug(retryMsg);
             },
             minTimeout: 1000,
             maxTimeout: 30000,
@@ -117,9 +117,8 @@ export async function processAllRows(
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
         const rowId = requireNoteId(row);
-        await log(
+        await logDebug(
           `Row ${rowId}: FAILED after all retries - ${errorMessage}`,
-          true,
         );
         result = { ...row, _error: errorMessage };
       }
@@ -131,9 +130,8 @@ export async function processAllRows(
       // Log cost every 10 completed rows
       if (completedCount % 10 === 0) {
         const currentCost = calculateCost(tokenStats, config.model);
-        await log(
+        await logDebug(
           `Progress: ${completedCount} rows completed | Tokens: ${tokenStats.input + tokenStats.output} (in: ${tokenStats.input}, out: ${tokenStats.output}) | Cost so far: $${currentCost.toFixed(4)}`,
-          true,
         );
       }
 

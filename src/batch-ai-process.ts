@@ -5,7 +5,12 @@ import chalk from 'chalk';
 import * as path from 'path';
 import { parseConfig } from './config.js';
 import { parseCliArgs } from './batch-processing/cli.js';
-import { initLogger, log } from './batch-processing/logger.js';
+import {
+  initLogger,
+  logDebug,
+  logInfo,
+  logInfoTee,
+} from './batch-processing/logger.js';
 import {
   parseDataFile,
   loadExistingOutput,
@@ -28,9 +33,9 @@ async function main(): Promise<void> {
   const logFilePath = path.join(outputDir, `${outputName}.log`);
   await initLogger(logFilePath);
 
-  await log('='.repeat(60));
-  await log('Batch AI Data Processing - Session Started');
-  await log('='.repeat(60));
+  await logDebug('='.repeat(60));
+  await logDebug('Batch AI Data Processing - Session Started');
+  await logDebug('='.repeat(60));
 
   // 3. Parse configuration from CLI args
   const config = parseConfig({
@@ -43,78 +48,77 @@ async function main(): Promise<void> {
     requireResultTag: argv.requireResultTag,
   });
 
-  await log(`Log file: ${logFilePath}`);
-  await log(`Input file: ${argv.input}`);
-  await log(`Output file: ${argv.output}`);
-  await log(`Field to process: ${argv.field}`);
-  await log(`Model: ${config.model}`);
-  await log(`Batch size: ${config.batchSize}`);
-  await log(`Retries: ${config.retries}`);
-  await log(`Temperature: ${config.temperature}`);
+  await logDebug(`Log file: ${logFilePath}`);
+  await logDebug(`Input file: ${argv.input}`);
+  await logDebug(`Output file: ${argv.output}`);
+  await logDebug(`Field to process: ${argv.field}`);
+  await logDebug(`Model: ${config.model}`);
+  await logDebug(`Batch size: ${config.batchSize}`);
+  await logDebug(`Retries: ${config.retries}`);
+  await logDebug(`Temperature: ${config.temperature}`);
   if (config.maxTokens) {
-    await log(`Max tokens: ${config.maxTokens}`);
+    await logDebug(`Max tokens: ${config.maxTokens}`);
   }
-  await log(`Dry run: ${config.dryRun}`);
-  await log(`Require result tag: ${config.requireResultTag}`);
+  await logDebug(`Dry run: ${config.dryRun}`);
+  await logDebug(`Require result tag: ${config.requireResultTag}`);
 
   // 4. Read prompt template from file
   const promptTemplate = await readFile(argv.prompt, 'utf-8');
-  await log(`Prompt template loaded (${promptTemplate.length} chars)`);
+  await logDebug(`Prompt template loaded (${promptTemplate.length} chars)`);
 
-  console.log(chalk.bold('='.repeat(60)));
-  console.log(chalk.bold('Batch AI Data Processing'));
-  console.log(chalk.bold('='.repeat(60)));
-  console.log(`Input file:        ${argv.input}`);
-  console.log(`Output file:       ${argv.output}`);
-  console.log(`Log file:          ${logFilePath}`);
-  console.log(`Field to process:  ${argv.field}`);
-  console.log(`Model:             ${config.model}`);
-  console.log(`Batch size:        ${config.batchSize}`);
-  console.log(`Retries:           ${config.retries}`);
-  console.log(`Temperature:       ${config.temperature}`);
+  logInfo(chalk.bold('='.repeat(60)));
+  logInfo(chalk.bold('Batch AI Data Processing'));
+  logInfo(chalk.bold('='.repeat(60)));
+  logInfo(`Input file:        ${argv.input}`);
+  logInfo(`Output file:       ${argv.output}`);
+  logInfo(`Log file:          ${logFilePath}`);
+  logInfo(`Field to process:  ${argv.field}`);
+  logInfo(`Model:             ${config.model}`);
+  logInfo(`Batch size:        ${config.batchSize}`);
+  logInfo(`Retries:           ${config.retries}`);
+  logInfo(`Temperature:       ${config.temperature}`);
   if (config.maxTokens) {
-    console.log(`Max tokens:        ${config.maxTokens}`);
+    logInfo(`Max tokens:        ${config.maxTokens}`);
   }
-  console.log(`Dry run:           ${config.dryRun}`);
-  console.log(`Require result tag: ${config.requireResultTag}`);
-  console.log(chalk.bold('='.repeat(60)));
+  logInfo(`Dry run:           ${config.dryRun}`);
+  logInfo(`Require result tag: ${config.requireResultTag}`);
+  logInfo(chalk.bold('='.repeat(60)));
 
   // 5. Read and parse data file
-  console.log(`\n${chalk.cyan('Reading')} ${argv.input}...`);
-  await log(`Reading input file: ${argv.input}`);
+  await logInfoTee(`\n${chalk.cyan('Reading')} ${argv.input}...`);
   const rows = await parseDataFile(argv.input);
   const inputFormat = path.extname(argv.input).substring(1).toUpperCase();
-  console.log(chalk.green(`✓ Found ${rows.length} rows in ${inputFormat}`));
-  await log(`Parsed ${rows.length} rows from ${inputFormat} file`);
+  await logInfoTee(
+    chalk.green(`✓ Found ${rows.length} rows in ${inputFormat}`),
+  );
 
   if (rows.length === 0) {
-    console.log(chalk.yellow('No rows to process. Exiting.'));
-    await log('No rows found. Exiting.');
+    await logInfoTee(chalk.yellow('No rows to process. Exiting.'));
     return;
   }
 
   // 6. Validate field exists
-  await log('Validating field exists in input data');
+  await logDebug('Validating field exists in input data');
   if (rows.length > 0 && !(argv.field in rows[0])) {
     const error = `Field "${argv.field}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`;
-    await log(`ERROR: ${error}`);
+    await logDebug(`ERROR: ${error}`);
     throw new Error(error);
   }
-  await log(`Field "${argv.field}" validated successfully`);
+  await logDebug(`Field "${argv.field}" validated successfully`);
 
   // 7. Validate no duplicate noteIds in input
-  await log('Validating no duplicate noteIds in input');
+  await logDebug('Validating no duplicate noteIds in input');
   const seenIds = new Set<string>();
   for (let i = 0; i < rows.length; i++) {
     const noteId = requireNoteId(rows[i]);
     if (seenIds.has(noteId)) {
       const error = `Duplicate noteId "${noteId}" detected in input (first seen at row ${seenIds.size + 1}, duplicate at row ${i + 1})`;
-      await log(`ERROR: ${error}`);
+      await logDebug(`ERROR: ${error}`);
       throw new AbortError(error);
     }
     seenIds.add(noteId);
   }
-  await log('No duplicate noteIds found');
+  await logDebug('No duplicate noteIds found');
 
   // 8. Load existing output and filter rows (always enabled unless --force)
   const force = argv.force;
@@ -123,15 +127,13 @@ async function main(): Promise<void> {
   let rowsToProcess = rows;
 
   if (!force) {
-    console.log(`\n${chalk.cyan('Loading')} existing output...`);
-    await log('Loading existing output to skip already-processed rows');
+    await logInfoTee(`\n${chalk.cyan('Loading')} existing output...`);
     existingRowsMap = await loadExistingOutput(argv.output);
 
     if (existingRowsMap.size > 0) {
-      console.log(
+      await logInfoTee(
         chalk.green(`✓ Found ${existingRowsMap.size} already-processed rows`),
       );
-      await log(`Found ${existingRowsMap.size} already-processed rows`);
 
       // Filter out rows that are already processed (skip rows with errors - retry them)
       rowsToProcess = rows.filter((row) => {
@@ -143,50 +145,51 @@ async function main(): Promise<void> {
 
       const skippedCount = rows.length - rowsToProcess.length;
       if (skippedCount > 0) {
-        console.log(
+        await logInfoTee(
           chalk.yellow(`⏭  Skipping ${skippedCount} already-processed rows`),
         );
-        await log(`Skipping ${skippedCount} already-processed rows`);
       }
     } else {
-      await log('No existing output found, will process all rows');
+      await logDebug('No existing output found, will process all rows');
     }
   } else {
-    await log('Force mode enabled, will re-process all rows');
+    await logDebug('Force mode enabled, will re-process all rows');
   }
 
   if (rowsToProcess.length === 0) {
-    console.log(chalk.green('\n✓ All rows already processed. Nothing to do.'));
-    await log('All rows already processed. Exiting.');
+    await logInfoTee(
+      chalk.green('\n✓ All rows already processed. Nothing to do.'),
+    );
     return;
   }
 
-  await log(`Total rows to process: ${rowsToProcess.length}`);
+  await logDebug(`Total rows to process: ${rowsToProcess.length}`);
 
   // 9. Handle dry run mode
   if (config.dryRun) {
-    console.log(chalk.yellow('\n⚠️  DRY RUN MODE - No changes will be saved'));
-    console.log(`Would process ${rowsToProcess.length} rows`);
-    console.log(`\n${chalk.bold('Prompt template:')}`);
-    console.log(promptTemplate);
-    console.log(`\n${chalk.bold('Sample row:')}`);
-    console.log(JSON.stringify(rowsToProcess[0], null, 2));
-    console.log(`\n${chalk.bold('Sample prompt:')}`);
-    console.log(fillTemplate(promptTemplate, rowsToProcess[0]));
-    await log('Dry run complete. Exiting.');
+    logInfo(chalk.yellow('\n⚠️  DRY RUN MODE - No changes will be saved'));
+    logInfo(`Would process ${rowsToProcess.length} rows`);
+    logInfo(`\n${chalk.bold('Prompt template:')}`);
+    logInfo(promptTemplate);
+    logInfo(`\n${chalk.bold('Sample row:')}`);
+    logInfo(JSON.stringify(rowsToProcess[0], null, 2));
+    logInfo(`\n${chalk.bold('Sample prompt:')}`);
+    logInfo(fillTemplate(promptTemplate, rowsToProcess[0]));
+    await logDebug('Dry run complete. Exiting.');
     return;
   }
 
   // 10. Initialize OpenAI client
-  await log(`Initializing OpenAI client for model: ${config.model}`);
+  await logDebug(`Initializing OpenAI client for model: ${config.model}`);
   const client = new OpenAI({
     apiKey: config.apiKey,
     ...(config.apiBaseUrl && { baseURL: config.apiBaseUrl }),
   });
 
   // 11. Process remaining rows with incremental writing
-  console.log(`\n${chalk.cyan('Processing')} ${rowsToProcess.length} rows...`);
-  await log(`Starting batch processing of ${rowsToProcess.length} rows`);
+  await logInfoTee(
+    `\n${chalk.cyan('Processing')} ${rowsToProcess.length} rows...`,
+  );
   const { rows: processedRows, tokenStats } = await processAllRows(
     rowsToProcess,
     argv.field,
@@ -200,8 +203,8 @@ async function main(): Promise<void> {
     },
   );
 
-  console.log(chalk.green(`\n✓ Processing complete`));
-  await log('Batch processing complete');
+  logInfo(chalk.green(`\n✓ Processing complete`));
+  await logDebug('Batch processing complete');
 
   // 12. Print summary
   const elapsedMs = Date.now() - startTime;
@@ -210,12 +213,12 @@ async function main(): Promise<void> {
   // 13. Log summary to file
   const failures = processedRows.filter((r) => r._error);
   const successes = processedRows.length - failures.length;
-  await log(`Summary: ${successes} successful, ${failures.length} failed`);
-  await log(
+  await logDebug(`Summary: ${successes} successful, ${failures.length} failed`);
+  await logDebug(
     `Total tokens: ${tokenStats.input + tokenStats.output} (input: ${tokenStats.input}, output: ${tokenStats.output})`,
   );
-  await log(`Total time: ${(elapsedMs / 1000).toFixed(2)}s`);
-  await log('Session completed successfully');
+  await logDebug(`Total time: ${(elapsedMs / 1000).toFixed(2)}s`);
+  await logDebug('Session completed successfully');
 }
 
 // Run main and handle errors

@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import type { Config } from '../config.js';
 import type { RowData, TokenStats } from './types.js';
 import { requireNoteId, fillTemplate, withTimeout } from './util.js';
-import { log } from './logger.js';
+import { logDebug } from './logger.js';
 
 /**
  * Extracts content from <result></result> XML tags in the response.
@@ -18,9 +18,8 @@ async function parseXmlResult(
   const match = response.match(/<result>([\s\S]*?)<\/result>/);
   if (match && match[1]) {
     const result = match[1].trim();
-    await log(
+    await logDebug(
       `Row ${rowId}: Successfully parsed result from XML tags (${result.length} chars)`,
-      true,
     );
     return result;
   }
@@ -29,7 +28,7 @@ async function parseXmlResult(
   if (requireResultTag) {
     // Strict mode: throw error to trigger retry
     const errorMsg = `Row ${rowId}: Response missing required <result></result> tags. Full response: ${response}`;
-    await log(errorMsg, true);
+    await logDebug(errorMsg);
     console.log(
       chalk.yellow(
         `\n  ⚠️  Response missing <result></result> tags. Full response:\n${chalk.gray(response)}`,
@@ -57,12 +56,12 @@ export async function processSingleRow(params: {
   const { row, promptTemplate, config, client, tokenStats } = params;
   const rowId = requireNoteId(row);
 
-  await log(`Row ${rowId}: Starting processing`, true);
+  await logDebug(`Row ${rowId}: Starting processing`);
 
   const prompt = fillTemplate(promptTemplate, row);
-  await log(`Row ${rowId}: Generated prompt (${prompt.length} chars)`, true);
+  await logDebug(`Row ${rowId}: Generated prompt (${prompt.length} chars)`);
 
-  await log(`Row ${rowId}: Sending request to ${config.model}`, true);
+  await logDebug(`Row ${rowId}: Sending request to ${config.model}`);
 
   // Track request timing
   const requestStartTime = Date.now();
@@ -86,18 +85,16 @@ export async function processSingleRow(params: {
 
   const requestDurationMs = Date.now() - requestStartTime;
   const rawResult = response.choices[0]?.message?.content?.trim() || '';
-  await log(
+  await logDebug(
     `Row ${rowId}: Received response (${rawResult.length} chars) in ${requestDurationMs}ms (${(requestDurationMs / 1000).toFixed(2)}s)`,
-    true,
   );
 
   // Track token usage
   if (response.usage) {
     tokenStats.input += response.usage.prompt_tokens;
     tokenStats.output += response.usage.completion_tokens;
-    await log(
+    await logDebug(
       `Row ${rowId}: Token usage - Input: ${response.usage.prompt_tokens}, Output: ${response.usage.completion_tokens}`,
-      true,
     );
   }
 
@@ -108,6 +105,6 @@ export async function processSingleRow(params: {
     config.requireResultTag,
   );
 
-  await log(`Row ${rowId}: Processing complete`, true);
+  await logDebug(`Row ${rowId}: Processing complete`);
   return result;
 }

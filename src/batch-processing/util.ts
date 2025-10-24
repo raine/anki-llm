@@ -109,6 +109,14 @@ export function fillTemplate(template: string, row: RowData): string {
 }
 
 /**
+ * Removes ANSI escape codes (used for colors) from a string.
+ */
+export function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+/**
  * Wraps a promise with a timeout. If the promise doesn't resolve within the timeout,
  * it rejects with a timeout error.
  */
