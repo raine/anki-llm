@@ -397,15 +397,17 @@ async function processAllRows(
         processedMap.set(noteId, row);
       }
 
-      // Merge with existing rows
-      const finalRows = options.allRows.map((row) => {
+      // Merge: combine newly processed rows with existing rows (from previous runs)
+      // Only include rows that have actually been processed
+      const finalRows: RowData[] = [];
+      for (const row of options.allRows) {
         const noteId = requireNoteId(row);
-        return (
-          processedMap.get(noteId) ||
-          options.existingRowsMap!.get(noteId) ||
-          row
-        );
-      });
+        const processedRow =
+          processedMap.get(noteId) || options.existingRowsMap.get(noteId);
+        if (processedRow) {
+          finalRows.push(processedRow);
+        }
+      }
 
       // Write to file
       const outputContent = serializeData(finalRows, options.outputPath);
