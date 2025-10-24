@@ -84,7 +84,7 @@ export function parseCliArgs() {
       describe:
         'Require <result></result> XML tags in responses (fail if missing)',
       type: 'boolean',
-      default: true,
+      default: false,
     })
     .example(
       '$0 input.csv output.csv english prompt.txt',
