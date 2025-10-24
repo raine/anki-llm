@@ -363,6 +363,9 @@ async function processRow(
 
   await log(`Row ${rowId}: Sending request to ${config.model}`, true);
 
+  // Track request timing
+  const requestStartTime = Date.now();
+
   // Add 60 second timeout to API request to prevent infinite hangs
   const response = await withTimeout(
     client.chat.completions.create({
@@ -380,9 +383,10 @@ async function processRow(
     `Request timeout after 60 seconds for row ${rowId}`,
   );
 
+  const requestDurationMs = Date.now() - requestStartTime;
   const rawResult = response.choices[0]?.message?.content?.trim() || '';
   await log(
-    `Row ${rowId}: Received response (${rawResult.length} chars)`,
+    `Row ${rowId}: Received response (${rawResult.length} chars) in ${requestDurationMs}ms (${(requestDurationMs / 1000).toFixed(2)}s)`,
     true,
   );
 
