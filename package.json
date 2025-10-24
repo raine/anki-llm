@@ -1,11 +1,11 @@
 {
-  "name": "anki-tools",
+  "name": "anki-llm-batch",
   "version": "1.0.0",
   "type": "module",
   "description": "",
   "main": "index.js",
   "bin": {
-    "anki-tools": "dist/cli.js"
+    "anki-llm-batch": "dist/cli.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

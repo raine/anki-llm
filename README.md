@@ -1,4 +1,4 @@
-# anki-tools
+# anki-llm-batch
 
 A command-line interface for bulk-processing Anki flashcards with LLMs.
 
@@ -8,7 +8,7 @@ Manually editing hundreds or thousands of Anki cards is tedious, error-prone,
 and time-consuming. Whether you're fixing translations, generating example
 sentences, or adding phonetic readings, doing it one-by-one is a non-starter.
 
-`anki-tools` provides a bridge between your Anki collection and modern AI
+`anki-llm-batch` provides a bridge between your Anki collection and modern AI
 models. It allows you to **export** your data, **batch process** it against a
 custom prompt, and then **import** the results back to Anki.
 
@@ -38,7 +38,7 @@ The general workflow is a three-step process:
 
 ```bash
 git clone <your-repo-url>
-cd anki-tools
+cd anki-llm-batch
 pnpm install
 ```
 
@@ -48,7 +48,7 @@ To make the command available globally, you can use `pnpm link`:
 pnpm link --global
 ```
 
-The tool will now be available as `anki-tools` in your terminal.
+The tool will now be available as `anki-llm-batch` in your terminal.
 
 ## Requirements
 
@@ -63,7 +63,7 @@ The tool will now be available as `anki-tools` in your terminal.
 
 ## Commands reference
 
-### `anki-tools export <deck> <output>`
+### `anki-llm-batch export <deck> <output>`
 
 Exports notes from an Anki deck.
 
@@ -71,7 +71,7 @@ Exports notes from an Anki deck.
   contains spaces).
 - `<output>`: The path for the output file (e.g., `output.csv` or `data.yaml`).
 
-### `anki-tools batch <input> <output> <field> <prompt>`
+### `anki-llm-batch batch <input> <output> <field> <prompt>`
 
 Processes a data file using an AI model.
 
@@ -90,7 +90,7 @@ Processes a data file using an AI model.
 - `--require-result-tag`: Only extracts content from within `<result></result>`
   tags in the AI response.
 
-### `anki-tools import <input> <deck> <model>`
+### `anki-llm-batch import <input> <deck> <model>`
 
 Imports data from a file into an Anki deck, updating existing notes.
 
@@ -107,8 +107,8 @@ Imports data from a file into an Anki deck, updating existing notes.
 
 Let's say you have an Anki deck named "Japanese Core 1k" with 1000 notes. Each
 note has a `Japanese` field with a sentence and a `Translation` field with an
-English translation that you suspect is inaccurate. We'll use `anki-tools` and
-GPT-4o mini to generate better translations for all 1000 notes.
+English translation that you suspect is inaccurate. We'll use `anki-llm-batch`
+and GPT-4o mini to generate better translations for all 1000 notes.
 
 ### Step 1: Export your deck
 
@@ -116,7 +116,7 @@ First, export the notes from your Anki deck into a YAML file. YAML is great for
 multiline text fields.
 
 ```bash
-anki-tools export "Japanese Core 1k" notes.yaml
+anki-llm-batch export "Japanese Core 1k" notes.yaml
 ```
 
 This command will connect to Anki, find all notes in that deck, and save them to
@@ -195,7 +195,7 @@ The tool will read the `Japanese` field from each note to fill the prompt, then
 the AI's response will overwrite the `Translation` field.
 
 ```bash
-anki-tools batch \
+anki-llm-batch batch \
   notes.yaml \
   notes-translated.yaml \
   Translation \
@@ -261,7 +261,7 @@ The final step is to import the newly generated translations back into Anki. The
 tool uses the `noteId` to find and update the existing notes.
 
 ```bash
-anki-tools import notes-translated.yaml "Japanese Core 1k" "Japanese Model"
+anki-llm-batch import notes-translated.yaml "Japanese Core 1k" "Japanese Model"
 ```
 
 - `notes-translated.yaml`: The file with our improved translations.
