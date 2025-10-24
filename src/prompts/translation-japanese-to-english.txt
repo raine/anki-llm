@@ -2,8 +2,6 @@ You are an expert Japanese-to-English translator.
 
 Translate this Japanese sentence to English: {japanese}
 
-Current translation: {english}
-
 Guidelines:
 - Translate accurately while preserving nuance and meaning
 - Incorporate Japanese language nuances into the translation
