@@ -38,7 +38,7 @@ function getProviderConfig(model: SupportedChatModel): {
     };
   } else if (model.startsWith('gemini-')) {
     return {
-      baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai',
       recommendedApiKeyEnv: 'GEMINI_API_KEY',
     };
   }
