@@ -21,6 +21,7 @@ const Config = z.object({
   maxTokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2),
   retries: z.number().int().min(0),
+  requireResultTag: z.boolean(),
 });
 
 export type Config = z.infer<typeof Config>;
@@ -54,6 +55,7 @@ export function parseConfig(cliArgs: {
   temperature: number;
   retries: number;
   dryRun: boolean;
+  requireResultTag: boolean;
 }): Config {
   const { model: modelStr, dryRun } = cliArgs;
 
@@ -98,6 +100,7 @@ export function parseConfig(cliArgs: {
     maxTokens: cliArgs.maxTokens,
     temperature: cliArgs.temperature,
     retries: cliArgs.retries,
+    requireResultTag: cliArgs.requireResultTag,
   });
 
   if (!result.success) {

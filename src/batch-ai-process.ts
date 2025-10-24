@@ -201,6 +201,12 @@ const argv = yargs(hideBin(process.argv))
     type: 'boolean',
     default: false,
   })
+  .option('require-result-tag', {
+    describe:
+      'Require <result></result> XML tags in responses (fail if missing)',
+    type: 'boolean',
+    default: true,
+  })
   .example(
     '$0 input.csv output.csv english prompt.txt',
     'Process english field with defaults',
@@ -330,32 +336,41 @@ function calculateCost(
 
 /**
  * Extracts content from <result></result> XML tags in the response.
- * Throws an error if no tags are found, triggering a retry.
+ * If requireResultTag is false, returns the raw response.
+ * If requireResultTag is true, throws an error if tags are missing (triggering a retry).
  */
 async function parseXmlResult(
   response: string,
   rowId: string,
+  requireResultTag: boolean,
 ): Promise<string> {
   const match = response.match(/<result>([\s\S]*?)<\/result>/);
   if (match && match[1]) {
     const result = match[1].trim();
     await log(
-      `Row ${rowId}: Successfully parsed result (${result.length} chars)`,
+      `Row ${rowId}: Successfully parsed result from XML tags (${result.length} chars)`,
       true,
     );
     return result;
   }
-  // No XML tags found - log and throw error to trigger retry
-  const errorMsg = `Row ${rowId}: Response missing <result></result> tags. Full response: ${response}`;
-  await log(errorMsg, true);
-  console.log(
-    chalk.yellow(
-      `\n  ⚠️  Response missing <result></result> tags. Full response:\n${chalk.gray(response)}`,
-    ),
-  );
-  throw new Error(
-    `Response missing required <result></result> tags. Response preview: ${response.substring(0, 100)}...`,
-  );
+
+  // No XML tags found
+  if (requireResultTag) {
+    // Strict mode: throw error to trigger retry
+    const errorMsg = `Row ${rowId}: Response missing required <result></result> tags. Full response: ${response}`;
+    await log(errorMsg, true);
+    console.log(
+      chalk.yellow(
+        `\n  ⚠️  Response missing <result></result> tags. Full response:\n${chalk.gray(response)}`,
+      ),
+    );
+    throw new Error(
+      `Response missing required <result></result> tags. Response preview: ${response.substring(0, 100)}...`,
+    );
+  } else {
+    // Permissive mode: use raw response
+    return response.trim();
+  }
 }
 
 /**
@@ -415,8 +430,12 @@ async function processRow(
     );
   }
 
-  // Parse XML to extract result from <result></result> tags
-  const result = await parseXmlResult(rawResult, rowId);
+  // Parse XML to extract result from <result></result> tags (or use raw response)
+  const result = await parseXmlResult(
+    rawResult,
+    rowId,
+    config.requireResultTag,
+  );
 
   await log(`Row ${rowId}: Processing complete`, true);
   return result;
@@ -734,6 +753,7 @@ async function main(): Promise<void> {
     temperature: argv.temperature,
     retries: argv.retries,
     dryRun: argv.dryRun,
+    requireResultTag: argv.requireResultTag,
   });
 
   await log(`Log file: ${logFilePath}`);
@@ -748,6 +768,7 @@ async function main(): Promise<void> {
     await log(`Max tokens: ${config.maxTokens}`);
   }
   await log(`Dry run: ${config.dryRun}`);
+  await log(`Require result tag: ${config.requireResultTag}`);
 
   // Read prompt template from file
   const promptTemplate = await readFile(argv.prompt, 'utf-8');
@@ -768,6 +789,7 @@ async function main(): Promise<void> {
     console.log(`Max tokens:        ${config.maxTokens}`);
   }
   console.log(`Dry run:           ${config.dryRun}`);
+  console.log(`Require result tag: ${config.requireResultTag}`);
   console.log(chalk.bold('='.repeat(60)));
 
   // Read and parse data file
