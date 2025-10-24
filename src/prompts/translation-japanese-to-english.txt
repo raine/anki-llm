@@ -7,6 +7,7 @@ Guidelines:
 - Incorporate Japanese language nuances into the translation
 - Make it easier to infer the original Japanese from the English
 - Be natural and idiomatic in English
+- If the sentence contains a ＞ symbol, it separates two related sentences. BOTH sentences must be included in your translation, in the same order. Do not include the ＞ symbol in the English translation; instead, join the sentences naturally with a period or appropriate punctuation
 
 Instructions:
 1. First, analyze the sentence structure and key elements
