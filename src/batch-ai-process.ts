@@ -219,6 +219,8 @@ async function main(): Promise<void> {
   );
   await logDebug(`Total time: ${(elapsedMs / 1000).toFixed(2)}s`);
   await logDebug('Session completed successfully');
+
+  process.exit(0);
 }
 
 // Run main and handle errors
