@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, rename, mkdtemp } from 'fs/promises';
 import Papa from 'papaparse';
 import { z } from 'zod';
 import OpenAI from 'openai';
@@ -8,6 +8,7 @@ import cliProgress from 'cli-progress';
 import chalk from 'chalk';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { tmpdir } from 'os';
 import { parseConfig, type Config, type SupportedChatModel } from './config.js';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
@@ -54,18 +55,31 @@ const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
 type RowData = Record<string, any>;
 
 /**
+ * Atomically writes a file by writing to a temp file first, then renaming.
+ * This prevents partial/corrupted files if the process crashes mid-write.
+ */
+async function atomicWriteFile(filePath: string, data: string): Promise<void> {
+  const dir = await mkdtemp(path.join(tmpdir(), 'batch-ai-'));
+  const tmpPath = path.join(dir, path.basename(filePath));
+  await writeFile(tmpPath, data, 'utf-8');
+  await rename(tmpPath, filePath); // atomic on POSIX systems
+}
+
+/**
  * Extracts noteId from a row, ensuring it's a valid string or number.
  * Checks multiple possible field names: noteId, id, Id
  * Returns undefined only during validation. After validation, all rows are guaranteed to have an ID.
+ * Note: Always normalizes to string to avoid Map key mismatch between '123' and 123.
  */
-function getNoteId(row: RowData): string | number | undefined {
+function getNoteId(row: RowData): string | undefined {
   // Check each possible field name in order
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const noteId = row.noteId ?? row.id ?? row.Id;
 
   // Ensure the value is actually a string or number (not an object, array, etc.)
   if (typeof noteId === 'string' || typeof noteId === 'number') {
-    return noteId;
+    // Normalize to string to prevent Map key mismatch ('123' vs 123)
+    return String(noteId);
   }
 
   // No valid identifier found, or the value is an unexpected type
@@ -76,7 +90,7 @@ function getNoteId(row: RowData): string | number | undefined {
  * Same as getNoteId but throws if no ID is found.
  * Use this after validation when all rows are guaranteed to have IDs.
  */
-function requireNoteId(row: RowData): string | number {
+function requireNoteId(row: RowData): string {
   const noteId = getNoteId(row);
   if (noteId === undefined) {
     throw new Error(
@@ -309,7 +323,7 @@ async function processAllRows(
   client: OpenAI,
   options?: {
     allRows?: RowData[];
-    existingRowsMap?: Map<string | number, RowData>;
+    existingRowsMap?: Map<string, RowData>;
     outputPath?: string;
   },
 ): Promise<{
@@ -333,7 +347,7 @@ async function processAllRows(
   progressBar.start(rows.length, 0);
 
   const processedRows: ProcessedRow[] = [];
-  const processedMap = new Map<string | number, RowData>();
+  const processedMap = new Map<string, RowData>();
 
   // Process in batches and write incrementally
   for (let i = 0; i < rows.length; i += config.batchSize) {
@@ -379,6 +393,10 @@ async function processAllRows(
             return { ...row, [fieldToProcess]: processedValue };
           } catch (error) {
             progressBar.increment();
+            // Bubble up AbortError - it indicates configuration issues that should stop everything
+            if (error instanceof AbortError) {
+              throw error;
+            }
             const errorMessage =
               error instanceof Error ? error.message : 'Unknown error';
             return { ...row, _error: errorMessage };
@@ -409,9 +427,9 @@ async function processAllRows(
         }
       }
 
-      // Write to file
+      // Write to file atomically
       const outputContent = serializeData(finalRows, options.outputPath);
-      await writeFile(options.outputPath, outputContent, 'utf-8');
+      await atomicWriteFile(options.outputPath, outputContent);
     }
   }
 
@@ -426,10 +444,10 @@ async function processAllRows(
  */
 async function loadExistingOutput(
   filePath: string,
-): Promise<Map<string | number, RowData>> {
+): Promise<Map<string, RowData>> {
   try {
     const rows = await parseDataFile(filePath);
-    const map = new Map<string | number, RowData>();
+    const map = new Map<string, RowData>();
     for (const row of rows) {
       const noteId = requireNoteId(row);
       map.set(noteId, row);
@@ -603,10 +621,22 @@ async function main(): Promise<void> {
     );
   }
 
+  // Validate no duplicate noteIds in input
+  const seenIds = new Set<string>();
+  for (let i = 0; i < rows.length; i++) {
+    const noteId = requireNoteId(rows[i]);
+    if (seenIds.has(noteId)) {
+      throw new AbortError(
+        `Duplicate noteId "${noteId}" detected in input (first seen at row ${seenIds.size + 1}, duplicate at row ${i + 1})`,
+      );
+    }
+    seenIds.add(noteId);
+  }
+
   // Load existing output and filter rows (always enabled unless --force)
   const force = argv.force;
 
-  let existingRowsMap = new Map<string | number, RowData>();
+  let existingRowsMap = new Map<string, RowData>();
   let rowsToProcess = rows;
 
   if (!force) {
@@ -618,10 +648,12 @@ async function main(): Promise<void> {
         chalk.green(`✓ Found ${existingRowsMap.size} already-processed rows`),
       );
 
-      // Filter out rows that are already processed
+      // Filter out rows that are already processed (skip rows with errors - retry them)
       rowsToProcess = rows.filter((row) => {
         const noteId = requireNoteId(row);
-        return !existingRowsMap.has(noteId);
+        const existing = existingRowsMap.get(noteId);
+        // Process if: no existing row, or existing row has an error
+        return !existing || existing._error;
       });
 
       const skippedCount = rows.length - rowsToProcess.length;
