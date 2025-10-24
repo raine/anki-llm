@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'fs/promises';
 import Papa from 'papaparse';
 import { z } from 'zod';
 import OpenAI from 'openai';
-import pRetry from 'p-retry';
+import pRetry, { AbortError } from 'p-retry';
 import pLimit from 'p-limit';
 import cliProgress from 'cli-progress';
 import chalk from 'chalk';
@@ -170,7 +170,8 @@ function fillTemplate(template: string, row: RowData): string {
     const lowerKey = key.toLowerCase();
     if (lowerCaseRow.has(lowerKey)) {
       // Fail fast on ambiguous keys to prevent unpredictable behavior.
-      throw new Error(
+      // Use AbortError to prevent retries on configuration errors
+      throw new AbortError(
         `Ambiguous key in row data: "${key}" conflicts with another key when case is ignored.`,
       );
     }
@@ -197,7 +198,8 @@ function fillTemplate(template: string, row: RowData): string {
   }
 
   if (missingKeys.length > 0) {
-    throw new Error(
+    // Use AbortError to prevent retries on configuration errors
+    throw new AbortError(
       `Missing data for template placeholders: ${missingKeys.join(', ')}. Available fields: ${Object.keys(row).join(', ')}`,
     );
   }
