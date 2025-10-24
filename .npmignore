@@ -1,0 +1,34 @@
+# Source files
+src/
+
+# Development files
+*.log
+.env
+.env.*
+
+# Config files
+tsconfig.json
+tsconfig.build.json
+.eslintrc*
+.prettierrc*
+.editorconfig
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Other
+CLAUDE.md
+node_modules/
+coverage/
+tmp/

@@ -2,12 +2,19 @@
   "name": "anki-llm-batch",
   "version": "1.0.0",
   "type": "module",
-  "description": "",
-  "main": "index.js",
+  "description": "A command-line interface for bulk-processing Anki flashcards with LLMs",
   "bin": {
     "anki-llm-batch": "dist/cli.js"
   },
+  "files": [
+    "dist/**",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
+    "build": "tsc",
+    "prepare": "pnpm run build",
+    "prepublishOnly": "pnpm run check",
     "test": "echo \"Error: no test specified\" && exit 1",
     "format": "prettier --write .",
     "check": "concurrently \"pnpm:check:*\"",
@@ -15,9 +22,31 @@
     "check:format": "prettier --write .",
     "check:lint": "eslint ."
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "anki",
+    "llm",
+    "cli",
+    "openai",
+    "flashcards",
+    "batch-processing",
+    "ai"
+  ],
+  "author": "Raine Virta <raine.virta@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/raine/anki-llm-batch#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raine/anki-llm-batch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/raine/anki-llm-batch/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "packageManager": "pnpm@10.16.1",
   "devDependencies": {
     "@eslint/js": "^9.38.0",

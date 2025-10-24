@@ -23,32 +23,22 @@ The general workflow is a three-step process:
 
 - **Export** Anki decks to clean CSV or YAML files.
 - **Batch process** note fields using any OpenAI-compatible API.
-- **Custom Prompts**: Use flexible template files to define exactly how the AI
+- **Custom prompts**: Use flexible template files to define exactly how the AI
   should process your data.
-- **Concurrent Processing**: Make multiple parallel API requests to speed up
+- **Concurrent processing**: Make multiple parallel API requests to speed up
   large jobs.
 - **Resilient**: Automatically retries failed requests and saves progress
-  incrementally, so you never lose work.
-- **Safe**: Includes a `--dry-run` mode to preview operations without making API
-  calls or spending money.
-- **Smart Updates**: Imports data back into Anki by updating existing notes, not
+  incrementally.
+- **Smart updates**: Imports data back into Anki by updating existing notes, not
   creating duplicates.
 
 ## Installation
 
-```bash
-git clone <your-repo-url>
-cd anki-llm-batch
-pnpm install
-```
-
-To make the command available globally, you can use `pnpm link`:
+Install globally via npm:
 
 ```bash
-pnpm link --global
+npm install -g anki-llm-batch
 ```
-
-The tool will now be available as `anki-llm-batch` in your terminal.
 
 ## Requirements
 
@@ -56,10 +46,6 @@ The tool will now be available as `anki-llm-batch` in your terminal.
 - Anki Desktop must be running.
 - The [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on must be
   installed in Anki.
-
-<!-- prettier-ignore -->
-> [!IMPORTANT]
-> AnkiConnect is essential for this tool to communicate with your Anki collection. Please ensure it is installed and that Anki is open before running any commands.
 
 ## Commands reference
 
