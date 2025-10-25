@@ -139,6 +139,72 @@ anki-llm-batch query version
 anki-llm-batch query docs
 ```
 
+**Real-world AI agent example:**
+
+Here's a real example of Claude Code autonomously exporting all Anki decks when
+given the simple instruction: "Use anki-llm-batch to export my decks in csv"
+
+```
+> Use anki-llm-batch to export my decks in csv
+
+⏺ I'll help you export your Anki decks to CSV. Let me first check
+  the available commands:
+
+⏺ Bash(anki-llm-batch --help)
+  ⎿  anki-llm-batch <command>
+
+     Commands:
+       anki-llm-batch export <deck> <output>              Export deck to file
+       anki-llm-batch batch <input> <output> <field>      Batch process with LLM
+       anki-llm-batch import <input> <deck> <model>       Import data to deck
+       anki-llm-batch query <action> [params]             Query AnkiConnect API
+
+⏺ Now let me check what decks are available:
+
+⏺ Bash(anki-llm-batch query deckNames)
+  ⎿  [
+       "_",
+       "_::Genki I",
+       "_::Genki II",
+       "_::Japanese Counters",
+       "Glossika-ENJA [0001-1000]",
+       "Japanese Speaking Practice",
+       ... 7 more decks
+     ]
+
+⏺ I can see you have several Anki decks. I'll export each one to CSV.
+
+⏺ Bash(anki-llm-batch export "_::Genki I" "genki_i.csv")
+  ⎿  ✓ Found 342 notes in '_::Genki I'.
+     ✓ Successfully exported 342 notes to genki_i.csv
+
+⏺ Bash(anki-llm-batch export "_::Genki II" "genki_ii.csv")
+  ⎿  ✓ Found 315 notes in '_::Genki II'.
+     ✓ Successfully exported 315 notes to genki_ii.csv
+
+     ... exports continue for remaining 9 decks ...
+
+⏺ Bash(ls -lh *.csv)
+     -rw-r--r--  170K  genki_i.csv
+     -rw-r--r--  138K  genki_ii.csv
+     -rw-r--r--   95K  japanese_counters.csv
+     -rw-r--r--  394K  glossika_enja_0001_1000.csv
+     ... 7 more files
+
+⏺ Successfully exported all your Anki decks to CSV!
+
+  Summary: 12 files, ~4.6MB total
+  - genki_i.csv (170K) - 342 notes
+  - genki_ii.csv (138K) - 315 notes
+  - glossika_enja_0001_1000.csv (394K) - 1,000 notes
+  ... and 8 more decks
+```
+
+The AI agent used `query deckNames` to discover available decks, then
+automatically generated appropriate filenames and exported all 12 decks without
+further human intervention. This demonstrates how the `query` command enables AI
+agents to work autonomously with your Anki collection.
+
 **Special actions:**
 
 - `docs` or `help`: Returns the complete AnkiConnect API documentation. This is
