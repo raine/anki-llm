@@ -13,6 +13,7 @@ void yargs(hideBin(process.argv))
   .command(importCmd)
   .command(batchCmd)
   // Configuration
+  .scriptName('anki-llm-batch')
   .demandCommand(1, 'You must provide a valid command.')
   .strict()
   .help()
