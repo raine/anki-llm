@@ -280,3 +280,33 @@ Import process finished.
 
 That's it! All 1000 notes in your Anki deck have now been updated with
 high-quality translations.
+
+## Development
+
+### Running locally
+
+Use `tsx` to run the CLI directly from TypeScript source without rebuilding:
+
+```bash
+pnpm tsx src/cli.ts export "My Deck" notes.yaml
+```
+
+### Testing the global CLI
+
+Use `pnpm link` to test the command globally:
+
+```bash
+pnpm link --global
+anki-llm-batch export "My Deck" notes.yaml
+```
+
+Note: The linked command uses compiled JavaScript from `dist/`. Run
+`pnpm run build` after making changes to see them reflected.
+
+To unlink: `pnpm unlink --global`
+
+### Code quality
+
+```bash
+pnpm run check
+```
