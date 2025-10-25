@@ -140,10 +140,11 @@ Imports data from a file into an Anki deck, updating existing notes.
 **Required options:**
 
 - `-d, --deck`: The name of the target Anki deck.
-- `-m, --model`: The name of the Anki note type/model to use.
 
 **Common options:**
 
+- `-m, --model`: The name of the Anki note type/model to use. If not specified,
+  the model will be inferred from existing notes in the deck.
 - `-k, --key-field`: Field to use for identifying existing notes (default:
   `noteId`).
 
@@ -445,13 +446,15 @@ The final step is to import the newly generated translations back into Anki. The
 tool uses the `noteId` to find and update the existing notes.
 
 ```bash
-anki-llm-batch import notes-translated.yaml --deck "Japanese Core 1k" --model "Japanese Model"
+anki-llm-batch import notes-translated.yaml --deck "Japanese Core 1k"
 ```
 
 - `notes-translated.yaml`: The file with our improved translations.
 - `--deck "Japanese Core 1k"`: The destination deck.
-- `--model "Japanese Model"`: The note type/model name for these notes. You can
-  see this when exporting the deck initially.
+
+The model type will be automatically inferred from the existing notes in the
+deck. You can also explicitly specify it with `--model "Japanese Model"` if
+needed.
 
 ```
 ============================================================
