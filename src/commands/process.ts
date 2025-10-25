@@ -35,6 +35,7 @@ interface BatchArgs {
   'require-result-tag': boolean;
   force: boolean;
   limit?: number;
+  log: boolean;
 }
 
 const command: Command<BatchArgs> = {
@@ -120,6 +121,11 @@ const command: Command<BatchArgs> = {
         describe: 'Limit the number of new rows to process (for testing)',
         type: 'number',
       })
+      .option('log', {
+        describe: 'Generate a log file',
+        type: 'boolean',
+        default: false,
+      })
       .check((argv) => {
         if (argv.limit !== undefined && argv.limit <= 0) {
           throw new Error('Error: --limit must be a positive number.');
@@ -156,15 +162,18 @@ const command: Command<BatchArgs> = {
   handler: async (argv) => {
     const startTime = Date.now();
 
-    // Initialize logger
-    const outputDir = path.dirname(argv.output);
-    const outputName = path.basename(argv.output, path.extname(argv.output));
-    const logFilePath = path.join(outputDir, `${outputName}.log`);
-    await initLogger(logFilePath);
+    // Initialize logger only if --log is enabled
+    let logFilePath: string | null = null;
+    if (argv.log) {
+      const outputDir = path.dirname(argv.output);
+      const outputName = path.basename(argv.output, path.extname(argv.output));
+      logFilePath = path.join(outputDir, `${outputName}.log`);
+      await initLogger(logFilePath);
 
-    await logDebug('='.repeat(60));
-    await logDebug('Batch AI Data Processing - Session Started');
-    await logDebug('='.repeat(60));
+      await logDebug('='.repeat(60));
+      await logDebug('Batch AI Data Processing - Session Started');
+      await logDebug('='.repeat(60));
+    }
 
     // Parse configuration from CLI args
     const config = parseConfig({
@@ -200,7 +209,9 @@ const command: Command<BatchArgs> = {
     logInfo(chalk.bold('='.repeat(60)));
     logInfo(`Input file:        ${argv.input}`);
     logInfo(`Output file:       ${argv.output}`);
-    logInfo(`Log file:          ${logFilePath}`);
+    if (logFilePath) {
+      logInfo(`Log file:          ${logFilePath}`);
+    }
     if (argv.json) {
       logInfo(`Mode:              JSON merge`);
     } else {

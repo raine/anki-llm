@@ -100,6 +100,7 @@ Processes a data file using an AI model.
   on a small sample before processing large datasets).
 - `--require-result-tag`: Only extracts content from within `<result></result>`
   tags in the AI response.
+- `--log`: Generate a log file with detailed debug information.
 
 **Understanding `--field` vs `--json` modes:**
 
@@ -405,7 +406,6 @@ Batch AI Data Processing
 ============================================================
 Input file:        notes.yaml
 Output file:       notes-translated.yaml
-Log file:          notes-translated.log
 Field to process:  Translation
 Model:             gpt-4o-mini
 Batch size:        10
