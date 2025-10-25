@@ -230,15 +230,14 @@ const command: Command<BatchArgs> = {
       return;
     }
 
-    // Validate field exists (only if using --field mode)
-    if (!argv.json) {
-      await logDebug('Validating field exists in input data');
-      if (rows.length > 0 && !(argv.field! in rows[0])) {
-        const error = `Field "${argv.field}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`;
-        await logDebug(`ERROR: ${error}`);
-        throw new Error(error);
-      }
-      await logDebug(`Field "${argv.field}" validated successfully`);
+    // Note: We allow adding new fields that don't exist in the input file yet
+    if (!argv.json && rows.length > 0) {
+      const fieldExists = argv.field! in rows[0];
+      await logDebug(
+        fieldExists
+          ? `Field "${argv.field}" exists in input data`
+          : `Field "${argv.field}" will be added as a new field`,
+      );
     }
 
     // Validate no duplicate noteIds in input
