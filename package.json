@@ -21,7 +21,10 @@
     "check": "concurrently \"pnpm:check:*\"",
     "check:types": "tsgo --noEmit",
     "check:format": "prettier --write .",
-    "check:lint": "eslint ."
+    "check:lint": "eslint .",
+    "publish:patch": "npm version patch && npm publish",
+    "publish:minor": "npm version minor && npm publish",
+    "publish:major": "npm version major && npm publish"
   },
   "keywords": [
     "anki",
