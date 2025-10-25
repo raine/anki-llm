@@ -36,8 +36,8 @@ interface BatchArgs {
 }
 
 const command: Command<BatchArgs> = {
-  command: 'batch <input> <output> <field> <prompt>',
-  describe: 'Batch AI data processing for Anki notes',
+  command: 'process <input> <output> <field> <prompt>',
+  describe: 'Process Anki notes with AI',
 
   builder: (yargs) => {
     return yargs
@@ -107,11 +107,11 @@ const command: Command<BatchArgs> = {
         default: false,
       })
       .example(
-        '$0 batch input.csv output.csv Translation prompt.txt',
+        '$0 process input.csv output.csv Translation prompt.txt',
         'Process Translation field',
       )
       .example(
-        '$0 batch data.yaml result.yaml Notes prompt.txt -m gpt-4',
+        '$0 process data.yaml result.yaml Notes prompt.txt -m gpt-4',
         'Use GPT-4 model',
       );
   },

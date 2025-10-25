@@ -5,14 +5,14 @@ import { hideBin } from 'yargs/helpers';
 // Import command modules
 import exportCmd from './commands/export.js';
 import importCmd from './commands/import.js';
-import batchCmd from './commands/batch.js';
+import processCmd from './commands/process.js';
 import queryCmd from './commands/query.js';
 
 void yargs(hideBin(process.argv))
   // Register commands
   .command(exportCmd)
   .command(importCmd)
-  .command(batchCmd)
+  .command(processCmd)
   .command(queryCmd)
   // Configuration
   .scriptName('anki-llm-batch')

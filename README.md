@@ -15,7 +15,7 @@ custom prompt, and then **import** the results back to Anki.
 The general workflow is a three-step process:
 
 1.  Export: Pull notes from a specified Anki deck into a CSV or YAML.
-2.  Batch: Run an AI model (e.g., GPT-4o mini) on a specific field in every
+2.  Process: Run an AI model (e.g., GPT-4o mini) on a specific field in every
     note, using a prompt template.
 3.  Import: Update the original notes by importing the CSV or YAML back to Anki.
 
@@ -57,7 +57,7 @@ Exports notes from an Anki deck.
   contains spaces).
 - `<output>`: The path for the output file (e.g., `output.csv` or `data.yaml`).
 
-### `anki-llm-batch batch <input> <output> <field> <prompt>`
+### `anki-llm-batch process <input> <output> <field> <prompt>`
 
 Processes a data file using an AI model.
 
@@ -155,7 +155,7 @@ given the simple instruction: "Use anki-llm-batch to export my decks in csv"
 
      Commands:
        anki-llm-batch export <deck> <output>              Export deck to file
-       anki-llm-batch batch <input> <output> <field>      Batch process with LLM
+       anki-llm-batch process <input> <output> <field>    Process notes with AI
        anki-llm-batch import <input> <deck> <model>       Import data to deck
        anki-llm-batch query <action> [params]             Query AnkiConnect API
 
@@ -298,9 +298,9 @@ Format your response like this:
 > [!NOTE]
 > The `<result>` tag (used with `--require-result-tag`) is optional. You could instruct the LLM to respond with only the translation directly. However, asking the model to "think out loud" by analyzing the sentence first tends to produce higher-quality translations, as it encourages deeper reasoning before generating the final output.
 
-### Step 3: Run the batch process
+### Step 3: Run the process command
 
-Now, run the `batch` command. We'll tell it to use our `notes.yaml` file as
+Now, run the `process` command. We'll tell it to use our `notes.yaml` file as
 input, write to a new `notes-translated.yaml` file, process the `Translation`
 field, and use our prompt template.
 
@@ -308,7 +308,7 @@ The tool will read the `Japanese` field from each note to fill the prompt, then
 the AI's response will overwrite the `Translation` field.
 
 ```bash
-anki-llm-batch batch \
+anki-llm-batch process \
   notes.yaml \
   notes-translated.yaml \
   Translation \
