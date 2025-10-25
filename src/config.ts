@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const SupportedModelSchema = z.enum([
+export const SupportedModel = z.enum([
   'gpt-4.1',
   'gpt-4o',
   'gpt-4o-mini',
@@ -10,12 +10,12 @@ const SupportedModelSchema = z.enum([
   'gemini-2.5-flash-lite',
 ]);
 
-export type SupportedChatModel = z.infer<typeof SupportedModelSchema>;
+export type SupportedChatModel = z.infer<typeof SupportedModel>;
 
 const Config = z.object({
   apiKey: z.string().min(1, 'API key is required'),
   apiBaseUrl: z.string().optional(),
-  model: SupportedModelSchema,
+  model: SupportedModel,
   batchSize: z.number().int().positive(),
   dryRun: z.boolean(),
   maxTokens: z.number().int().positive().optional(),
@@ -60,13 +60,11 @@ export function parseConfig(cliArgs: {
   const { model: modelStr, dryRun } = cliArgs;
 
   // Validate model
-  const modelResult = SupportedModelSchema.safeParse(modelStr);
+  const modelResult = SupportedModel.safeParse(modelStr);
 
   if (!modelResult.success) {
     console.error(`❌ Invalid MODEL: ${modelStr}`);
-    console.error(
-      `Supported models: ${SupportedModelSchema.options.join(', ')}`,
-    );
+    console.error(`Supported models: ${SupportedModel.options.join(', ')}`);
     process.exit(1);
   }
 

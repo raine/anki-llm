@@ -2,7 +2,7 @@ import { readFile } from 'fs/promises';
 import OpenAI from 'openai';
 import chalk from 'chalk';
 import * as path from 'path';
-import { parseConfig } from '../config.js';
+import { parseConfig, SupportedModel } from '../config.js';
 import {
   initLogger,
   logDebug,
@@ -73,7 +73,7 @@ const command: Command<BatchArgs> = {
       })
       .option('model', {
         alias: 'm',
-        describe: 'OpenAI model to use',
+        describe: `Model to use. Available: ${SupportedModel.options.join(', ')}`,
         type: 'string',
         default: 'gpt-4o-mini',
       })
