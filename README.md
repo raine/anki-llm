@@ -2,7 +2,7 @@
 
 A command-line interface for bulk-processing Anki flashcards with LLMs.
 
-## why?
+## Why?
 
 Manually editing hundreds or thousands of Anki cards is tedious, error-prone,
 and time-consuming. Whether you're fixing translations, generating example
