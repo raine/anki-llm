@@ -49,13 +49,31 @@ npm install -g anki-llm-batch
 
 ## Commands reference
 
-### `anki-llm-batch export <deck> <output>`
+### `anki-llm-batch export <deck> [output]`
 
 Exports notes from an Anki deck.
 
 - `<deck>`: The name of the Anki deck to export (must be in quotes if it
   contains spaces).
-- `<output>`: The path for the output file (e.g., `output.csv` or `data.yaml`).
+- `[output]`: Optional output file path. If omitted, automatically generates a
+  filename from the deck name (e.g., `"My Deck"` → `my-deck.yaml`). You can also
+  provide just a file extension (e.g., `.csv`) to auto-generate the filename
+  with your preferred format.
+
+**Examples:**
+
+```bash
+# Auto-generate filename with default .yaml format
+anki-llm-batch export "Japanese Core 1k"
+# → japanese-core-1k.yaml
+
+# Auto-generate filename with .csv format
+anki-llm-batch export "Japanese Core 1k" .csv
+# → japanese-core-1k.csv
+
+# Specify custom filename
+anki-llm-batch export "Japanese Core 1k" my-custom-name.yaml
+```
 
 ### `anki-llm-batch process <input>`
 
@@ -232,14 +250,15 @@ and GPT-4o mini to generate better translations for all 1000 notes.
 ### Step 1: Export your deck
 
 First, export the notes from your Anki deck into a YAML file. YAML is great for
-multiline text fields.
+multiline text fields and for using `git diff` to see what has changed after
+processing is complete.
 
 ```bash
 anki-llm-batch export "Japanese Core 1k" notes.yaml
 ```
 
 This command will connect to Anki, find all notes in that deck, and save them to
-`notes.yaml`.
+a YAML file.
 
 ```
 ============================================================

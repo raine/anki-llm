@@ -12,11 +12,11 @@ type NoteInfoType = z.infer<typeof NoteInfo>;
 
 interface ExportDeckArgs {
   deck: string;
-  output: string;
+  output?: string;
 }
 
 const command: Command<ExportDeckArgs> = {
-  command: 'export <deck> <output>',
+  command: 'export <deck> [output]',
   describe: 'Export an Anki deck to CSV or YAML',
 
   builder: (yargs) => {
@@ -27,11 +27,13 @@ const command: Command<ExportDeckArgs> = {
         demandOption: true,
       })
       .positional('output', {
-        describe: 'Output file path (CSV or YAML)',
+        describe:
+          'Output file path. If omitted, generates from deck name (e.g., "My Deck" -> my-deck.yaml)',
         type: 'string',
-        demandOption: true,
+        demandOption: false,
       })
-      .example('$0 export "My Deck" output.csv', 'Export deck to CSV')
+      .example('$0 export "My Deck"', 'Export deck to my-deck.yaml')
+      .example('$0 export "My Deck" .csv', 'Export deck to my-deck.csv')
       .example('$0 export "Japanese" data.yaml', 'Export deck to YAML');
   },
 
@@ -41,6 +43,9 @@ const command: Command<ExportDeckArgs> = {
     console.log('='.repeat(60));
 
     try {
+      // Resolve output path
+      const outputPath = resolveOutputPath(argv.deck, argv.output);
+
       // Find all notes in the deck
       const query = `deck:"${argv.deck}"`;
       const noteIds = await ankiRequest('findNotes', z.array(z.number()), {
@@ -85,12 +90,12 @@ const command: Command<ExportDeckArgs> = {
       });
 
       // Write to file (CSV or YAML)
-      console.log(`\nWriting to ${argv.output}...`);
-      const content = serializeRows(rows, argv.output);
+      console.log(`\nWriting to ${outputPath}...`);
+      const content = serializeRows(rows, outputPath);
 
-      await writeFile(argv.output, content, 'utf-8');
+      await writeFile(outputPath, content, 'utf-8');
       console.log(
-        `✓ Successfully exported ${notesInfo.length} notes to ${argv.output}`,
+        `✓ Successfully exported ${notesInfo.length} notes to ${outputPath}`,
       );
     } catch (error) {
       if (error instanceof Error) {
@@ -113,6 +118,63 @@ const command: Command<ExportDeckArgs> = {
 export default command;
 
 // Helper functions
+
+/**
+ * Resolves the output file path based on the deck name and optional output argument.
+ * Supports three modes:
+ * 1. No output specified -> auto-generate with default .yaml extension
+ * 2. Extension only (e.g., ".csv") -> auto-generate filename with specified extension
+ * 3. Full path specified -> use as-is
+ */
+function resolveOutputPath(deckName: string, output?: string): string {
+  const defaultExt = '.yaml';
+
+  if (!output) {
+    // Case 1: No output specified. Slugify deck name + default extension.
+    const outputPath = slugify(deckName) + defaultExt;
+    console.log(
+      `\n✓ Output file not specified, automatically using '${outputPath}'`,
+    );
+    return outputPath;
+  } else if (output.startsWith('.')) {
+    // Case 2: Only extension specified. Slugify deck name + given extension.
+    const extension = output;
+    if (extension === '.' || !['.yaml', '.yml', '.csv'].includes(extension)) {
+      throw new Error(
+        `Unsupported file extension: '${extension}'. Please use .csv, .yaml, or .yml.`,
+      );
+    }
+    const outputPath = slugify(deckName) + extension;
+    console.log(`\n✓ Automatically generating filename: '${outputPath}'`);
+    return outputPath;
+  } else {
+    // Case 3: Full path specified.
+    return output;
+  }
+}
+
+/**
+ * Converts a deck name to a safe filename slug.
+ * Handles Anki's :: sub-deck separator by using the last part.
+ */
+function slugify(text: string): string {
+  // Use the last part of the deck name for the filename
+  const parts = text.split('::');
+  const lastPart = parts[parts.length - 1];
+
+  return (
+    lastPart
+      .toString()
+      .toLowerCase()
+      .trim()
+      // Replace characters that are not letters, numbers, or hyphens
+      .replace(/[^a-z0-9\s-]/g, '')
+      // Replace spaces and multiple hyphens with a single hyphen
+      .replace(/[\s-]+/g, '-')
+      // Remove leading or trailing hyphens
+      .replace(/^-+|-+$/g, '')
+  );
+}
 
 /**
  * Converts an array of rows to the appropriate format based on file extension.
