@@ -36,7 +36,7 @@ interface BatchArgs {
 }
 
 const command: Command<BatchArgs> = {
-  command: 'process <input> <output> <field> <prompt>',
+  command: 'process <input>',
   describe: 'Process Anki notes with AI',
 
   builder: (yargs) => {
@@ -46,17 +46,19 @@ const command: Command<BatchArgs> = {
         type: 'string',
         demandOption: true,
       })
-      .positional('output', {
+      .option('output', {
+        alias: 'o',
         describe: 'Output file path (CSV or YAML)',
         type: 'string',
         demandOption: true,
       })
-      .positional('field', {
+      .option('field', {
         describe: 'Field name to process',
         type: 'string',
         demandOption: true,
       })
-      .positional('prompt', {
+      .option('prompt', {
+        alias: 'p',
         describe: 'Path to prompt template file',
         type: 'string',
         demandOption: true,
@@ -107,11 +109,11 @@ const command: Command<BatchArgs> = {
         default: false,
       })
       .example(
-        '$0 process input.csv output.csv Translation prompt.txt',
+        '$0 process input.csv -o output.csv --field Translation -p prompt.txt',
         'Process Translation field',
       )
       .example(
-        '$0 process data.yaml result.yaml Notes prompt.txt -m gpt-4',
+        '$0 process data.yaml -o result.yaml --field Notes -p prompt.txt -m gpt-4',
         'Use GPT-4 model',
       );
   },

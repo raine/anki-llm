@@ -57,14 +57,17 @@ Exports notes from an Anki deck.
   contains spaces).
 - `<output>`: The path for the output file (e.g., `output.csv` or `data.yaml`).
 
-### `anki-llm-batch process <input> <output> <field> <prompt>`
+### `anki-llm-batch process <input>`
 
 Processes a data file using an AI model.
 
 - `<input>`: Path to the input data file (CSV or YAML).
-- `<output>`: Path to write the processed data file.
-- `<field>`: The name of the field to populate with the AI's result.
-- `<prompt>`: Path to the prompt template text file.
+
+**Required options:**
+
+- `-o, --output`: Path to write the processed data file.
+- `--field`: The name of the field to populate with the AI's result.
+- `-p, --prompt`: Path to the prompt template text file.
 
 **Common options:**
 
@@ -76,13 +79,16 @@ Processes a data file using an AI model.
 - `--require-result-tag`: Only extracts content from within `<result></result>`
   tags in the AI response.
 
-### `anki-llm-batch import <input> <deck> <model>`
+### `anki-llm-batch import <input>`
 
 Imports data from a file into an Anki deck, updating existing notes.
 
 - `<input>`: Path to the data file to import (CSV or YAML).
-- `<deck>`: The name of the target Anki deck.
-- `<model>`: The name of the Anki note type/model to use.
+
+**Required options:**
+
+- `-d, --deck`: The name of the target Anki deck.
+- `-m, --model`: The name of the Anki note type/model to use.
 
 **Common options:**
 
@@ -308,19 +314,19 @@ The tool will read the `Japanese` field from each note to fill the prompt, then
 the AI's response will overwrite the `Translation` field.
 
 ```bash
-anki-llm-batch process \
-  notes.yaml \
-  notes-translated.yaml \
-  Translation \
-  prompt-ja-en.txt \
+anki-llm-batch process notes.yaml \
+  --output notes-translated.yaml \
+  --field Translation \
+  --prompt prompt-ja-en.txt \
   --batch-size 10 \
   --require-result-tag
 ```
 
 - `notes.yaml`: The input file.
-- `notes-translated.yaml`: The output file.
-- `Translation`: The field we want the AI to generate and place its result into.
-- `prompt-ja-en.txt`: Our instruction template.
+- `--output notes-translated.yaml`: The output file.
+- `--field Translation`: The field we want the AI to generate and place its
+  result into.
+- `--prompt prompt-ja-en.txt`: Our instruction template.
 - `--batch-size 10`: Process 10 notes concurrently for speed.
 - `--require-result-tag`: Ensures the tool only saves the content inside the
   `<result>` tag, ignoring the AI's analysis.
@@ -374,13 +380,13 @@ The final step is to import the newly generated translations back into Anki. The
 tool uses the `noteId` to find and update the existing notes.
 
 ```bash
-anki-llm-batch import notes-translated.yaml "Japanese Core 1k" "Japanese Model"
+anki-llm-batch import notes-translated.yaml --deck "Japanese Core 1k" --model "Japanese Model"
 ```
 
 - `notes-translated.yaml`: The file with our improved translations.
-- `"Japanese Core 1k"`: The destination deck.
-- `"Japanese Model"`: The note type/model name for these notes. You can see this
-  when exporting the deck initially.
+- `--deck "Japanese Core 1k"`: The destination deck.
+- `--model "Japanese Model"`: The note type/model name for these notes. You can
+  see this when exporting the deck initially.
 
 ```
 ============================================================

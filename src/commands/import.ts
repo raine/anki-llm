@@ -32,7 +32,7 @@ interface ImportDeckArgs {
 }
 
 const command: Command<ImportDeckArgs> = {
-  command: 'import <input> <deck> <model>',
+  command: 'import <input>',
   describe: 'Import CSV or YAML file into an Anki deck',
 
   builder: (yargs) => {
@@ -42,12 +42,14 @@ const command: Command<ImportDeckArgs> = {
         type: 'string',
         demandOption: true,
       })
-      .positional('deck', {
+      .option('deck', {
+        alias: 'd',
         describe: 'Target Anki deck name',
         type: 'string',
         demandOption: true,
       })
-      .positional('model', {
+      .option('model', {
+        alias: 'm',
         describe: 'Anki note type/model name',
         type: 'string',
         demandOption: true,
@@ -59,11 +61,11 @@ const command: Command<ImportDeckArgs> = {
         default: 'noteId',
       })
       .example(
-        '$0 import export.csv "My Deck" "Basic" --key-field noteId',
+        '$0 import export.csv --deck "My Deck" --model "Basic" --key-field noteId',
         'Import using noteId as key',
       )
       .example(
-        '$0 import data.yaml "Japanese" "Custom" -k Id',
+        '$0 import data.yaml -d "Japanese" -m "Custom" -k Id',
         'Import using Id as key',
       );
   },
