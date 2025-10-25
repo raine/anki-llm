@@ -50,8 +50,11 @@
   "packageManager": "pnpm@10.16.1",
   "devDependencies": {
     "@eslint/js": "^9.38.0",
+    "@types/cli-progress": "^3.11.6",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.9.1",
     "@types/papaparse": "^5.3.16",
+    "@types/yargs": "^17.0.33",
     "@typescript/native-preview": "7.0.0-dev.20251022.1",
     "concurrently": "^9.2.1",
     "eslint": "^9.38.0",
@@ -61,9 +64,6 @@
     "typescript-eslint": "^8.46.2"
   },
   "dependencies": {
-    "@types/cli-progress": "^3.11.6",
-    "@types/js-yaml": "^4.0.9",
-    "@types/yargs": "^17.0.33",
     "chalk": "^5.6.2",
     "cli-progress": "^3.12.0",
     "js-yaml": "^4.1.0",
