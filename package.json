@@ -9,7 +9,8 @@
   "files": [
     "dist/**",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "ANKI_CONNECT.md"
   ],
   "scripts": {
     "build": "tsc",

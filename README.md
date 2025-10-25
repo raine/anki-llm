@@ -89,6 +89,67 @@ Imports data from a file into an Anki deck, updating existing notes.
 - `-k, --key-field`: Field to use for identifying existing notes (default:
   `noteId`).
 
+### `anki-llm-batch query <action> [params]`
+
+Query the AnkiConnect API directly with any supported action. This command is
+especially useful for AI agents (like Claude Code) to explore and interact with
+your Anki collection programmatically.
+
+- `<action>`: The AnkiConnect API action to perform (e.g., `deckNames`,
+  `findNotes`, `cardsInfo`).
+- `[params]`: Optional JSON string of parameters for the action.
+
+**Why this is useful for AI agents:**
+
+AI assistants can use this command to dynamically query your Anki collection
+without you having to manually provide information. For example:
+
+- "List all my decks" → `anki-llm-batch query deckNames`
+- "Show me statistics for my Japanese deck" →
+  `anki-llm-batch query getDeckStats '{"decks":["Japanese"]}'`
+- "Find all cards with tag 'vocabulary'" →
+  `anki-llm-batch query findNotes '{"query":"tag:vocabulary"}'`
+
+The command outputs clean JSON that AI agents can parse and reason about, making
+it easy to build custom workflows or answer questions about your Anki
+collection.
+
+**Examples:**
+
+```bash
+# Get all deck names
+anki-llm-batch query deckNames
+
+# Get all model (note type) names
+anki-llm-batch query modelNames
+
+# Find notes in a specific deck
+anki-llm-batch query findNotes '{"query":"deck:Japanese"}'
+
+# Get detailed information about specific cards
+anki-llm-batch query cardsInfo '{"cards":[1498938915662]}'
+
+# Get statistics for a deck
+anki-llm-batch query getDeckStats '{"decks":["Default"]}'
+
+# Check AnkiConnect version
+anki-llm-batch query version
+
+# Get full AnkiConnect API documentation (useful for AI agents to understand available actions)
+anki-llm-batch query docs
+```
+
+**Special actions:**
+
+- `docs` or `help`: Returns the complete AnkiConnect API documentation. This is
+  especially useful for AI agents that need to understand what actions are
+  available and how to use them. The agent can query this once to get the full
+  documentation and then use that context to make informed decisions about which
+  API calls to make.
+
+See [ANKI_CONNECT.md](./ANKI_CONNECT.md) for the complete list of available
+actions and their parameters.
+
 ## Example use case: Fixing 1000 japanese translations
 
 Let's say you have an Anki deck named "Japanese Core 1k" with 1000 notes. Each
