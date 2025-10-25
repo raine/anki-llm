@@ -44,10 +44,17 @@ export function logInfo(message: string): void {
 /**
  * Logs a message to both the console and the log file.
  * Can include chalk formatting for the console (will be stripped in the file).
+ * Handles leading/trailing newlines properly - they appear in console but not in log timestamps.
  */
 export async function logInfoTee(message: string): Promise<void> {
+  // Print to console with original formatting (including newlines)
   logInfo(message);
-  await logDebug(message);
+
+  // For log file, trim the message so newlines don't create blank timestamped lines
+  const trimmedMessage = message.trim();
+  if (trimmedMessage) {
+    await logDebug(trimmedMessage);
+  }
 }
 
 /**
