@@ -263,6 +263,18 @@ automatically generated appropriate filenames and exported all 12 decks without
 further human intervention. This demonstrates how the `query` command enables AI
 agents to work autonomously with your Anki collection.
 
+**Another example: Sampling random cards from decks**
+
+Here's another example of Claude Code using the `query` command to sample random
+cards from multiple decks. Given the instruction: "Use anki-llm-batch to pick
+random cards from Glossika decks, and print the English and Japanese fields for
+each, pick 10 cards from each deck, and save to a markdown file"
+
+[Full conversation](https://gist.github.com/raine/b8d42275a188005bd2dadc34b8e05824)
+
+This demonstrates how the `query` command enables AI agents to build custom
+scripts for data analysis and extraction tasks autonomously.
+
 **Special actions:**
 
 - `docs` or `help`: Returns the complete AnkiConnect API documentation. This is
