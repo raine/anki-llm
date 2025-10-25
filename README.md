@@ -84,8 +84,10 @@ Processes a data file using an AI model.
 **Required options:**
 
 - `-o, --output`: Path to write the processed data file.
-- `--field`: The name of the field to populate with the AI's result.
 - `-p, --prompt`: Path to the prompt template text file.
+- **Either** `--field` **or** `--json` (mutually exclusive):
+  - `--field <name>`: Update a single field with the AI response.
+  - `--json`: Expect JSON response and merge all fields into the note.
 
 **Common options:**
 
@@ -98,6 +100,36 @@ Processes a data file using an AI model.
   on a small sample before processing large datasets).
 - `--require-result-tag`: Only extracts content from within `<result></result>`
   tags in the AI response.
+
+**Understanding `--field` vs `--json` modes:**
+
+- **`--field` mode** (single field update): The AI response is saved to the
+  specified field. This is the traditional mode for updating one field at a
+  time.
+
+  ```bash
+  anki-llm-batch process notes.yaml -o out.yaml --field Translation -p prompt.txt
+  ```
+
+- **`--json` mode** (multi-field merge): The AI must return valid JSON. All
+  fields in the JSON are merged into your note, allowing multi-field updates.
+
+  ```bash
+  anki-llm-batch process notes.yaml -o out.yaml --json -p prompt.txt
+  ```
+
+  Example: If your note has `Japanese` and `Grammar` fields, and the AI returns:
+
+  ```json
+  {
+    "Japanese": "こんにちは",
+    "Grammar": "greeting"
+  }
+  ```
+
+  Both fields will be updated. Only fields present in the JSON are updated
+  (partial updates are allowed). If the response is not valid JSON, the
+  operation will fail and retry.
 
 ### `anki-llm-batch import <input>`
 

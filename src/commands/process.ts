@@ -23,7 +23,8 @@ import type { Command } from './types.js';
 interface BatchArgs {
   input: string;
   output: string;
-  field: string;
+  field?: string;
+  json: boolean;
   prompt: string;
   model: string;
   'batch-size': number;
@@ -54,9 +55,15 @@ const command: Command<BatchArgs> = {
         demandOption: true,
       })
       .option('field', {
-        describe: 'Field name to process',
+        describe:
+          'Field name to update with AI response (mutually exclusive with --json)',
         type: 'string',
-        demandOption: true,
+      })
+      .option('json', {
+        describe:
+          'Expect JSON response and merge all fields (mutually exclusive with --field)',
+        type: 'boolean',
+        default: false,
       })
       .option('prompt', {
         alias: 'p',
@@ -117,11 +124,24 @@ const command: Command<BatchArgs> = {
         if (argv.limit !== undefined && argv.limit <= 0) {
           throw new Error('Error: --limit must be a positive number.');
         }
+        // Require either --field or --json (but not both)
+        if (!argv.field && !argv.json) {
+          throw new Error('Error: Either --field or --json must be specified.');
+        }
+        if (argv.field && argv.json) {
+          throw new Error(
+            'Error: --field and --json are mutually exclusive. Use only one.',
+          );
+        }
         return true;
       })
       .example(
         '$0 process input.csv -o output.csv --field Translation -p prompt.txt',
-        'Process Translation field',
+        'Update Translation field',
+      )
+      .example(
+        '$0 process data.yaml -o result.yaml --json -p prompt.txt',
+        'Merge JSON response into all fields',
       )
       .example(
         '$0 process data.yaml -o result.yaml --field Notes -p prompt.txt -m gpt-4',
@@ -181,7 +201,11 @@ const command: Command<BatchArgs> = {
     logInfo(`Input file:        ${argv.input}`);
     logInfo(`Output file:       ${argv.output}`);
     logInfo(`Log file:          ${logFilePath}`);
-    logInfo(`Field to process:  ${argv.field}`);
+    if (argv.json) {
+      logInfo(`Mode:              JSON merge`);
+    } else {
+      logInfo(`Field to process:  ${argv.field}`);
+    }
     logInfo(`Model:             ${config.model}`);
     logInfo(`Batch size:        ${config.batchSize}`);
     logInfo(`Retries:           ${config.retries}`);
@@ -206,14 +230,16 @@ const command: Command<BatchArgs> = {
       return;
     }
 
-    // Validate field exists
-    await logDebug('Validating field exists in input data');
-    if (rows.length > 0 && !(argv.field in rows[0])) {
-      const error = `Field "${argv.field}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`;
-      await logDebug(`ERROR: ${error}`);
-      throw new Error(error);
+    // Validate field exists (only if using --field mode)
+    if (!argv.json) {
+      await logDebug('Validating field exists in input data');
+      if (rows.length > 0 && !(argv.field! in rows[0])) {
+        const error = `Field "${argv.field}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`;
+        await logDebug(`ERROR: ${error}`);
+        throw new Error(error);
+      }
+      await logDebug(`Field "${argv.field}" validated successfully`);
     }
-    await logDebug(`Field "${argv.field}" validated successfully`);
 
     // Validate no duplicate noteIds in input
     await logDebug('Validating no duplicate noteIds in input');
@@ -312,7 +338,7 @@ const command: Command<BatchArgs> = {
     );
     const { rows: processedRows, tokenStats } = await processAllRows(
       rowsToProcess,
-      argv.field,
+      argv.field ?? null, // null indicates JSON mode
       promptTemplate,
       config,
       client,

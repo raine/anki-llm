@@ -5,7 +5,11 @@ import cliProgress from 'cli-progress';
 import chalk from 'chalk';
 import type { Config } from '../config.js';
 import type { RowData, ProcessedRow, TokenStats } from './types.js';
-import { requireNoteId } from './util.js';
+import {
+  requireNoteId,
+  tryParseJsonObject,
+  mergeFieldsCaseInsensitive,
+} from './util.js';
 import { logDebug } from './logger.js';
 import { processSingleRow } from './llm.js';
 import { serializeData, atomicWriteFile } from './data-io.js';
@@ -16,7 +20,7 @@ import { calculateCost } from './reporting.js';
  */
 export async function processAllRows(
   rows: RowData[],
-  fieldToProcess: string,
+  fieldToProcess: string | null, // null = JSON mode, string = single field mode
   promptTemplate: string,
   config: Config,
   client: OpenAI,
@@ -86,6 +90,7 @@ export async function processAllRows(
   const allPromises = rows.map((row, index) =>
     limit(async () => {
       let result: ProcessedRow;
+      const rowId = requireNoteId(row); // Get rowId early for logging
       try {
         const processedValue = await pRetry(
           () =>
@@ -99,7 +104,6 @@ export async function processAllRows(
           {
             retries: config.retries,
             onFailedAttempt: async (error) => {
-              const rowId = requireNoteId(row);
               const errorMsg =
                 error instanceof Error ? error.message : 'Unknown error';
               const retryMsg = `Retry ${error.attemptNumber}/${config.retries + 1} for row ${rowId}: ${errorMsg}`;
@@ -111,14 +115,36 @@ export async function processAllRows(
             factor: 2,
           },
         );
-        result = { ...row, [fieldToProcess]: processedValue };
+
+        // Handle response based on mode
+        if (fieldToProcess === null) {
+          // JSON mode: expect and require JSON response
+          const parsedJson = tryParseJsonObject(processedValue);
+          if (parsedJson) {
+            // Perform case-insensitive merge to prevent field duplication
+            result = mergeFieldsCaseInsensitive(row, parsedJson);
+            await logDebug(
+              `Row ${rowId}: Merged JSON response into note. Fields updated: ${Object.keys(parsedJson).join(', ')}`,
+            );
+          } else {
+            // JSON mode but response is not valid JSON - this is an error
+            throw new Error(
+              `Expected JSON response in --json mode, but received: ${processedValue.substring(0, 100)}...`,
+            );
+          }
+        } else {
+          // Single field mode: update the specified field
+          result = { ...row, [fieldToProcess]: processedValue };
+          await logDebug(
+            `Row ${rowId}: Updated field '${fieldToProcess}' with response.`,
+          );
+        }
       } catch (error) {
         if (error instanceof AbortError) {
           throw error; // Critical error, stop everything
         }
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
-        const rowId = requireNoteId(row);
         await logDebug(
           `Row ${rowId}: FAILED after all retries - ${errorMessage}`,
         );

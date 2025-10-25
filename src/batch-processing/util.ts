@@ -132,3 +132,98 @@ export function withTimeout<T>(
     ),
   ]);
 }
+
+/**
+ * Tries to parse a string as JSON.
+ * Returns a Record<string, any> if the string is a valid JSON object.
+ * Returns null if parsing fails or if the result is not a plain object (e.g., an array).
+ */
+export function tryParseJsonObject(
+  jsonString: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Record<string, any> | null {
+  try {
+    // Return null for empty or non-string inputs
+    if (!jsonString || typeof jsonString !== 'string') {
+      return null;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const parsed = JSON.parse(jsonString);
+
+    // Ensure the parsed result is a non-null, non-array object
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+    ) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      return parsed;
+    }
+
+    // The JSON is valid but not a mergeable object (e.g., it's an array or primitive)
+    return null;
+  } catch {
+    // The string is not valid JSON
+    return null;
+  }
+}
+
+/**
+ * Merges fields from a source object into a target row using case-insensitive matching.
+ *
+ * This function ensures consistency with fillTemplate, which reads fields case-insensitively.
+ * It prevents field duplication that would occur with a simple spread operation.
+ *
+ * Behavior:
+ * - If a field in the source matches an existing field in the target (case-insensitively),
+ *   the target's field is updated while preserving its original casing.
+ * - If a field in the source is new (no case-insensitive match), it's added as-is.
+ * - Throws an error if the target row contains ambiguous keys (e.g., both "Name" and "name").
+ *
+ * @param targetRow The row object to merge into (typically the existing note data).
+ * @param sourceFields The object containing fields to merge (typically from LLM JSON response).
+ * @returns A new object with merged fields.
+ * @throws {Error} if the target row has ambiguous keys that match when case is ignored.
+ *
+ * @example
+ * const note = { noteId: "123", Translation: "old", Japanese: "古い" };
+ * const llmResponse = { translation: "new", grammar: "noun" };
+ * const result = mergeFieldsCaseInsensitive(note, llmResponse);
+ * // Returns: { noteId: "123", Translation: "new", Japanese: "古い", grammar: "noun" }
+ * //           Note: "Translation" was updated (not duplicated as "translation")
+ */
+export function mergeFieldsCaseInsensitive(
+  targetRow: RowData,
+  sourceFields: RowData,
+): RowData {
+  const resultRow = { ...targetRow };
+
+  // Create a lookup from lowercase key -> original key, checking for ambiguity
+  const keyMap = new Map<string, string>();
+  for (const key of Object.keys(resultRow)) {
+    const lowerKey = key.toLowerCase();
+    if (keyMap.has(lowerKey)) {
+      throw new Error(
+        `Ambiguous key in row data: "${key}" and "${keyMap.get(lowerKey)}" are the same when case is ignored.`,
+      );
+    }
+    keyMap.set(lowerKey, key);
+  }
+
+  // Merge fields from source using case-insensitive matching
+  for (const [sourceKey, sourceValue] of Object.entries(sourceFields)) {
+    const matchingKey = keyMap.get(sourceKey.toLowerCase());
+    if (matchingKey) {
+      // Update existing field, preserving original casing
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      resultRow[matchingKey] = sourceValue;
+    } else {
+      // Add as a new field
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      resultRow[sourceKey] = sourceValue;
+    }
+  }
+
+  return resultRow;
+}
