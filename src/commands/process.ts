@@ -33,6 +33,7 @@ interface BatchArgs {
   'dry-run': boolean;
   'require-result-tag': boolean;
   force: boolean;
+  limit?: number;
 }
 
 const command: Command<BatchArgs> = {
@@ -108,6 +109,16 @@ const command: Command<BatchArgs> = {
         type: 'boolean',
         default: false,
       })
+      .option('limit', {
+        describe: 'Limit the number of new rows to process (for testing)',
+        type: 'number',
+      })
+      .check((argv) => {
+        if (argv.limit !== undefined && argv.limit <= 0) {
+          throw new Error('Error: --limit must be a positive number.');
+        }
+        return true;
+      })
       .example(
         '$0 process input.csv -o output.csv --field Translation -p prompt.txt',
         'Process Translation field',
@@ -115,6 +126,10 @@ const command: Command<BatchArgs> = {
       .example(
         '$0 process data.yaml -o result.yaml --field Notes -p prompt.txt -m gpt-4',
         'Use GPT-4 model',
+      )
+      .example(
+        '$0 process input.yaml -o output.yaml --field Text -p prompt.txt --limit 10',
+        'Test with 10 rows first',
       );
   },
 
@@ -248,6 +263,17 @@ const command: Command<BatchArgs> = {
       }
     } else {
       await logDebug('Force mode enabled, will re-process all rows');
+    }
+
+    // Apply limit if specified
+    if (argv.limit) {
+      const originalCount = rowsToProcess.length;
+      if (rowsToProcess.length > argv.limit) {
+        rowsToProcess = rowsToProcess.slice(0, argv.limit);
+        await logInfoTee(
+          `\n${chalk.yellow('Limiting')} processing to ${rowsToProcess.length} of ${originalCount} new rows (due to --limit=${argv.limit})`,
+        );
+      }
     }
 
     if (rowsToProcess.length === 0) {

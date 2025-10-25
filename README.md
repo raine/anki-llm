@@ -94,6 +94,8 @@ Processes a data file using an AI model.
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
 - `-d, --dry-run`: Preview the operation without making API calls.
 - `-f, --force`: Re-process all notes, even if they exist in the output file.
+- `--limit`: Limit the number of new rows to process (useful for testing prompts
+  on a small sample before processing large datasets).
 - `--require-result-tag`: Only extracts content from within `<result></result>`
   tags in the AI response.
 
