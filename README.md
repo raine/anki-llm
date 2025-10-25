@@ -374,7 +374,7 @@ Loading existing output...
 ✓ Found 0 already-processed rows
 
 Processing 1000 rows...
-Progress: [████████████████████████████████████████] 1000/1000 | 100% | ETA: 0s
+Processing |████████████████████████████████████████| 100% | 1000/1000 rows | Cost: $0.0234 | Tokens: 152340
 
 ✓ Processing complete
 

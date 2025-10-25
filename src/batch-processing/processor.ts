@@ -36,13 +36,16 @@ export async function processAllRows(
     format:
       'Processing |' +
       chalk.cyan('{bar}') +
-      '| {percentage}% | {value}/{total} rows | ETA: {eta}s',
+      '| {percentage}% | {value}/{total} rows | Cost: ${cost} | Tokens: {tokens}',
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
   });
 
-  progressBar.start(rows.length, 0);
+  progressBar.start(rows.length, 0, {
+    cost: '0.0000',
+    tokens: '0',
+  });
 
   // This array will store results in the original order.
   const orderedResults: ProcessedRow[] = new Array<ProcessedRow>(rows.length);
@@ -50,7 +53,6 @@ export async function processAllRows(
   // --- Logic for buffered incremental writing ---
   const processedMap = new Map<string, RowData>();
   const completedBuffer: ProcessedRow[] = [];
-  let completedCount = 0; // Track how many rows have completed
 
   const performIncrementalWrite = async () => {
     if (!options?.outputPath || !options?.allRows || !options?.existingRowsMap)
@@ -125,15 +127,6 @@ export async function processAllRows(
 
       // Store result in order and handle incremental writing
       orderedResults[index] = result;
-      completedCount++;
-
-      // Log cost every 10 completed rows
-      if (completedCount % 10 === 0) {
-        const currentCost = calculateCost(tokenStats, config.model);
-        await logDebug(
-          `Progress: ${completedCount} rows completed | Tokens: ${tokenStats.input + tokenStats.output} (in: ${tokenStats.input}, out: ${tokenStats.output}) | Cost so far: $${currentCost.toFixed(4)}`,
-        );
-      }
 
       if (options?.outputPath) {
         completedBuffer.push(result);
@@ -142,7 +135,13 @@ export async function processAllRows(
         }
       }
 
-      progressBar.increment();
+      // Calculate stats and update progress bar with real-time cost/token info
+      const totalTokens = tokenStats.input + tokenStats.output;
+      const currentCost = calculateCost(tokenStats, config.model);
+      progressBar.increment(1, {
+        cost: currentCost.toFixed(4),
+        tokens: totalTokens.toString(),
+      });
     }),
   );
 
