@@ -68,12 +68,11 @@ export async function selectCards(cards: ValidatedCard[]): Promise<number[]> {
     ),
   );
 
-  // Create choices for inquirer
+  // Create choices for inquirer without pre-selecting any cards
   const choices = cards.map((card, index) => ({
     name: formatCardForDisplay(card, index + 1),
     value: index,
-    // Pre-select non-duplicates by default
-    checked: !card.isDuplicate,
+    checked: false,
   }));
 
   try {
