@@ -13,6 +13,7 @@ import { slugifyDeckName } from '../batch-processing/util.js';
 
 interface GenerateInitArgs {
   output?: string;
+  model?: string;
 }
 
 /**
@@ -104,6 +105,7 @@ async function generateContextualPromptBody(
   deckName: string,
   sampleCards: Array<Record<string, string>>,
   fieldKeys: string[],
+  userModel?: string,
 ): Promise<string> {
   // Get API key from environment
   const apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
@@ -113,12 +115,25 @@ async function generateContextualPromptBody(
     );
   }
 
-  // Determine which provider to use based on available key
-  const useGemini = !process.env.OPENAI_API_KEY && process.env.GEMINI_API_KEY;
-  const model = useGemini ? 'gemini-2.5-flash' : 'gpt-4.1';
-  const baseURL = useGemini
-    ? 'https://generativelanguage.googleapis.com/v1beta/openai'
-    : undefined;
+  // Determine model and provider
+  let model: string;
+  let baseURL: string | undefined;
+
+  if (userModel) {
+    // User specified a model
+    model = userModel;
+    // Detect provider based on model name
+    if (model.startsWith('gemini-')) {
+      baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai';
+    }
+  } else {
+    // Auto-detect based on available API key
+    const useGemini = !process.env.OPENAI_API_KEY && process.env.GEMINI_API_KEY;
+    model = useGemini ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    baseURL = useGemini
+      ? 'https://generativelanguage.googleapis.com/v1beta/openai'
+      : undefined;
+  }
 
   const client = new OpenAI({
     apiKey,
@@ -225,8 +240,18 @@ const command: Command<GenerateInitArgs> = {
           'Path to save the prompt file (defaults to deck-name-prompt.md)',
         type: 'string',
       })
+      .option('model', {
+        alias: 'm',
+        describe:
+          'LLM model to use for prompt generation (e.g., gpt-4o, gemini-2.5-flash)',
+        type: 'string',
+      })
       .example('$0 generate-init', 'Create prompt file named after the deck')
-      .example('$0 generate-init my-prompt.md', 'Save to custom location');
+      .example('$0 generate-init my-prompt.md', 'Save to custom location')
+      .example(
+        '$0 generate-init --model gemini-2.5-flash',
+        'Use Gemini for prompt generation',
+      );
   },
 
   handler: async (argv) => {
@@ -495,6 +520,7 @@ const command: Command<GenerateInitArgs> = {
           selectedDeck,
           sampleCards,
           Object.keys(filteredFieldMap),
+          argv.model,
         );
 
         console.log(chalk.green('✓ Smart prompt generated successfully!\n'));
