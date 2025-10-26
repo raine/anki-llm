@@ -1,10 +1,10 @@
 {
-  "name": "anki-llm-batch",
+  "name": "anki-llm",
   "version": "1.1.0",
   "type": "module",
   "description": "A command-line interface for bulk-processing Anki flashcards with LLMs",
   "bin": {
-    "anki-llm-batch": "dist/cli.js"
+    "anki-llm": "dist/cli.js"
   },
   "files": [
     "dist/**",
@@ -38,13 +38,13 @@
   ],
   "author": "Raine Virta <raine.virta@gmail.com>",
   "license": "MIT",
-  "homepage": "https://github.com/raine/anki-llm-batch#readme",
+  "homepage": "https://github.com/raine/anki-llm#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/raine/anki-llm-batch.git"
+    "url": "git+https://github.com/raine/anki-llm.git"
   },
   "bugs": {
-    "url": "https://github.com/raine/anki-llm-batch/issues"
+    "url": "https://github.com/raine/anki-llm/issues"
   },
   "engines": {
     "node": ">=18"

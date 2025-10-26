@@ -206,7 +206,7 @@ const command: Command<ImportDeckArgs> = {
             deckName: argv.deck,
             modelName: modelName,
             fields,
-            tags: ['anki-llm-batch-import'],
+            tags: ['anki-llm-import'],
           });
         }
       }

@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 
-const configDir = path.join(os.homedir(), '.config', 'anki-llm-batch');
+const configDir = path.join(os.homedir(), '.config', 'anki-llm');
 const configPath = path.join(configDir, 'config.json');
 
 export interface PersistentConfig {

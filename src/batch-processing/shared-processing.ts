@@ -43,7 +43,7 @@ export async function commonProcessingHandler<T extends SharedProcessingArgs>(
     );
     console.log(
       chalk.dim(
-        '\nTo set a default model, run: anki-llm-batch config set model <model-name>',
+        '\nTo set a default model, run: anki-llm config set model <model-name>',
       ),
     );
     console.log(

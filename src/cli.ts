@@ -19,7 +19,7 @@ void yargs(hideBin(process.argv))
   .command(queryCmd)
   .command(configCmd)
   // Configuration
-  .scriptName('anki-llm-batch')
+  .scriptName('anki-llm')
   .demandCommand(1, 'You must provide a valid command.')
   .strict()
   .help()

@@ -1,4 +1,4 @@
-# anki-llm-batch
+# anki-llm
 
 A command-line interface for bulk-processing Anki flashcards with LLMs.
 
@@ -8,8 +8,8 @@ Manually editing hundreds or thousands of Anki cards is tedious, error-prone,
 and time-consuming. Whether you're fixing translations, generating example
 sentences, or adding phonetic readings, doing it one-by-one is a non-starter.
 
-`anki-llm-batch` provides a bridge between your Anki collection and modern AI
-models. It offers two workflows:
+`anki-llm` provides a bridge between your Anki collection and modern AI models.
+It offers two workflows:
 
 **File-based workflow** (3 steps, with resume support):
 
@@ -47,7 +47,7 @@ models. It offers two workflows:
 Install globally via npm:
 
 ```bash
-npm install -g anki-llm-batch
+npm install -g anki-llm
 ```
 
 ## Requirements
@@ -59,8 +59,8 @@ npm install -g anki-llm-batch
 
 ## API Configuration
 
-`anki-llm-batch` uses LLM APIs to process your notes. You need to configure an
-API key for the model provider you want to use.
+`anki-llm` uses LLM APIs to process your notes. You need to configure an API key
+for the model provider you want to use.
 
 ### Supported models
 
@@ -102,21 +102,21 @@ Get your API key from: https://aistudio.google.com/api-keys
 
 ## Configuration
 
-Use `anki-llm-batch config` to store defaults (for example, the model) so you
-don't have to repeat flags on every command.
+Use `anki-llm config` to store defaults (for example, the model) so you don't
+have to repeat flags on every command.
 
 ```bash
 # Set or override defaults
-anki-llm-batch config set model gpt-4o-mini
+anki-llm config set model gpt-4o-mini
 ```
 
-Config file lives at `~/.config/anki-llm-batch/config.json`.
+Config file lives at `~/.config/anki-llm/config.json`.
 
 ---
 
 ## Commands reference
 
-### `anki-llm-batch export <deck> [output]`
+### `anki-llm export <deck> [output]`
 
 Exports notes from an Anki deck.
 
@@ -131,18 +131,18 @@ Exports notes from an Anki deck.
 
 ```bash
 # Auto-generate filename with default .yaml format
-anki-llm-batch export "Japanese Core 1k"
+anki-llm export "Japanese Core 1k"
 # → japanese-core-1k.yaml
 
 # Auto-generate filename with .csv format
-anki-llm-batch export "Japanese Core 1k" .csv
+anki-llm export "Japanese Core 1k" .csv
 # → japanese-core-1k.csv
 
 # Specify custom filename
-anki-llm-batch export "Japanese Core 1k" my-custom-name.yaml
+anki-llm export "Japanese Core 1k" my-custom-name.yaml
 ```
 
-### `anki-llm-batch process-file <input>`
+### `anki-llm process-file <input>`
 
 Process notes from a CSV/YAML file and save results to another file. **Supports
 automatic resume** - if interrupted or if some notes fail, you can re-run the
@@ -177,28 +177,28 @@ command and it will skip already-processed notes.
 
 **Workflow:**
 
-1. Export deck to file: `anki-llm-batch export "My Deck" notes.yaml`
+1. Export deck to file: `anki-llm export "My Deck" notes.yaml`
 2. Process file:
-   `anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini`
-3. Import results: `anki-llm-batch import output.yaml -d "My Deck"`
+   `anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini`
+3. Import results: `anki-llm import output.yaml -d "My Deck"`
 
 **Examples:**
 
 ```bash
 # Process a file and update a single field
-anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini
+anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini
 
 # Process with JSON mode (update multiple fields)
-anki-llm-batch process-file notes.yaml -o output.yaml --json -p prompt.txt -m gpt-4o-mini
+anki-llm process-file notes.yaml -o output.yaml --json -p prompt.txt -m gpt-4o-mini
 
 # Test on 10 notes first (dry run)
-anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --limit 10 --dry-run -m gpt-4o-mini
+anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --limit 10 --dry-run -m gpt-4o-mini
 
 # Resume processing after interruption (automatic - just re-run the same command)
-anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini
+anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini
 
 # Force re-process all notes (ignore existing output)
-anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --force -m gpt-4o-mini
+anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --force -m gpt-4o-mini
 ```
 
 **Key features:**
@@ -215,7 +215,7 @@ anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p pro
 
 ---
 
-### `anki-llm-batch process-deck <deck>`
+### `anki-llm process-deck <deck>`
 
 Process notes directly from an Anki deck and update them in-place. **No
 intermediate files** needed. This is faster and more convenient when you've
@@ -255,22 +255,22 @@ tested your prompt and know the end result is safe to run.
 **Workflow:**
 
 - Single command:
-  `anki-llm-batch process-deck "My Deck" --field Translation -p prompt.txt -m gpt-4o-mini`
+  `anki-llm process-deck "My Deck" --field Translation -p prompt.txt -m gpt-4o-mini`
 
 **Examples:**
 
 ```bash
 # Process a deck directly and update a single field
-anki-llm-batch process-deck "Japanese Core 1k" --field Translation -p prompt.txt
+anki-llm process-deck "Japanese Core 1k" --field Translation -p prompt.txt
 
 # Direct mode with JSON (update multiple fields)
-anki-llm-batch process-deck "Vocabulary" --json -p prompt.txt
+anki-llm process-deck "Vocabulary" --json -p prompt.txt
 
 # Test on 10 notes first (recommended before processing entire deck)
-anki-llm-batch process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run
+anki-llm process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run
 
 # Use a different model for a specific run
-anki-llm-batch process-deck "Spanish" --field Translation -p prompt.txt
+anki-llm process-deck "Spanish" --field Translation -p prompt.txt
 ```
 
 **Key features:**
@@ -291,14 +291,14 @@ Both `process-file` and `process-deck` support two response formats:
   specified field.
 
   ```bash
-  anki-llm-batch process-file notes.yaml -o out.yaml --field Translation -p prompt.txt -m gpt-4o-mini
+  anki-llm process-file notes.yaml -o out.yaml --field Translation -p prompt.txt -m gpt-4o-mini
   ```
 
 - **`--json` mode** (multi-field merge): The LLM must return valid JSON. All
   fields in the JSON are merged into your note.
 
   ```bash
-  anki-llm-batch process-file notes.yaml -o out.yaml --json -p prompt.txt -m gpt-4o-mini
+  anki-llm process-file notes.yaml -o out.yaml --json -p prompt.txt -m gpt-4o-mini
   ```
 
   Example: If your note has `Japanese` and `Grammar` fields, and the LLM
@@ -315,7 +315,7 @@ Both `process-file` and `process-deck` support two response formats:
   (partial updates are allowed). If the response is not valid JSON, the
   operation will fail and retry.
 
-### `anki-llm-batch import <input>`
+### `anki-llm import <input>`
 
 Imports data from a file into an Anki deck, updating existing notes.
 
@@ -332,7 +332,7 @@ Imports data from a file into an Anki deck, updating existing notes.
 - `-k, --key-field`: Field to use for identifying existing notes (default:
   `noteId`).
 
-### `anki-llm-batch query <action> [params]`
+### `anki-llm query <action> [params]`
 
 Query the AnkiConnect API directly with any supported action. This command is
 especially useful for AI agents (like Claude Code) to explore and interact with
@@ -347,11 +347,11 @@ your Anki collection programmatically.
 AI assistants can use this command to dynamically query your Anki collection
 without you having to manually provide information. For example:
 
-- "List all my decks" → `anki-llm-batch query deckNames`
+- "List all my decks" → `anki-llm query deckNames`
 - "Show me statistics for my Japanese deck" →
-  `anki-llm-batch query getDeckStats '{"decks":["Japanese"]}'`
+  `anki-llm query getDeckStats '{"decks":["Japanese"]}'`
 - "Find all cards with tag 'vocabulary'" →
-  `anki-llm-batch query findNotes '{"query":"tag:vocabulary"}'`
+  `anki-llm query findNotes '{"query":"tag:vocabulary"}'`
 
 The command outputs clean JSON that AI agents can parse and reason about, making
 it easy to build custom workflows or answer questions about your Anki
@@ -361,51 +361,51 @@ collection.
 
 ```bash
 # Get all deck names
-anki-llm-batch query deckNames
+anki-llm query deckNames
 
 # Get all model (note type) names
-anki-llm-batch query modelNames
+anki-llm query modelNames
 
 # Find notes in a specific deck
-anki-llm-batch query findNotes '{"query":"deck:Japanese"}'
+anki-llm query findNotes '{"query":"deck:Japanese"}'
 
 # Get detailed information about specific cards
-anki-llm-batch query cardsInfo '{"cards":[1498938915662]}'
+anki-llm query cardsInfo '{"cards":[1498938915662]}'
 
 # Get statistics for a deck
-anki-llm-batch query getDeckStats '{"decks":["Default"]}'
+anki-llm query getDeckStats '{"decks":["Default"]}'
 
 # Check AnkiConnect version
-anki-llm-batch query version
+anki-llm query version
 
 # Get full AnkiConnect API documentation (useful for AI agents to understand available actions)
-anki-llm-batch query docs
+anki-llm query docs
 ```
 
 **Real-world AI agent example:**
 
 Here's a real example of Claude Code autonomously exporting all Anki decks when
-given the simple instruction: "Use anki-llm-batch to export my decks in csv"
+given the simple instruction: "Use anki-llm to export my decks in csv"
 
 ```
-> Use anki-llm-batch to export my decks in csv
+> Use anki-llm to export my decks in csv
 
 ⏺ I'll help you export your Anki decks to CSV. Let me first check
   the available commands:
 
-⏺ Bash(anki-llm-batch --help)
-  ⎿  anki-llm-batch <command>
+⏺ Bash(anki-llm --help)
+  ⎿  anki-llm <command>
 
      Commands:
-       anki-llm-batch export <deck> <output>              Export deck to file
-       anki-llm-batch process-file <input>                Process notes from file with AI
-       anki-llm-batch process-deck <deck>                 Process notes from deck with AI
-       anki-llm-batch import <input> <deck> <model>       Import data to deck
-       anki-llm-batch query <action> [params]             Query AnkiConnect API
+       anki-llm export <deck> <output>              Export deck to file
+       anki-llm process-file <input>                Process notes from file with AI
+       anki-llm process-deck <deck>                 Process notes from deck with AI
+       anki-llm import <input> <deck> <model>       Import data to deck
+       anki-llm query <action> [params]             Query AnkiConnect API
 
 ⏺ Now let me check what decks are available:
 
-⏺ Bash(anki-llm-batch query deckNames)
+⏺ Bash(anki-llm query deckNames)
   ⎿  [
        "_",
        "_::Genki I",
@@ -418,11 +418,11 @@ given the simple instruction: "Use anki-llm-batch to export my decks in csv"
 
 ⏺ I can see you have several Anki decks. I'll export each one to CSV.
 
-⏺ Bash(anki-llm-batch export "_::Genki I" "genki_i.csv")
+⏺ Bash(anki-llm export "_::Genki I" "genki_i.csv")
   ⎿  ✓ Found 342 notes in '_::Genki I'.
      ✓ Successfully exported 342 notes to genki_i.csv
 
-⏺ Bash(anki-llm-batch export "_::Genki II" "genki_ii.csv")
+⏺ Bash(anki-llm export "_::Genki II" "genki_ii.csv")
   ⎿  ✓ Found 315 notes in '_::Genki II'.
      ✓ Successfully exported 315 notes to genki_ii.csv
 
@@ -452,9 +452,9 @@ agents to work autonomously with your Anki collection.
 **Another example: Sampling random cards from decks**
 
 Here's another example of Claude Code using the `query` command to sample random
-cards from multiple decks. Given the instruction: "Use anki-llm-batch to pick
-random cards from Glossika decks, and print the English and Japanese fields for
-each, pick 10 cards from each deck, and save to a markdown file"
+cards from multiple decks. Given the instruction: "Use anki-llm to pick random
+cards from Glossika decks, and print the English and Japanese fields for each,
+pick 10 cards from each deck, and save to a markdown file"
 
 [Full conversation](https://gist.github.com/raine/b8d42275a188005bd2dadc34b8e05824)
 
@@ -476,8 +476,8 @@ actions and their parameters.
 
 Let's say you have an Anki deck named "Japanese Core 1k" with 1000 notes. Each
 note has a `Japanese` field with a sentence and a `Translation` field with an
-English translation that you suspect is inaccurate. We'll use `anki-llm-batch`
-and GPT-4o mini to generate better translations for all 1000 notes.
+English translation that you suspect is inaccurate. We'll use `anki-llm` and
+GPT-4o mini to generate better translations for all 1000 notes.
 
 ### Step 1: Export your deck
 
@@ -486,7 +486,7 @@ multiline text fields and for using `git diff` to see what has changed after
 processing is complete.
 
 ```bash
-anki-llm-batch export "Japanese Core 1k" notes.yaml
+anki-llm export "Japanese Core 1k" notes.yaml
 ```
 
 This command will connect to Anki, find all notes in that deck, and save them to
@@ -565,7 +565,7 @@ The tool will read the `Japanese` field from each note to fill the prompt, then
 the AI's response will overwrite the `Translation` field.
 
 ```bash
-anki-llm-batch process-file notes.yaml \
+anki-llm process-file notes.yaml \
   --output notes-translated.yaml \
   --field Translation \
   --prompt prompt-ja-en.txt \
@@ -632,7 +632,7 @@ The final step is to import the newly generated translations back into Anki. The
 tool uses the `noteId` to find and update the existing notes.
 
 ```bash
-anki-llm-batch import notes-translated.yaml --deck "Japanese Core 1k"
+anki-llm import notes-translated.yaml --deck "Japanese Core 1k"
 ```
 
 - `notes-translated.yaml`: The file with our improved translations.
@@ -684,7 +684,7 @@ Use `pnpm link` to test the command globally:
 
 ```bash
 pnpm link --global
-anki-llm-batch export "My Deck" notes.yaml
+anki-llm export "My Deck" notes.yaml
 ```
 
 Note: The linked command uses compiled JavaScript from `dist/`. Run
