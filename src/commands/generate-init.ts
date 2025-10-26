@@ -136,11 +136,12 @@ async function generateContextualPromptBody(
 
   // Build the meta-prompt
   const metaPrompt = `You are an expert prompt engineer creating a prompt template for another AI.
-Your goal is to generate a comprehensive prompt body that instructs an AI to create new Anki cards matching the provided style.
+Your goal is to generate a helpful and flexible prompt body that instructs an AI to create new Anki cards that match the general style of the provided examples.
 
-**CONTEXT:**
-The user wants to create new Anki cards for their deck named "${deckName}".
-I have sampled some existing cards from their deck to show you the desired style, content, and structure.
+**IMPORTANT CONTEXT:**
+- The user's deck is named "${deckName}".
+- You are working with a very small sample of existing cards.
+- Your task is to infer the *likely principles and general style*, not to codify every detail as a strict rule. Prioritize patterns that are consistent across multiple examples and ignore coincidences.
 
 **EXISTING CARD EXAMPLES:**
 \`\`\`json
@@ -149,53 +150,36 @@ ${JSON.stringify(sampleCards, null, 2)}
 
 **YOUR TASK:**
 
-**Step 1: Deep Analysis**
-Carefully analyze the examples to understand and deconstruct the underlying rules:
+**Step 1: Gentle Analysis**
+Analyze the examples to understand the deck's high-level principles:
 
-1. **Deck's Purpose & Style**: What is the subject matter? Is it formal, casual, technical? What is the pedagogical goal (e.g., teaching conversational Japanese, medical terminology)?
+1. **Purpose & Style**: What is the likely subject matter and learning goal (e.g., conversational Japanese, medical terminology)?
+2. **Content Principles**: What kind of information is typically included in fields like explanations or notes? Look for recurring themes (e.g., formal vs. informal usage, common mistakes, collocations). Distinguish between what seems essential versus what is helpful but optional.
+3. **Formatting Conventions**: How is HTML used for emphasis and structure?
+   - What is the *purpose* of tags like \`<b>\` or \`<ul>\`?
+   - For linguistic formatting (like Japanese furigana \`漢字[かんじ]\`), identify the general pattern but **avoid creating overly strict spacing rules** from this small sample. Focus on high-confidence patterns only.
 
-2. **Semantic Formatting**:
-   - **Bold Tags (<b>)**: What is the rule for bolding? Is it only the focus term, or does it include surrounding words/particles? Are there multiple bolded elements?
-   - **Lists (<ul>/<li>)**: How are lists used in explanations? Are they for definitions, examples, usage notes, or something else?
-   - **Other HTML**: Any other HTML tags or patterns (headings, emphasis, etc.)?
+**Step 2: Generate a Flexible Prompt Body**
+Using your analysis, generate a prompt body that guides the AI to create cards that *fit the spirit* of the examples, while allowing for natural variation.
 
-3. **Linguistic & Technical Conventions (CRITICAL FOR LANGUAGE DECKS)**:
-   - **Furigana Spacing (Japanese)**: If the deck uses furigana like \`漢字[かんじ]\`, analyze the spacing carefully:
-     - Is there a space between kanji compounds? (e.g., \`体感[たいかん] 温度[おんど]\`)
-     - Is there a space before particles? (e.g., \`温度[おんど] は\`)
-     - Are there exceptions where there is **NO** space? (e.g., before auxiliary verbs like \`~ない\`, \`~ます\`, or certain particles like \`の\`, \`を\`)
-     - This spacing is often critical for technical reasons (audio generation, ruby syntax). You MUST identify these patterns.
-   - **Explanation Structure**: Analyze the content of explanation/note fields across all examples. What topics are consistently covered? Common themes include:
-     - Formal vs informal usage
-     - Common mistakes or pitfalls
-     - Cultural context or nuances
-     - Collocations or example sentences
-     - Grammatical patterns
-     - Variations of the word/phrase
-   - Synthesize these recurring topics into a structured checklist.
+1. **Persona & Goal**: Start with a concise instruction for the AI, mentioning the deck's purpose.
 
-**Step 2: Generate the Prompt Body**
-Using your analysis, generate a high-quality prompt body with these sections:
+2. **Term Placeholder**: State that the term will be provided via the **{term}** placeholder.
 
-1. **Persona & Goal**: Start with a concise instruction for the AI, mentioning the deck's likely purpose and any pedagogical goals you inferred (e.g., "Create a Japanese flashcard designed to teach conversational nuances with cultural context.").
+3. **One-Shot Example**: Provide a single, plausible, **NEW** example in a JSON code block. This example should be a good demonstration of the deck's style. The JSON keys must be exactly: ${fieldKeys.join(', ')}.
 
-2. **Term Placeholder**: State that the term to be defined will be provided via the **{term}** placeholder. Phrase this naturally (e.g., "The term to create a card for is: **{term}**").
+4. **Boilerplate**: Include the standard instruction: "IMPORTANT: Your output must be a single, valid JSON object and nothing else. Do not include any explanation, markdown formatting, or additional text. All field values must be strings."
 
-3. **One-Shot Example**: Provide a single, plausible, **NEW** example in a JSON code block. This example must perfectly follow all the formatting, spacing, and content rules you identified. The JSON keys must be exactly: ${fieldKeys.join(', ')}.
-
-4. **Boilerplate**: Include: "IMPORTANT: Your output must be a single, valid JSON object and nothing else. Do not include any explanation, markdown formatting, or additional text. All field values must be strings."
-
-5. **Formatting Requirements**: Create a section that explicitly lists the formatting rules you discovered.
-   - **This is critical.** Codify all patterns you observed.
-   - For complex rules like furigana spacing, provide **CORRECT** and **INCORRECT** examples to eliminate ambiguity.
-   - Example: "CORRECT: \`10度[ど]しかない\`, INCORRECT: \`10度[ど] しか ない\`"
-   - Be specific about which fields use which formatting.
-
-6. **Content Requirements**: Create a checklist of topics that explanation fields must cover, based on the recurring themes you found. Make this specific and actionable.
-   - Example: "The explanation field must be a list that includes: 1. Formal vs informal usage, 2. A common collocation or example, 3. Any potential pitfalls."
+5. **Stylistic Guidelines (Not Strict Rules)**:
+   - Create sections with headings like "Formatting Guidelines" and "Content Guidelines".
+   - Phrase instructions as recommendations, not commands. Use words like "Generally," "Typically," "Aim to," "Consider including."
+   - **Good Example**: "Typically, use \`<b>\` tags to highlight the main term within example sentences."
+   - **Bad Example**: "You must always bold the second word of every sentence."
+   - If a field was often empty in the samples, suggest its purpose rather than mandating it be empty. Example: "The 'notes' field is optional but can be used for extra cultural context."
+   - For complex formatting like furigana, provide a single good example and a brief, high-level description of the pattern. Avoid detailed CORRECT/INCORRECT lists unless a pattern is exceptionally clear and consistent across all samples.
 
 **OUTPUT FORMAT:**
-Return ONLY the raw text for the prompt body. Do NOT include frontmatter, markdown formatting for the entire block, or any explanations about your own process.`;
+Return ONLY the raw text for the prompt body. Do NOT include frontmatter or explanations about your process.`;
 
   try {
     const response = await client.chat.completions.create({
@@ -471,8 +455,8 @@ const command: Command<GenerateInitArgs> = {
           throw new Error('No cards found in deck to analyze.');
         }
 
-        // 2. Sample 3 random cards (or all if fewer than 3)
-        const sampleCount = Math.min(3, noteIds.length);
+        // 2. Sample 5 random cards (or all if fewer than 5)
+        const sampleCount = Math.min(5, noteIds.length);
         const shuffled = noteIds.sort(() => 0.5 - Math.random());
         const sampleIds = shuffled.slice(0, sampleCount);
 
