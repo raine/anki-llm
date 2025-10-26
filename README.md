@@ -2,6 +2,12 @@
 
 A command-line interface for bulk-processing Anki flashcards with LLMs.
 
+## Example workflows
+
+- **Bulk-verify translations** – End-to-end pipeline for cleaning large decks. [Read more](#example-use-case-fixing-1000-japanese-translations)
+- **Add a Key Vocabulary field** – Generate structured HTML explanations per sentence. [Prompt + steps](#example-use-case-adding-a-key-vocabulary-field)
+- **Scriptable collection access** – Query AnkiConnect directly from the CLI or AI agents. [Command reference](#anki-llm-query-action-params)
+
 ## Why?
 
 Manually editing hundreds or thousands of Anki cards is tedious, error-prone,
