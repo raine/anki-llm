@@ -47,6 +47,48 @@ npm install -g anki-llm-batch
 - The [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on must be
   installed in Anki.
 
+## API Configuration
+
+`anki-llm-batch` uses LLM APIs to process your notes. You need to configure an
+API key for the model provider you want to use.
+
+### Supported Models
+
+The tool supports two API providers:
+
+**OpenAI models:**
+
+- `gpt-4.1`
+- `gpt-4o`
+- `gpt-4o-mini` (default)
+- `gpt-5-nano`
+
+**Google Gemini models:**
+
+- `gemini-2.0-flash`
+- `gemini-2.5-flash`
+- `gemini-2.5-flash-lite`
+
+### Setting up API Keys
+
+Set the appropriate environment variable for your chosen model provider:
+
+**For OpenAI models:**
+
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+Get your API key from: https://platform.openai.com/api-keys
+
+**For Gemini models:**
+
+```bash
+export GEMINI_API_KEY="your-api-key-here"
+```
+
+Get your API key from: https://aistudio.google.com/api-keys
+
 ## Commands reference
 
 ### `anki-llm-batch export <deck> [output]`
