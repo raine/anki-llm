@@ -273,21 +273,22 @@ anki-llm-batch process-deck "Spanish" --field Translation -p prompt.txt -m gpt-4
 
 Both `process-file` and `process-deck` support two response formats:
 
-- **`--field` mode** (single field update): The AI response is saved to the
+- **`--field` mode** (single field update): The LLM response is saved to the
   specified field.
 
   ```bash
   anki-llm-batch process-file notes.yaml -o out.yaml --field Translation -p prompt.txt -m gpt-4o-mini
   ```
 
-- **`--json` mode** (multi-field merge): The AI must return valid JSON. All
+- **`--json` mode** (multi-field merge): The LLM must return valid JSON. All
   fields in the JSON are merged into your note.
 
   ```bash
   anki-llm-batch process-file notes.yaml -o out.yaml --json -p prompt.txt -m gpt-4o-mini
   ```
 
-  Example: If your note has `Japanese` and `Grammar` fields, and the AI returns:
+  Example: If your note has `Japanese` and `Grammar` fields, and the LLM
+  returns:
 
   ```json
   {
