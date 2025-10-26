@@ -5,11 +5,18 @@ import { stripAnsi } from './util.js';
 // Module-scoped log file path
 let logFilePath: string | null = null;
 
+// Module-scoped verbose flag
+let isVerbose = false;
+
 /**
  * Initializes the logger with a log file path and clears any previous log file.
  */
-export async function initLogger(path: string): Promise<void> {
+export async function initLogger(
+  path: string,
+  verbose: boolean = false,
+): Promise<void> {
   logFilePath = path;
+  isVerbose = verbose;
   await writeFile(logFilePath, '', 'utf-8');
 }
 
@@ -70,6 +77,15 @@ export async function logError(
     console.error(error);
   }
   await logDebug(`ERROR: ${message}. Details: ${errorMessage}`);
+}
+
+/**
+ * Logs verbose information (like LLM responses) to the log file only.
+ * Only logs if verbose mode is enabled.
+ */
+export async function logVerbose(message: string): Promise<void> {
+  if (!isVerbose) return;
+  await logDebug(`[VERBOSE] ${message}`);
 }
 
 // Legacy compatibility - marked as deprecated

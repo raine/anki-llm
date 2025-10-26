@@ -101,6 +101,9 @@ Processes a data file using an AI model.
 - `--require-result-tag`: Only extracts content from within `<result></result>`
   tags in the AI response.
 - `--log`: Generate a log file with detailed debug information.
+- `--very-verbose`: Log full LLM responses to the log file (automatically
+  enables `--log`). Useful for debugging prompts and understanding model
+  outputs.
 
 **Understanding `--field` vs `--json` modes:**
 

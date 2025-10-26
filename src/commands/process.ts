@@ -36,6 +36,7 @@ interface BatchArgs {
   force: boolean;
   limit?: number;
   log: boolean;
+  'very-verbose': boolean;
 }
 
 const command: Command<BatchArgs> = {
@@ -126,6 +127,11 @@ const command: Command<BatchArgs> = {
         type: 'boolean',
         default: false,
       })
+      .option('very-verbose', {
+        describe: 'Log LLM responses to log file (automatically enables --log)',
+        type: 'boolean',
+        default: false,
+      })
       .check((argv) => {
         if (argv.limit !== undefined && argv.limit <= 0) {
           throw new Error('Error: --limit must be a positive number.');
@@ -162,17 +168,20 @@ const command: Command<BatchArgs> = {
   handler: async (argv) => {
     const startTime = Date.now();
 
-    // Initialize logger only if --log is enabled
+    // Initialize logger if --log is enabled or --very-verbose is enabled
     let logFilePath: string | null = null;
-    if (argv.log) {
+    if (argv.log || argv['very-verbose']) {
       const outputDir = path.dirname(argv.output);
       const outputName = path.basename(argv.output, path.extname(argv.output));
       logFilePath = path.join(outputDir, `${outputName}.log`);
-      await initLogger(logFilePath);
+      await initLogger(logFilePath, argv['very-verbose']);
 
       await logDebug('='.repeat(60));
       await logDebug('Batch AI Data Processing - Session Started');
       await logDebug('='.repeat(60));
+      if (argv['very-verbose']) {
+        await logDebug('Very verbose mode enabled - will log LLM responses');
+      }
     }
 
     // Parse configuration from CLI args

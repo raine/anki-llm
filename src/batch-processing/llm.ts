@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import type { Config } from '../config.js';
 import type { RowData, TokenStats } from './types.js';
 import { requireNoteId, fillTemplate, withTimeout } from './util.js';
-import { logDebug } from './logger.js';
+import { logDebug, logVerbose } from './logger.js';
 
 /**
  * Extracts content from <result></result> XML tags in the response.
@@ -87,6 +87,11 @@ export async function processSingleRow(params: {
   const rawResult = response.choices[0]?.message?.content?.trim() || '';
   await logDebug(
     `Row ${rowId}: Received response (${rawResult.length} chars) in ${requestDurationMs}ms (${(requestDurationMs / 1000).toFixed(2)}s)`,
+  );
+
+  // Log the full LLM response if verbose mode is enabled
+  await logVerbose(
+    `Row ${rowId}: LLM Response:\n${'-'.repeat(60)}\n${rawResult}\n${'-'.repeat(60)}`,
   );
 
   // Track token usage
