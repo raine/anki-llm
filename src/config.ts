@@ -30,7 +30,7 @@ export type Config = z.infer<typeof Config>;
 /**
  * Determines the provider and base URL based on the model name
  */
-function getProviderConfig(model: SupportedChatModel): {
+export function getProviderConfig(model: string): {
   baseURL?: string;
   recommendedApiKeyEnv: string;
 } {
@@ -47,6 +47,14 @@ function getProviderConfig(model: SupportedChatModel): {
   return {
     recommendedApiKeyEnv: 'OPENAI_API_KEY',
   };
+}
+
+/**
+ * Gets the API key for a given model from environment variables
+ */
+export function getApiKeyForModel(model: string): string | undefined {
+  const providerConfig = getProviderConfig(model);
+  return process.env[providerConfig.recommendedApiKeyEnv];
 }
 
 export function parseConfig(cliArgs: {

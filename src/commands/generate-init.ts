@@ -10,6 +10,7 @@ import {
   findModelNamesForDeck,
 } from '../anki-schema.js';
 import { slugifyDeckName } from '../batch-processing/util.js';
+import { getProviderConfig, getApiKeyForModel } from '../config.js';
 
 interface GenerateInitArgs {
   output?: string;
@@ -107,37 +108,30 @@ async function generateContextualPromptBody(
   fieldKeys: string[],
   userModel?: string,
 ): Promise<string> {
-  // Get API key from environment
-  const apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      'No API key found in environment (OPENAI_API_KEY or GEMINI_API_KEY)',
-    );
-  }
-
-  // Determine model and provider
+  // Determine model
   let model: string;
-  let baseURL: string | undefined;
 
   if (userModel) {
-    // User specified a model
     model = userModel;
-    // Detect provider based on model name
-    if (model.startsWith('gemini-')) {
-      baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai';
-    }
   } else {
     // Auto-detect based on available API key
     const useGemini = !process.env.OPENAI_API_KEY && process.env.GEMINI_API_KEY;
     model = useGemini ? 'gemini-2.5-flash' : 'gpt-4o-mini';
-    baseURL = useGemini
-      ? 'https://generativelanguage.googleapis.com/v1beta/openai'
-      : undefined;
+  }
+
+  // Get provider configuration and API key for the model
+  const providerConfig = getProviderConfig(model);
+  const apiKey = getApiKeyForModel(model);
+
+  if (!apiKey) {
+    throw new Error(
+      `${providerConfig.recommendedApiKeyEnv} environment variable is required for model '${model}'`,
+    );
   }
 
   const client = new OpenAI({
     apiKey,
-    baseURL,
+    baseURL: providerConfig.baseURL,
   });
 
   // Build the meta-prompt
