@@ -4,9 +4,13 @@ A command-line interface for bulk-processing Anki flashcards with LLMs.
 
 ## Example workflows
 
-- **Bulk-verify translations** – End-to-end pipeline for cleaning large decks. [Read more](#example-use-case-fixing-1000-japanese-translations)
-- **Add a Key Vocabulary field** – Create a per-note field highlighting 1–3 key words with readings, meanings, and HTML context. [Prompt + steps](#example-use-case-adding-a-key-vocabulary-field)
-- **Scriptable collection access** – Query AnkiConnect directly from the CLI or AI agents. [Command reference](#anki-llm-query-action-params)
+- **Bulk-verify translations** – End-to-end pipeline for cleaning large decks.
+  [Read more](#example-use-case-fixing-1000-japanese-translations)
+- **Add a Key Vocabulary field** – Create a per-note field highlighting 1–3 key
+  words with readings, meanings, and HTML context.
+  [Prompt + steps](#example-use-case-adding-a-key-vocabulary-field)
+- **Scriptable collection access** – Query AnkiConnect directly from the CLI or
+  AI agents. [Command reference](#anki-llm-query-action-params)
 
 ## Why?
 
@@ -742,7 +746,6 @@ When you open the processed YAML/CSV, the generated field will look like this:
 
 ```yaml
 Key Vocabulary: |
-  <result>
   <h3>控える (ひかえる)</h3>
   <dl class="vocab-entry">
     <dt>Type</dt>
@@ -766,7 +769,6 @@ Key Vocabulary: |
     <dt>Context</dt>
     <dd>Modifies わからない to emphasize that the speaker has absolutely no understanding.</dd>
   </dl>
-  </result>
 ```
 
 After verifying the results, import the updated file back into Anki to add the
