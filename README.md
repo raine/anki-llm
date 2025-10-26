@@ -678,7 +678,8 @@ HTML that spotlights the most important words in each sentence.
 
 Create a prompt that instructs the model to reason about the sentence, pick the
 top 1–3 items, and return clean HTML. This example assumes your notes have
-`Japanese` and `English` fields.
+`Japanese` and `English` fields. You can start from the full prompt example in
+[`examples/key_vocabulary.md`](examples/key_vocabulary.md).
 
 **File: `prompt-key-vocab.txt`**
 
@@ -721,7 +722,7 @@ anki-llm process-file sentences.yaml \
   --output sentences-key-vocab.yaml \
   --field "Key Vocabulary" \
   --prompt prompt-key-vocab.txt \
-  --model gpt-4o-mini \
+  --model gemini-2.5-flash-lite \
   --require-result-tag
 ```
 
