@@ -73,7 +73,10 @@ export function fillTemplate(template: string, row: RowData): string {
   }
 
   // 2. Use a regex to find all unique placeholders required by the template.
-  const placeholders = [...template.matchAll(/\{([^}]+)\}/g)];
+  //    Placeholders must be simple identifiers (letters/numbers/underscore/hyphen)
+  //    so sample JSON blocks like `{ "front": ... }` are ignored.
+  const placeholderPattern = /\{([a-zA-Z0-9_-]+)\}/g;
+  const placeholders = [...template.matchAll(placeholderPattern)];
   const requiredKeys = new Set(
     placeholders.map((match) => match[1].toLowerCase()),
   );
@@ -99,7 +102,8 @@ export function fillTemplate(template: string, row: RowData): string {
   }
 
   // 4. Perform the replacement in a single, efficient pass.
-  return template.replace(/\{([^}]+)\}/g, (_match, key: string) => {
+  placeholderPattern.lastIndex = 0;
+  return template.replace(placeholderPattern, (_match, key: string) => {
     const lowerKey = key.toLowerCase();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const value = lowerCaseRow.get(lowerKey);
