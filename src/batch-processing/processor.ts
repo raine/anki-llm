@@ -46,6 +46,21 @@ export async function processAllRows(
     hideCursor: true,
   });
 
+  // Setup cleanup handler to restore terminal state on interrupt
+  const cleanupProgressBar = () => {
+    progressBar.stop();
+    process.stdout.write('\x1B[?25h'); // Show cursor
+  };
+
+  // Handle SIGINT (Ctrl+C) and SIGTERM
+  const signalHandler = () => {
+    cleanupProgressBar();
+    process.exit(130); // Standard exit code for SIGINT
+  };
+
+  process.on('SIGINT', signalHandler);
+  process.on('SIGTERM', signalHandler);
+
   progressBar.start(rows.length, 0, {
     cost: '0.0000',
     tokens: '0',
@@ -171,15 +186,20 @@ export async function processAllRows(
     }),
   );
 
-  // Wait for all queued promises to complete
-  await Promise.all(allPromises);
+  try {
+    // Wait for all queued promises to complete
+    await Promise.all(allPromises);
 
-  // Write any remaining items in the buffer
-  if (completedBuffer.length > 0) {
-    await performIncrementalWrite();
+    // Write any remaining items in the buffer
+    if (completedBuffer.length > 0) {
+      await performIncrementalWrite();
+    }
+
+    return { rows: orderedResults, tokenStats };
+  } finally {
+    // Clean up progress bar and remove signal handlers
+    cleanupProgressBar();
+    process.removeListener('SIGINT', signalHandler);
+    process.removeListener('SIGTERM', signalHandler);
   }
-
-  progressBar.stop();
-
-  return { rows: orderedResults, tokenStats };
 }
