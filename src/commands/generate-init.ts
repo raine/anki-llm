@@ -216,9 +216,19 @@ Return ONLY the raw text for the prompt body. Do NOT include frontmatter, markdo
 
     return generatedPrompt;
   } catch (error) {
-    throw new Error(
-      `LLM API call failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    // Enhanced error logging for debugging
+    let errorMessage = 'LLM API call failed';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      // Log additional details if available
+      if ('status' in error) {
+        console.error('   Status code:', error.status);
+      }
+      if ('error' in error) {
+        console.error('   Error details:', JSON.stringify(error.error));
+      }
+    }
+    throw new Error(`LLM API call failed: ${errorMessage}`);
   }
 }
 
