@@ -35,7 +35,7 @@ export function parseCliArgs() {
       alias: 'm',
       describe: 'AI model to use',
       type: 'string',
-      default: 'gpt-4o-mini',
+      demandOption: true,
       choices: [
         'gpt-4.1',
         'gpt-4o',

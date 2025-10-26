@@ -62,7 +62,7 @@ npm install -g anki-llm-batch
 `anki-llm-batch` uses LLM APIs to process your notes. You need to configure an
 API key for the model provider you want to use.
 
-### Supported Models
+### Supported models
 
 The tool supports two API providers:
 
@@ -71,7 +71,7 @@ The tool supports two API providers:
 | **OpenAI models**        |
 | `gpt-4.1`                | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4.1)                    |
 | `gpt-4o`                 | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4o)                     |
-| `gpt-4o-mini` (default)  | $0.15/M | $0.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4o-mini)                |
+| `gpt-4o-mini`            | $0.15/M | $0.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4o-mini)                |
 | `gpt-5-nano`             | $0.05/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-nano)                 |
 | **Google Gemini models** |
 | `gemini-2.0-flash`       | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)      |
@@ -146,7 +146,7 @@ command and it will skip already-processed notes.
 
 **Common options:**
 
-- `-m, --model`: AI model to use (default: `gpt-4o-mini`).
+- `-m, --model`: AI model to use (required).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
 - `-d, --dry-run`: Preview the operation without making API calls (recommended
@@ -165,26 +165,26 @@ command and it will skip already-processed notes.
 
 1. Export deck to file: `anki-llm-batch export "My Deck" notes.yaml`
 2. Process file:
-   `anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt`
+   `anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini`
 3. Import results: `anki-llm-batch import output.yaml -d "My Deck"`
 
 **Examples:**
 
 ```bash
 # Process a file and update a single field
-anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt
+anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini
 
 # Process with JSON mode (update multiple fields)
-anki-llm-batch process-file notes.yaml -o output.yaml --json -p prompt.txt
+anki-llm-batch process-file notes.yaml -o output.yaml --json -p prompt.txt -m gpt-4o-mini
 
 # Test on 10 notes first (dry run)
-anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --limit 10 --dry-run
+anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --limit 10 --dry-run -m gpt-4o-mini
 
 # Resume processing after interruption (automatic - just re-run the same command)
-anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt
+anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini
 
 # Force re-process all notes (ignore existing output)
-anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --force
+anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --force -m gpt-4o-mini
 ```
 
 **Key features:**
@@ -219,13 +219,13 @@ tested your prompt and know the end result is safe to run.
 
 **Common options:**
 
-- `-m, --model`: AI model to use (default: `gpt-4o-mini`).
+- `-m, --model`: AI model to use (required).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
 - `-d, --dry-run`: Preview the operation without making API calls (recommended
   for testing).
-- `--limit`: Limit the number of notes to process (useful for testing prompts
-  on a small sample before processing entire deck).
+- `--limit`: Limit the number of notes to process (useful for testing prompts on
+  a small sample before processing entire deck).
 - `--require-result-tag`: Only extracts content from within `<result></result>`
   tags in the AI response.
 - `--log`: Generate a log file with detailed debug information.
@@ -241,19 +241,19 @@ tested your prompt and know the end result is safe to run.
 **Workflow:**
 
 - Single command:
-  `anki-llm-batch process-deck "My Deck" --field Translation -p prompt.txt`
+  `anki-llm-batch process-deck "My Deck" --field Translation -p prompt.txt -m gpt-4o-mini`
 
 **Examples:**
 
 ```bash
 # Process a deck directly and update a single field
-anki-llm-batch process-deck "Japanese Core 1k" --field Translation -p prompt.txt
+anki-llm-batch process-deck "Japanese Core 1k" --field Translation -p prompt.txt -m gpt-4o-mini
 
 # Direct mode with JSON (update multiple fields)
-anki-llm-batch process-deck "Vocabulary" --json -p prompt.txt
+anki-llm-batch process-deck "Vocabulary" --json -p prompt.txt -m gpt-4o-mini
 
 # Test on 10 notes first (recommended before processing entire deck)
-anki-llm-batch process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run
+anki-llm-batch process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run -m gpt-4o-mini
 
 # Use a different model
 anki-llm-batch process-deck "Spanish" --field Translation -p prompt.txt -m gpt-4o
@@ -277,14 +277,14 @@ Both `process-file` and `process-deck` support two response formats:
   specified field.
 
   ```bash
-  anki-llm-batch process-file notes.yaml -o out.yaml --field Translation -p prompt.txt
+  anki-llm-batch process-file notes.yaml -o out.yaml --field Translation -p prompt.txt -m gpt-4o-mini
   ```
 
 - **`--json` mode** (multi-field merge): The AI must return valid JSON. All
   fields in the JSON are merged into your note.
 
   ```bash
-  anki-llm-batch process-file notes.yaml -o out.yaml --json -p prompt.txt
+  anki-llm-batch process-file notes.yaml -o out.yaml --json -p prompt.txt -m gpt-4o-mini
   ```
 
   Example: If your note has `Japanese` and `Grammar` fields, and the AI returns:
@@ -554,6 +554,7 @@ anki-llm-batch process-file notes.yaml \
   --output notes-translated.yaml \
   --field Translation \
   --prompt prompt-ja-en.txt \
+  --model gpt-4o-mini \
   --batch-size 10 \
   --require-result-tag
 ```
@@ -563,6 +564,7 @@ anki-llm-batch process-file notes.yaml \
 - `--field Translation`: The field we want the AI to generate and place its
   result into.
 - `--prompt prompt-ja-en.txt`: Our instruction template.
+- `--model gpt-4o-mini`: The AI model to use.
 - `--batch-size 10`: Process 10 notes concurrently for speed.
 - `--require-result-tag`: Ensures the tool only saves the content inside the
   `<result>` tag, ignoring the AI's analysis.
