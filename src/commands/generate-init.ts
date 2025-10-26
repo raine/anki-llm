@@ -2,8 +2,9 @@ import { writeFile } from 'fs/promises';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { z } from 'zod';
+import OpenAI from 'openai';
 import type { Command } from './types.js';
-import { ankiRequest } from '../anki-connect.js';
+import { ankiRequest, NoteInfo } from '../anki-connect.js';
 import {
   getFieldNamesForModel,
   findModelNamesForDeck,
@@ -51,15 +52,27 @@ function suggestKeyForField(fieldName: string): string {
 
 /**
  * Generates a boilerplate prompt body with instructions and a one-shot example.
+ * If sampleCard is provided, uses it as a real example from the deck.
+ * Otherwise, generates generic placeholder values.
  */
-function generatePromptBody(fieldKeys: string[]): string {
-  // Create an example JSON object
-  const exampleJson: Record<string, string> = {};
-  for (const key of fieldKeys) {
-    exampleJson[key] = `Example value for ${key}`;
+function generatePromptBody(
+  fieldKeys: string[],
+  sampleCard?: Record<string, string>,
+): string {
+  // Use real sample card or create placeholder
+  const exampleJson: Record<string, string> = sampleCard || {};
+  if (!sampleCard) {
+    for (const key of fieldKeys) {
+      exampleJson[key] = `Example value for ${key}`;
+    }
   }
 
-  return `You are an expert assistant who creates one excellent Anki flashcard for a vocabulary term.
+  // Determine intro based on whether we have a real sample
+  const intro = sampleCard
+    ? 'You are an expert assistant who creates excellent Anki flashcards in the style shown below.'
+    : 'You are an expert assistant who creates one excellent Anki flashcard for a vocabulary term.';
+
+  return `${intro}
 The term to create a card for is: **{term}**
 
 IMPORTANT: Your output must be a single, valid JSON object and nothing else.
@@ -81,6 +94,89 @@ Tips for creating high-quality cards:
 - Use HTML tags like <b>, <i>, <ul>, <li> for formatting when helpful
 - For language learning: include pronunciation guides if relevant
 - Keep the content focused and easy to review`;
+}
+
+/**
+ * Generates a contextual prompt body using an LLM by analyzing sample cards.
+ */
+async function generateContextualPromptBody(
+  deckName: string,
+  sampleCards: Array<Record<string, string>>,
+  fieldKeys: string[],
+): Promise<string> {
+  // Get API key from environment
+  const apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      'No API key found in environment (OPENAI_API_KEY or GEMINI_API_KEY)',
+    );
+  }
+
+  // Determine which provider to use based on available key
+  const useGemini = !process.env.OPENAI_API_KEY && process.env.GEMINI_API_KEY;
+  const model = useGemini ? 'gemini-2.5-flash' : 'gpt-4.1';
+  const baseURL = useGemini
+    ? 'https://generativelanguage.googleapis.com/v1beta/openai'
+    : undefined;
+
+  const client = new OpenAI({
+    apiKey,
+    baseURL,
+  });
+
+  // Build the meta-prompt
+  const metaPrompt = `You are an expert prompt engineer creating a prompt template for another AI.
+Your task is to generate the BODY of a prompt file that will be used to create Anki flashcards.
+
+**CONTEXT:**
+The user wants to create new Anki cards for their deck named "${deckName}".
+I have sampled some existing cards from their deck to show you the desired style, content, and structure.
+
+**EXISTING CARD EXAMPLES:**
+\`\`\`json
+${JSON.stringify(sampleCards, null, 2)}
+\`\`\`
+
+**YOUR TASK:**
+Analyze the examples above to understand the deck's purpose (e.g., language learning, medical terminology, coding concepts). Then, generate a high-quality prompt body that instructs an AI to create a NEW, similar card.
+
+**REQUIREMENTS FOR THE GENERATED PROMPT:**
+1. Start with a concise instruction for the AI, mentioning the likely topic of the deck based on your analysis.
+2. The user will provide the term to create a card for using the placeholder: **{term}**
+3. Include a ONE-SHOT example in a JSON code block. This example must be:
+   - A plausible, NEW example that fits the style of the provided cards but is NOT one of them.
+   - Formatted as a JSON object with the exact following keys: ${fieldKeys.join(', ')}.
+   - Use realistic, detailed content similar to the examples provided.
+4. Include the boilerplate instructions about requiring valid JSON output and using HTML for formatting.
+5. Add 2-4 "Tips for creating high-quality cards" that are specific and relevant to the content you analyzed (e.g., "For Japanese, include both furigana and romaji if possible").
+
+**OUTPUT FORMAT:**
+Return ONLY the raw text for the prompt body. Do NOT include frontmatter, markdown formatting for the entire block, or any explanations about your own process.`;
+
+  try {
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: 'user',
+          content: metaPrompt,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+    });
+
+    const generatedPrompt = response.choices[0]?.message?.content?.trim();
+    if (!generatedPrompt) {
+      throw new Error('Empty response from LLM');
+    }
+
+    return generatedPrompt;
+  } catch (error) {
+    throw new Error(
+      `LLM API call failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 const command: Command<GenerateInitArgs> = {
@@ -225,7 +321,7 @@ const command: Command<GenerateInitArgs> = {
       });
 
       // Build initial fieldMap
-      const fieldMap: Record<string, string> = {};
+      let fieldMap: Record<string, string> = {};
       for (let i = 0; i < fieldNames.length; i++) {
         fieldMap[resolvedKeys[i]] = fieldNames[i];
       }
@@ -283,15 +379,82 @@ const command: Command<GenerateInitArgs> = {
           customFieldMap[jsonKey.trim()] = fieldName;
         }
 
-        // Replace with custom mapping
-        Object.assign(fieldMap, {});
-        Object.assign(fieldMap, customFieldMap);
+        // Replace fieldMap with custom mapping
+        fieldMap = customFieldMap;
       }
 
       console.log(chalk.green('\n✓ Field mapping complete\n'));
 
-      // Step 5: Generate the prompt file content
-      console.log(chalk.cyan('\n📝 Generating prompt file...\n'));
+      // Step 5: Generate the prompt body (with LLM if possible)
+      let body: string;
+      console.log(
+        chalk.cyan(
+          '\n🧠 Attempting to generate a smart prompt based on your existing cards...\n',
+        ),
+      );
+      console.log(
+        chalk.gray(
+          '(This requires OPENAI_API_KEY or GEMINI_API_KEY environment variable)\n',
+        ),
+      );
+
+      try {
+        // 1. Find notes in the deck
+        const noteIds = await ankiRequest('findNotes', z.array(z.number()), {
+          query: `deck:"${selectedDeck}"`,
+        });
+
+        if (noteIds.length < 1) {
+          throw new Error('No cards found in deck to analyze.');
+        }
+
+        // 2. Sample 3 random cards (or all if fewer than 3)
+        const sampleCount = Math.min(3, noteIds.length);
+        const shuffled = noteIds.sort(() => 0.5 - Math.random());
+        const sampleIds = shuffled.slice(0, sampleCount);
+
+        console.log(
+          chalk.gray(`  Analyzing ${sampleCount} sample card(s)...\n`),
+        );
+
+        // 3. Fetch full note info
+        const notesInfo = await ankiRequest('notesInfo', z.array(NoteInfo), {
+          notes: sampleIds,
+        });
+
+        // 4. Format examples using the fieldMap keys
+        const sampleCards = notesInfo.map((note) => {
+          const card: Record<string, string> = {};
+          for (const [jsonKey, ankiField] of Object.entries(fieldMap)) {
+            card[jsonKey] = note.fields[ankiField]?.value || '';
+          }
+          return card;
+        });
+
+        // 5. Call LLM to generate contextual prompt
+        body = await generateContextualPromptBody(
+          selectedDeck,
+          sampleCards,
+          Object.keys(fieldMap),
+        );
+
+        console.log(chalk.green('✓ Smart prompt generated successfully!\n'));
+      } catch (error) {
+        console.log(
+          chalk.yellow(
+            '\n⚠️  Could not generate smart prompt. Falling back to generic template.',
+          ),
+        );
+        console.log(
+          chalk.gray(
+            `   Reason: ${error instanceof Error ? error.message : 'Unknown error'}\n`,
+          ),
+        );
+        body = generatePromptBody(Object.keys(fieldMap));
+      }
+
+      // Step 6: Create frontmatter and full content
+      console.log(chalk.cyan('📝 Creating prompt file...\n'));
 
       const frontmatter = `---
 deck: ${selectedDeck}
@@ -301,8 +464,6 @@ ${Object.entries(fieldMap)
   .map(([key, value]) => `  ${key}: ${value}`)
   .join('\n')}
 ---`;
-
-      const body = generatePromptBody(Object.keys(fieldMap));
 
       const fullContent = `${frontmatter}\n\n${body}\n`;
 
