@@ -57,4 +57,8 @@ export const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
   },
+  'gemini-2.5-pro': {
+    inputCostPerMillion: 1.25,
+    outputCostPerMillion: 10,
+  },
 };
