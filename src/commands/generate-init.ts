@@ -139,7 +139,16 @@ ${JSON.stringify(sampleCards, null, 2)}
 \`\`\`
 
 **YOUR TASK:**
-Analyze the examples above to understand the deck's purpose (e.g., language learning, medical terminology, coding concepts). Then, generate a high-quality prompt body that instructs an AI to create a NEW, similar card.
+Carefully analyze the examples above to understand:
+1. The deck's purpose (e.g., language learning, medical terminology, coding concepts)
+2. The content style and level of detail
+3. **CRITICAL**: HTML formatting patterns used consistently across examples, such as:
+   - Use of <b> tags (what gets bolded? focus terms? key words?)
+   - Use of <ul>/<li> for lists
+   - Use of furigana notation patterns (e.g., 今日[きょう])
+   - Any other HTML or formatting conventions
+
+Then, generate a high-quality prompt body that instructs an AI to create a NEW, similar card.
 
 **REQUIREMENTS FOR THE GENERATED PROMPT:**
 1. Start with a concise instruction for the AI, mentioning the likely topic of the deck based on your analysis.
@@ -148,8 +157,10 @@ Analyze the examples above to understand the deck's purpose (e.g., language lear
    - A plausible, NEW example that fits the style of the provided cards but is NOT one of them.
    - Formatted as a JSON object with the exact following keys: ${fieldKeys.join(', ')}.
    - Use realistic, detailed content similar to the examples provided.
-4. Include the boilerplate instructions about requiring valid JSON output and using HTML for formatting.
-5. Add 2-4 "Tips for creating high-quality cards" that are specific and relevant to the content you analyzed (e.g., "For Japanese, include both furigana and romaji if possible").
+   - **MATCH THE HTML FORMATTING PATTERNS** from the sample cards (e.g., if samples use <b> tags around focus terms, your example must do the same).
+4. Include the boilerplate: "IMPORTANT: Your output must be a single, valid JSON object and nothing else. Do not include any explanation, markdown formatting, or additional text. All field values must be strings."
+5. Add a "Formatting Requirements" section that explicitly lists the HTML patterns observed in the samples (e.g., "Wrap the focus term in <b></b> tags in the en, jp, and furigana fields").
+6. Add 2-4 "Content Tips" that are specific and relevant to the subject matter (e.g., "For Japanese, include both furigana and romaji if possible").
 
 **OUTPUT FORMAT:**
 Return ONLY the raw text for the prompt body. Do NOT include frontmatter, markdown formatting for the entire block, or any explanations about your own process.`;
