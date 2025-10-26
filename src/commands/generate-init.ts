@@ -164,7 +164,7 @@ Using your analysis, generate a prompt body that guides the AI to create cards t
 
 1. **Persona & Goal**: Start with a concise instruction for the AI, mentioning the deck's purpose.
 
-2. **Term Placeholder**: State that the term will be provided via the **{term}** placeholder.
+2. **Term Placeholder**: Include a natural sentence that introduces the term/phrase using the **{term}** placeholder. For example: "The term to create a card for is: **{term}**" or "Create a flashcard for: **{term}**". Do NOT explain what {term} contains - just use it naturally in a sentence.
 
 3. **One-Shot Example**: Provide a single, plausible, **NEW** example in a JSON code block. This example should be a good demonstration of the deck's style. The JSON keys must be exactly: ${fieldKeys.join(', ')}.
 
