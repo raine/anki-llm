@@ -455,19 +455,45 @@ const command: Command<GenerateInitArgs> = {
           throw new Error('No cards found in deck to analyze.');
         }
 
-        // 2. Sample 5 random cards (or all if fewer than 5)
-        const sampleCount = Math.min(5, noteIds.length);
-        const shuffled = noteIds.sort(() => 0.5 - Math.random());
-        const sampleIds = shuffled.slice(0, sampleCount);
-
+        // 2. Sample cards, preferring those with populated fields
+        // Fetch ALL notes from the deck to find the best examples
         console.log(
-          chalk.gray(`  Analyzing ${sampleCount} sample card(s)...\n`),
+          chalk.gray(
+            `  Analyzing ${noteIds.length} card(s) to find best examples...\n`,
+          ),
         );
 
-        // 3. Fetch full note info
-        const notesInfo = await ankiRequest('notesInfo', z.array(NoteInfo), {
-          notes: sampleIds,
+        const allNotesInfo = await ankiRequest('notesInfo', z.array(NoteInfo), {
+          notes: noteIds,
         });
+
+        // Score each card by how many non-empty fields it has
+        const scoredNotes = allNotesInfo.map((note) => {
+          let score = 0;
+          for (const [, ankiField] of Object.entries(fieldMap)) {
+            const value = note.fields[ankiField]?.value || '';
+            // Count non-empty, non-auto-generated fields
+            if (value.trim() && !/^\[sound:.*\]$/.test(value.trim())) {
+              score++;
+            }
+          }
+          return { note, score };
+        });
+
+        // Sort by score (descending) and take top 5
+        const sampleCount = Math.min(5, scoredNotes.length);
+        const topNotes = scoredNotes
+          .sort((a, b) => b.score - a.score)
+          .slice(0, sampleCount)
+          .map((item) => item.note);
+
+        console.log(
+          chalk.gray(
+            `  Selected ${sampleCount} card(s) with most populated fields...\n`,
+          ),
+        );
+
+        const notesInfo = topNotes;
 
         // 4. Format examples using the fieldMap keys
         // Filter out auto-generated fields (like sound files)
