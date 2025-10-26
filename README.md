@@ -56,18 +56,19 @@ API key for the model provider you want to use.
 
 The tool supports two API providers:
 
-**OpenAI models:**
+| Model                    | Input   | Output   | Links                                                                      |
+| ------------------------ | ------- | -------- | -------------------------------------------------------------------------- |
+| **OpenAI models**        |
+| `gpt-4.1`                | $2.50/M | $10.00/M | [Docs](https://platform.openai.com/docs/models/gpt-4-1)                    |
+| `gpt-4o`                 | $2.50/M | $10.00/M | [Docs](https://platform.openai.com/docs/models/gpt-4o)                     |
+| `gpt-4o-mini` (default)  | $0.15/M | $0.60/M  | [Docs](https://platform.openai.com/docs/models/gpt-4o-mini)                |
+| `gpt-5-nano`             | $0.05/M | $0.40/M  | [Docs](https://platform.openai.com/docs/models/gpt-5-nano)                 |
+| **Google Gemini models** |
+| `gemini-2.0-flash`       | $0.10/M | $0.40/M  | [Docs](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)      |
+| `gemini-2.5-flash`       | $0.30/M | $2.50/M  | [Docs](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)      |
+| `gemini-2.5-flash-lite`  | $0.10/M | $0.40/M  | [Docs](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-lite) |
 
-- `gpt-4.1`
-- `gpt-4o`
-- `gpt-4o-mini` (default)
-- `gpt-5-nano`
-
-**Google Gemini models:**
-
-- `gemini-2.0-flash`
-- `gemini-2.5-flash`
-- `gemini-2.5-flash-lite`
+Pricing is per million tokens (M).
 
 ### Setting up API Keys
 
