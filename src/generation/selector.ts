@@ -74,6 +74,11 @@ export async function selectCards(cards: ValidatedCard[]): Promise<number[]> {
     value: index,
     checked: false,
   }));
+  // Dynamically size the page to fit multi-line choice content
+  const totalChoiceLines = choices.reduce((sum, choice) => {
+    return sum + choice.name.split('\n').length;
+  }, 0);
+  const pageSize = Math.min(Math.max(totalChoiceLines, 10), 30);
 
   try {
     const answers = (await inquirer.prompt([
@@ -82,7 +87,7 @@ export async function selectCards(cards: ValidatedCard[]): Promise<number[]> {
         name: 'selectedCards',
         message: 'Choose cards to import:',
         choices,
-        pageSize: 10, // Show 10 items at a time for easier navigation
+        pageSize,
         // Validate that at least one card is selected
         validate: (selected: unknown) => {
           const selectedArray = selected as number[];
