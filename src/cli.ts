@@ -9,6 +9,8 @@ import processFileCmd from './commands/process-file.js';
 import processDeckCmd from './commands/process-deck.js';
 import queryCmd from './commands/query.js';
 import configCmd from './commands/config.js';
+import generateCmd from './commands/generate.js';
+import generateInitCmd from './commands/generate-init.js';
 
 void yargs(hideBin(process.argv))
   // Register commands
@@ -18,6 +20,8 @@ void yargs(hideBin(process.argv))
   .command(processDeckCmd)
   .command(queryCmd)
   .command(configCmd)
+  .command(generateCmd)
+  .command(generateInitCmd)
   // Configuration
   .scriptName('anki-llm')
   .demandCommand(1, 'You must provide a valid command.')

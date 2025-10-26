@@ -39,3 +39,35 @@ export async function findModelNameForDeck(
 
   return notesInfo[0]?.modelName ?? null;
 }
+
+/**
+ * Finds all unique note types (models) used in a given deck.
+ * @param deckName The name of the deck.
+ * @returns A promise that resolves to an array of unique model names, or empty array if deck is empty.
+ */
+export async function findModelNamesForDeck(
+  deckName: string,
+): Promise<string[]> {
+  const noteIds = await ankiRequest('findNotes', z.array(z.number()), {
+    query: `deck:"${deckName}"`,
+  });
+
+  if (noteIds.length === 0) {
+    return [];
+  }
+
+  // Fetch info for all notes to get their model names
+  const notesInfo = await ankiRequest('notesInfo', z.array(NoteInfo), {
+    notes: noteIds,
+  });
+
+  // Extract unique model names
+  const modelNames = new Set<string>();
+  for (const note of notesInfo) {
+    if (note.modelName) {
+      modelNames.add(note.modelName);
+    }
+  }
+
+  return Array.from(modelNames).sort();
+}
