@@ -213,7 +213,6 @@ Return ONLY the raw text for the prompt body. Do NOT include frontmatter, markdo
         },
       ],
       temperature: 0.7,
-      max_tokens: 2000,
     });
 
     const generatedPrompt = response.choices[0]?.message?.content?.trim();
