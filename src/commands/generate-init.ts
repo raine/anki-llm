@@ -9,6 +9,7 @@ import {
   getFieldNamesForModel,
   findModelNamesForDeck,
 } from '../anki-schema.js';
+import { slugifyDeckName } from '../batch-processing/util.js';
 
 interface GenerateInitArgs {
   output?: string;
@@ -186,11 +187,11 @@ const command: Command<GenerateInitArgs> = {
   builder: (yargs) => {
     return yargs
       .positional('output', {
-        describe: 'Path to save the prompt file',
+        describe:
+          'Path to save the prompt file (defaults to deck-name-prompt.md)',
         type: 'string',
-        default: 'generate-prompt.md',
       })
-      .example('$0 generate-init', 'Create prompt.md in current directory')
+      .example('$0 generate-init', 'Create prompt file named after the deck')
       .example('$0 generate-init my-prompt.md', 'Save to custom location');
   },
 
@@ -468,7 +469,8 @@ ${Object.entries(fieldMap)
       const fullContent = `${frontmatter}\n\n${body}\n`;
 
       // Step 6: Save the file
-      const outputPath = argv.output || 'generate-prompt.md';
+      const defaultFilename = `${slugifyDeckName(selectedDeck)}-prompt.md`;
+      const outputPath = argv.output || defaultFilename;
       await writeFile(outputPath, fullContent, 'utf-8');
 
       console.log(chalk.green(`✓ Prompt template saved to ${outputPath}\n`));
