@@ -152,7 +152,7 @@ Then, generate a high-quality prompt body that instructs an AI to create a NEW, 
 
 **REQUIREMENTS FOR THE GENERATED PROMPT:**
 1. Start with a concise instruction for the AI, mentioning the likely topic of the deck based on your analysis.
-2. The user will provide the term to create a card for using the placeholder: **{term}**
+2. Naturally explain that the term to create a card for will be provided via the **{term}** placeholder. Phrase this clearly and simply (e.g., "The term to create a card for is: **{term}**").
 3. Include a ONE-SHOT example in a JSON code block. This example must be:
    - A plausible, NEW example that fits the style of the provided cards but is NOT one of them.
    - Formatted as a JSON object with the exact following keys: ${fieldKeys.join(', ')}.
