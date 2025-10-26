@@ -68,3 +68,36 @@ export async function ankiRequest<
     throw error;
   }
 }
+
+/**
+ * Helper function for direct processing mode - simplified interface without validation
+ * Used by direct-processor.ts for batch updates
+ */
+export async function ankiRequestRaw(
+  action: string,
+  params: Record<string, unknown> = {},
+): Promise<unknown> {
+  const payload = { action, params, version: 6 };
+
+  const response = await fetch(ANKI_CONNECT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const responseJson = await response.json();
+
+  // Type assertion for cleaner error handling
+  const typedResponse = responseJson as { error?: string; result?: unknown };
+
+  if (typedResponse.error) {
+    throw new Error(`AnkiConnect API error: ${typedResponse.error}`);
+  }
+
+  return typedResponse.result;
+}

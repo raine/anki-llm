@@ -26,6 +26,9 @@ export function printSummary(
   tokenStats: TokenStats,
   config: Config,
   elapsedMs: number,
+  options?: {
+    errorLogPath?: string; // For direct mode
+  },
 ) {
   const failures = processedRows.filter((r) => r._error);
   const successes = processedRows.length - failures.length;
@@ -36,12 +39,24 @@ export function printSummary(
   console.log(chalk.green(`✓ Successful: ${successes}`));
   if (failures.length > 0) {
     console.log(chalk.red(`✗ Failed: ${failures.length}`));
-    console.log(chalk.yellow('\nFailed rows:'));
-    failures.forEach((row) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const rowId = row.id || row.noteId || Object.values(row)[0] || 'unknown';
-      console.log(chalk.yellow(`  - Row ${String(rowId)}: ${row._error}`));
-    });
+
+    // Show error log path for direct mode
+    if (options?.errorLogPath) {
+      console.log(
+        chalk.yellow(
+          `\n⚠️  Failed notes logged to: ${chalk.bold(options.errorLogPath)}`,
+        ),
+      );
+    } else {
+      // Show error details for file mode
+      console.log(chalk.yellow('\nFailed rows:'));
+      failures.forEach((row) => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const rowId =
+          row.id || row.noteId || Object.values(row)[0] || 'unknown';
+        console.log(chalk.yellow(`  - Row ${String(rowId)}: ${row._error}`));
+      });
+    }
   }
 
   console.log(`\n${chalk.bold('Token Usage:')}`);
@@ -62,10 +77,10 @@ export function printSummary(
   console.log(`\n${chalk.bold('Cost Breakdown:')}`);
   console.log(`  Model: ${config.model}`);
   console.log(
-    `  Input cost:  $${inputCost.toFixed(4)} (${pricing.inputCostPerMillion.toFixed(2)}/M tokens)`,
+    `  Input cost:  $${inputCost.toFixed(4)} ($${pricing.inputCostPerMillion.toFixed(2)}/M tokens)`,
   );
   console.log(
-    `  Output cost: $${outputCost.toFixed(4)} (${pricing.outputCostPerMillion.toFixed(2)}/M tokens)`,
+    `  Output cost: $${outputCost.toFixed(4)} ($${pricing.outputCostPerMillion.toFixed(2)}/M tokens)`,
   );
   console.log(chalk.bold(`  Total cost:  $${totalCost.toFixed(4)}`));
 

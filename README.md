@@ -9,18 +9,24 @@ and time-consuming. Whether you're fixing translations, generating example
 sentences, or adding phonetic readings, doing it one-by-one is a non-starter.
 
 `anki-llm-batch` provides a bridge between your Anki collection and modern AI
-models. It allows you to **export** your data, **batch process** it against a
-custom prompt, and then **import** the results back to Anki.
+models. It offers two workflows:
 
-The general workflow is a three-step process:
+**File-based workflow** (3 steps, with resume support):
 
 1.  Export: Pull notes from a specified Anki deck into a CSV or YAML.
 2.  Process: Run an AI model (e.g., GPT-4o mini) on a specific field in every
     note, using a prompt template.
 3.  Import: Update the original notes by importing the CSV or YAML back to Anki.
 
+**Direct workflow** (1 step):
+
+- Process notes directly from your deck and update them in-place with a single
+  command.
+
 ## Features
 
+- **Two flexible workflows**: File-based (with resume) or direct-to-Anki (one
+  command).
 - **Export** Anki decks to clean CSV or YAML files.
 - **Batch process** note fields using any OpenAI-compatible API.
 - **Custom prompts**: Use flexible template files to define exactly how the AI
@@ -28,7 +34,11 @@ The general workflow is a three-step process:
 - **Concurrent processing**: Make multiple parallel API requests to speed up
   large jobs.
 - **Resilient**: Automatically retries failed requests and saves progress
-  incrementally.
+  incrementally (file mode).
+- **Automatic resume**: Pick up where you left off if processing is interrupted
+  (file mode).
+- **Direct updates**: Process and update Anki notes in-place without
+  intermediate files (direct mode).
 - **Smart updates**: Imports data back into Anki by updating existing notes, not
   creating duplicates.
 
@@ -118,15 +128,17 @@ anki-llm-batch export "Japanese Core 1k" .csv
 anki-llm-batch export "Japanese Core 1k" my-custom-name.yaml
 ```
 
-### `anki-llm-batch process <input>`
+### `anki-llm-batch process-file <input>`
 
-Processes a data file using an AI model.
+Process notes from a CSV/YAML file and save results to another file. **Supports
+automatic resume** - if interrupted or if some notes fail, you can re-run the
+command and it will skip already-processed notes.
 
-- `<input>`: Path to the input data file (CSV or YAML).
+- `<input>`: Input file path (CSV or YAML).
 
 **Required options:**
 
-- `-o, --output`: Path to write the processed data file.
+- `-o, --output`: Output file path (CSV or YAML).
 - `-p, --prompt`: Path to the prompt template text file.
 - **Either** `--field` **or** `--json` (mutually exclusive):
   - `--field <name>`: Update a single field with the AI response.
@@ -134,11 +146,12 @@ Processes a data file using an AI model.
 
 **Common options:**
 
-- `-m, --model`: OpenAI model to use (default: `gpt-4o-mini`).
+- `-m, --model`: AI model to use (default: `gpt-4o-mini`).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
-- `-d, --dry-run`: Preview the operation without making API calls.
-- `-f, --force`: Re-process all notes, even if they exist in the output file.
+- `-d, --dry-run`: Preview the operation without making API calls (recommended
+  for testing).
+- `-f, --force`: Re-process all rows, ignoring existing output.
 - `--limit`: Limit the number of new rows to process (useful for testing prompts
   on a small sample before processing large datasets).
 - `--require-result-tag`: Only extracts content from within `<result></result>`
@@ -148,21 +161,130 @@ Processes a data file using an AI model.
   enables `--log`). Useful for debugging prompts and understanding model
   outputs.
 
-**Understanding `--field` vs `--json` modes:**
+**Workflow:**
+
+1. Export deck to file: `anki-llm-batch export "My Deck" notes.yaml`
+2. Process file:
+   `anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt`
+3. Import results: `anki-llm-batch import output.yaml -d "My Deck"`
+
+**Examples:**
+
+```bash
+# Process a file and update a single field
+anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt
+
+# Process with JSON mode (update multiple fields)
+anki-llm-batch process-file notes.yaml -o output.yaml --json -p prompt.txt
+
+# Test on 10 notes first (dry run)
+anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --limit 10 --dry-run
+
+# Resume processing after interruption (automatic - just re-run the same command)
+anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt
+
+# Force re-process all notes (ignore existing output)
+anki-llm-batch process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --force
+```
+
+**Key features:**
+
+- ✅ **Automatic resume**: Skips already-processed notes
+- ✅ **Incremental saves**: Progress saved continuously
+- ✅ **Review before import**: You can inspect/edit the output file before
+  importing
+
+**When to use this command:**
+
+- When you want to review/edit results before updating the actual Anki deck
+- When processing might be interrupted (resume capability needed)
+
+---
+
+### `anki-llm-batch process-deck <deck>`
+
+Process notes directly from an Anki deck and update them in-place. **No
+intermediate files** needed. This is faster and more convenient when you've
+tested your prompt and know the end result is safe to run.
+
+- `<deck>`: Name of the Anki deck to process (must be in quotes if it contains
+  spaces).
+
+**Required options:**
+
+- `-p, --prompt`: Path to the prompt template text file.
+- **Either** `--field` **or** `--json` (mutually exclusive):
+  - `--field <name>`: Update a single field with the AI response.
+  - `--json`: Expect JSON response and merge all fields into the note.
+
+**Common options:**
+
+- `-m, --model`: AI model to use (default: `gpt-4o-mini`).
+- `-b, --batch-size`: Number of concurrent API requests (default: `5`).
+- `-r, --retries`: Number of retries for failed requests (default: `3`).
+- `-d, --dry-run`: Preview the operation without making API calls (recommended
+  for testing).
+- `--limit`: Limit the number of notes to process (useful for testing prompts
+  on a small sample before processing entire deck).
+- `--require-result-tag`: Only extracts content from within `<result></result>`
+  tags in the AI response.
+- `--log`: Generate a log file with detailed debug information.
+- `--very-verbose`: Log full LLM responses to the log file (automatically
+  enables `--log`). Useful for debugging prompts and understanding model
+  outputs.
+
+**Prerequisites:**
+
+- Anki Desktop must be running
+- AnkiConnect add-on must be installed
+
+**Workflow:**
+
+- Single command:
+  `anki-llm-batch process-deck "My Deck" --field Translation -p prompt.txt`
+
+**Examples:**
+
+```bash
+# Process a deck directly and update a single field
+anki-llm-batch process-deck "Japanese Core 1k" --field Translation -p prompt.txt
+
+# Direct mode with JSON (update multiple fields)
+anki-llm-batch process-deck "Vocabulary" --json -p prompt.txt
+
+# Test on 10 notes first (recommended before processing entire deck)
+anki-llm-batch process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run
+
+# Use a different model
+anki-llm-batch process-deck "Spanish" --field Translation -p prompt.txt -m gpt-4o
+```
+
+**Key features:**
+
+- ✅ **No intermediate files**: Process and update in one step
+- ✅ **Batch updates**: Efficient bulk updates to Anki
+- ✅ **Error logging**: Failed notes logged to `[deck-name]-errors.jsonl`
+- ❌ **No resume support**: Must complete in one run (use `process-file` for
+  large datasets)
+
+---
+
+#### **Understanding `--field` vs `--json` modes**
+
+Both `process-file` and `process-deck` support two response formats:
 
 - **`--field` mode** (single field update): The AI response is saved to the
-  specified field. This is the traditional mode for updating one field at a
-  time.
+  specified field.
 
   ```bash
-  anki-llm-batch process notes.yaml -o out.yaml --field Translation -p prompt.txt
+  anki-llm-batch process-file notes.yaml -o out.yaml --field Translation -p prompt.txt
   ```
 
 - **`--json` mode** (multi-field merge): The AI must return valid JSON. All
-  fields in the JSON are merged into your note, allowing multi-field updates.
+  fields in the JSON are merged into your note.
 
   ```bash
-  anki-llm-batch process notes.yaml -o out.yaml --json -p prompt.txt
+  anki-llm-batch process-file notes.yaml -o out.yaml --json -p prompt.txt
   ```
 
   Example: If your note has `Japanese` and `Grammar` fields, and the AI returns:
@@ -261,7 +383,8 @@ given the simple instruction: "Use anki-llm-batch to export my decks in csv"
 
      Commands:
        anki-llm-batch export <deck> <output>              Export deck to file
-       anki-llm-batch process <input> <output> <field>    Process notes with AI
+       anki-llm-batch process-file <input>                Process notes from file with AI
+       anki-llm-batch process-deck <deck>                 Process notes from deck with AI
        anki-llm-batch import <input> <deck> <model>       Import data to deck
        anki-llm-batch query <action> [params]             Query AnkiConnect API
 
@@ -417,17 +540,17 @@ Format your response like this:
 > [!NOTE]
 > The `<result>` tag (used with `--require-result-tag`) is optional. You could instruct the LLM to respond with only the translation directly. However, asking the model to "think out loud" by analyzing the sentence first tends to produce higher-quality translations, as it encourages deeper reasoning before generating the final output.
 
-### Step 3: Run the process command
+### Step 3: Run the process-file command
 
-Now, run the `process` command. We'll tell it to use our `notes.yaml` file as
-input, write to a new `notes-translated.yaml` file, process the `Translation`
+Now, run the `process-file` command. We'll tell it to use our `notes.yaml` file
+as input, write to a new `notes-translated.yaml` file, process the `Translation`
 field, and use our prompt template.
 
 The tool will read the `Japanese` field from each note to fill the prompt, then
 the AI's response will overwrite the `Translation` field.
 
 ```bash
-anki-llm-batch process notes.yaml \
+anki-llm-batch process-file notes.yaml \
   --output notes-translated.yaml \
   --field Translation \
   --prompt prompt-ja-en.txt \
@@ -448,7 +571,7 @@ You will see real-time progress as it processes the notes:
 
 ```
 ============================================================
-Batch AI Data Processing
+File-Based Processing
 ============================================================
 Input file:        notes.yaml
 Output file:       notes-translated.yaml
