@@ -57,7 +57,7 @@ export async function runProcessor(
     format:
       'Processing |' +
       chalk.cyan('{bar}') +
-      '| {percentage}% | {value}/{total} items | Cost: {cost} | Tokens: {tokens}',
+      '| {percentage}% | {value}/{total} items | Cost: ${cost} | Tokens: {tokens}',
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
