@@ -127,7 +127,7 @@ async function generateContextualPromptBody(
 
   // Build the meta-prompt
   const metaPrompt = `You are an expert prompt engineer creating a prompt template for another AI.
-Your task is to generate the BODY of a prompt file that will be used to create Anki flashcards.
+Your goal is to generate a comprehensive prompt body that instructs an AI to create new Anki cards matching the provided style.
 
 **CONTEXT:**
 The user wants to create new Anki cards for their deck named "${deckName}".
@@ -139,28 +139,51 @@ ${JSON.stringify(sampleCards, null, 2)}
 \`\`\`
 
 **YOUR TASK:**
-Carefully analyze the examples above to understand:
-1. The deck's purpose (e.g., language learning, medical terminology, coding concepts)
-2. The content style and level of detail
-3. **CRITICAL**: HTML formatting patterns used consistently across examples, such as:
-   - Use of <b> tags (what gets bolded? focus terms? key words?)
-   - Use of <ul>/<li> for lists
-   - Use of furigana notation patterns (e.g., 今日[きょう])
-   - Any other HTML or formatting conventions
 
-Then, generate a high-quality prompt body that instructs an AI to create a NEW, similar card.
+**Step 1: Deep Analysis**
+Carefully analyze the examples to understand and deconstruct the underlying rules:
 
-**REQUIREMENTS FOR THE GENERATED PROMPT:**
-1. Start with a concise instruction for the AI, mentioning the likely topic of the deck based on your analysis.
-2. Naturally explain that the term to create a card for will be provided via the **{term}** placeholder. Phrase this clearly and simply (e.g., "The term to create a card for is: **{term}**").
-3. Include a ONE-SHOT example in a JSON code block. This example must be:
-   - A plausible, NEW example that fits the style of the provided cards but is NOT one of them.
-   - Formatted as a JSON object with the exact following keys: ${fieldKeys.join(', ')}.
-   - Use realistic, detailed content similar to the examples provided.
-   - **MATCH THE HTML FORMATTING PATTERNS** from the sample cards (e.g., if samples use <b> tags around focus terms, your example must do the same).
-4. Include the boilerplate: "IMPORTANT: Your output must be a single, valid JSON object and nothing else. Do not include any explanation, markdown formatting, or additional text. All field values must be strings."
-5. Add a "Formatting Requirements" section that explicitly lists the HTML patterns observed in the samples (e.g., "Wrap the focus term in <b></b> tags in the en, jp, and furigana fields").
-6. Add 2-4 "Content Tips" that are specific and relevant to the subject matter (e.g., "For Japanese, include both furigana and romaji if possible").
+1. **Deck's Purpose & Style**: What is the subject matter? Is it formal, casual, technical? What is the pedagogical goal (e.g., teaching conversational Japanese, medical terminology)?
+
+2. **Semantic Formatting**:
+   - **Bold Tags (<b>)**: What is the rule for bolding? Is it only the focus term, or does it include surrounding words/particles? Are there multiple bolded elements?
+   - **Lists (<ul>/<li>)**: How are lists used in explanations? Are they for definitions, examples, usage notes, or something else?
+   - **Other HTML**: Any other HTML tags or patterns (headings, emphasis, etc.)?
+
+3. **Linguistic & Technical Conventions (CRITICAL FOR LANGUAGE DECKS)**:
+   - **Furigana Spacing (Japanese)**: If the deck uses furigana like \`漢字[かんじ]\`, analyze the spacing carefully:
+     - Is there a space between kanji compounds? (e.g., \`体感[たいかん] 温度[おんど]\`)
+     - Is there a space before particles? (e.g., \`温度[おんど] は\`)
+     - Are there exceptions where there is **NO** space? (e.g., before auxiliary verbs like \`~ない\`, \`~ます\`, or certain particles like \`の\`, \`を\`)
+     - This spacing is often critical for technical reasons (audio generation, ruby syntax). You MUST identify these patterns.
+   - **Explanation Structure**: Analyze the content of explanation/note fields across all examples. What topics are consistently covered? Common themes include:
+     - Formal vs informal usage
+     - Common mistakes or pitfalls
+     - Cultural context or nuances
+     - Collocations or example sentences
+     - Grammatical patterns
+     - Variations of the word/phrase
+   - Synthesize these recurring topics into a structured checklist.
+
+**Step 2: Generate the Prompt Body**
+Using your analysis, generate a high-quality prompt body with these sections:
+
+1. **Persona & Goal**: Start with a concise instruction for the AI, mentioning the deck's likely purpose and any pedagogical goals you inferred (e.g., "Create a Japanese flashcard designed to teach conversational nuances with cultural context.").
+
+2. **Term Placeholder**: State that the term to be defined will be provided via the **{term}** placeholder. Phrase this naturally (e.g., "The term to create a card for is: **{term}**").
+
+3. **One-Shot Example**: Provide a single, plausible, **NEW** example in a JSON code block. This example must perfectly follow all the formatting, spacing, and content rules you identified. The JSON keys must be exactly: ${fieldKeys.join(', ')}.
+
+4. **Boilerplate**: Include: "IMPORTANT: Your output must be a single, valid JSON object and nothing else. Do not include any explanation, markdown formatting, or additional text. All field values must be strings."
+
+5. **Formatting Requirements**: Create a section that explicitly lists the formatting rules you discovered.
+   - **This is critical.** Codify all patterns you observed.
+   - For complex rules like furigana spacing, provide **CORRECT** and **INCORRECT** examples to eliminate ambiguity.
+   - Example: "CORRECT: \`10度[ど]しかない\`, INCORRECT: \`10度[ど] しか ない\`"
+   - Be specific about which fields use which formatting.
+
+6. **Content Requirements**: Create a checklist of topics that explanation fields must cover, based on the recurring themes you found. Make this specific and actionable.
+   - Example: "The explanation field must be a list that includes: 1. Formal vs informal usage, 2. A common collocation or example, 3. Any potential pitfalls."
 
 **OUTPUT FORMAT:**
 Return ONLY the raw text for the prompt body. Do NOT include frontmatter, markdown formatting for the entire block, or any explanations about your own process.`;
