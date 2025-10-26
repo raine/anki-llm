@@ -100,6 +100,20 @@ export GEMINI_API_KEY="your-api-key-here"
 
 Get your API key from: https://aistudio.google.com/api-keys
 
+## Configuration
+
+Use `anki-llm-batch config` to store defaults (for example, the model) so you
+don't have to repeat flags on every command.
+
+```bash
+# Set or override defaults
+anki-llm-batch config set model gpt-4o-mini
+```
+
+Config file lives at `~/.config/anki-llm-batch/config.json`.
+
+---
+
 ## Commands reference
 
 ### `anki-llm-batch export <deck> [output]`
@@ -146,7 +160,7 @@ command and it will skip already-processed notes.
 
 **Common options:**
 
-- `-m, --model`: AI model to use (required).
+- `-m, --model`: AI model to use (required unless set via `config set model`).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
 - `-d, --dry-run`: Preview the operation without making API calls (recommended
@@ -219,7 +233,7 @@ tested your prompt and know the end result is safe to run.
 
 **Common options:**
 
-- `-m, --model`: AI model to use (required).
+- `-m, --model`: AI model to use (required unless set via `config set model`).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
 - `-d, --dry-run`: Preview the operation without making API calls (recommended
@@ -247,16 +261,16 @@ tested your prompt and know the end result is safe to run.
 
 ```bash
 # Process a deck directly and update a single field
-anki-llm-batch process-deck "Japanese Core 1k" --field Translation -p prompt.txt -m gpt-4o-mini
+anki-llm-batch process-deck "Japanese Core 1k" --field Translation -p prompt.txt
 
 # Direct mode with JSON (update multiple fields)
-anki-llm-batch process-deck "Vocabulary" --json -p prompt.txt -m gpt-4o-mini
+anki-llm-batch process-deck "Vocabulary" --json -p prompt.txt
 
 # Test on 10 notes first (recommended before processing entire deck)
-anki-llm-batch process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run -m gpt-4o-mini
+anki-llm-batch process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run
 
-# Use a different model
-anki-llm-batch process-deck "Spanish" --field Translation -p prompt.txt -m gpt-4o
+# Use a different model for a specific run
+anki-llm-batch process-deck "Spanish" --field Translation -p prompt.txt
 ```
 
 **Key features:**
@@ -555,7 +569,7 @@ anki-llm-batch process-file notes.yaml \
   --output notes-translated.yaml \
   --field Translation \
   --prompt prompt-ja-en.txt \
-  --model gpt-4o-mini \
+  --model gemini-2.5-flash \
   --batch-size 10 \
   --require-result-tag
 ```
@@ -565,7 +579,7 @@ anki-llm-batch process-file notes.yaml \
 - `--field Translation`: The field we want the AI to generate and place its
   result into.
 - `--prompt prompt-ja-en.txt`: Our instruction template.
-- `--model gpt-4o-mini`: The AI model to use.
+- `--model gemini-2.5-flash`: The AI model to use.
 - `--batch-size 10`: Process 10 notes concurrently for speed.
 - `--require-result-tag`: Ensures the tool only saves the content inside the
   `<result>` tag, ignoring the AI's analysis.

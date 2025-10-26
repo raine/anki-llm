@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import chalk from 'chalk';
 import * as path from 'path';
 import { parseConfig, SupportedModel } from '../config.js';
+import { readConfigFile } from '../config-manager.js';
 import {
   initLogger,
   logDebug,
@@ -26,7 +27,7 @@ interface ProcessFileArgs {
   field?: string;
   json: boolean;
   prompt: string;
-  model: string;
+  model?: string;
   'batch-size': number;
   'max-tokens'?: number;
   temperature: number;
@@ -77,7 +78,6 @@ const command: Command<ProcessFileArgs> = {
         alias: 'm',
         describe: `Model to use. Available: ${SupportedModel.options.join(', ')}`,
         type: 'string',
-        default: 'gpt-4o-mini',
       })
       .option('batch-size', {
         alias: 'b',
@@ -164,6 +164,29 @@ const command: Command<ProcessFileArgs> = {
   handler: async (argv) => {
     const startTime = Date.now();
 
+    // Load config and use as fallback for model
+    const userConfig = await readConfigFile();
+    const storedModel =
+      typeof userConfig.model === 'string' ? userConfig.model : undefined;
+    const model = argv.model ?? storedModel;
+
+    if (!model) {
+      console.log(
+        chalk.red(
+          '✗ Error: A model must be specified via the --model flag or set in the configuration.',
+        ),
+      );
+      console.log(
+        chalk.dim(
+          '\nTo set a default model, run: anki-llm-batch config set model <model-name>',
+        ),
+      );
+      console.log(
+        chalk.dim(`Available models: ${SupportedModel.options.join(', ')}`),
+      );
+      process.exit(1);
+    }
+
     // Initialize logger
     let logFilePath: string | null = null;
     if (argv.log || argv['very-verbose']) {
@@ -181,7 +204,7 @@ const command: Command<ProcessFileArgs> = {
 
     // Parse configuration
     const config = parseConfig({
-      model: argv.model,
+      model,
       batchSize: argv['batch-size'],
       maxTokens: argv['max-tokens'],
       temperature: argv.temperature,

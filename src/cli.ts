@@ -8,6 +8,7 @@ import importCmd from './commands/import.js';
 import processFileCmd from './commands/process-file.js';
 import processDeckCmd from './commands/process-deck.js';
 import queryCmd from './commands/query.js';
+import configCmd from './commands/config.js';
 
 void yargs(hideBin(process.argv))
   // Register commands
@@ -16,6 +17,7 @@ void yargs(hideBin(process.argv))
   .command(processFileCmd)
   .command(processDeckCmd)
   .command(queryCmd)
+  .command(configCmd)
   // Configuration
   .scriptName('anki-llm-batch')
   .demandCommand(1, 'You must provide a valid command.')
