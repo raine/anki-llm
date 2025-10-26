@@ -12,13 +12,14 @@ import { validateCards } from '../generation/validator.js';
 import { selectCards, displayCards } from '../generation/selector.js';
 import { ankiRequest } from '../anki-connect.js';
 import { getFieldNamesForModel } from '../anki-schema.js';
-import { parseConfig } from '../config.js';
+import { parseConfig, SupportedModel } from '../config.js';
+import { readConfigFile } from '../config-manager.js';
 
 interface GenerateArgs {
   term: string;
   prompt?: string;
   count: number;
-  model: string;
+  model?: string;
   'dry-run': boolean;
   'batch-size': number;
   retries: number;
@@ -50,9 +51,8 @@ const command: Command<GenerateArgs> = {
       })
       .option('model', {
         alias: 'm',
-        describe: 'LLM model to use',
+        describe: `LLM model to use. Available: ${SupportedModel.options.join(', ')}`,
         type: 'string',
-        default: 'gpt-4o-mini',
       })
       .option('dry-run', {
         describe: 'Display cards without importing to Anki',
@@ -176,9 +176,32 @@ const command: Command<GenerateArgs> = {
         process.exit(1);
       }
 
+      // Determine model (CLI argument overrides stored config)
+      const userConfig = await readConfigFile();
+      const storedModel =
+        typeof userConfig.model === 'string' ? userConfig.model : undefined;
+      const model = argv.model ?? storedModel;
+
+      if (!model) {
+        console.log(
+          chalk.red(
+            '✗ Error: A model must be specified via the --model flag or set in the configuration.',
+          ),
+        );
+        console.log(
+          chalk.dim(
+            '\nTo set a default model, run: anki-llm config set model <model-name>',
+          ),
+        );
+        console.log(
+          chalk.dim(`Available models: ${SupportedModel.options.join(', ')}`),
+        );
+        process.exit(1);
+      }
+
       // Parse config (for API keys and model validation)
       const config = parseConfig({
-        model: argv.model,
+        model,
         batchSize: argv['batch-size'],
         maxTokens: argv['max-tokens'],
         temperature: argv.temperature,
@@ -219,12 +242,10 @@ const command: Command<GenerateArgs> = {
       }
 
       // Step 5: Sanitize HTML in all generated cards
-      console.log(chalk.cyan('\n🧹 Sanitizing HTML content...'));
       const sanitizedCards = successful.map((card) => ({
         ...card,
         fields: sanitizeFields(card.fields),
       }));
-      console.log(chalk.green('✓ HTML sanitization complete'));
 
       // Step 6: Validate cards and check for duplicates
       console.log(chalk.cyan('\n🔍 Checking for duplicates...'));
