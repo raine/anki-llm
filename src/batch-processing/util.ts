@@ -109,6 +109,21 @@ export function fillTemplate(template: string, row: RowData): string {
 }
 
 /**
+ * Slugifies a deck name for use in filenames
+ */
+export function slugifyDeckName(deckName: string): string {
+  const parts = deckName.split('::');
+  const lastPart = parts[parts.length - 1];
+  return lastPart
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
  * Removes ANSI escape codes (used for colors) from a string.
  */
 export function stripAnsi(str: string): string {
