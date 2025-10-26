@@ -1,30 +1,40 @@
+import { readFile } from 'fs/promises';
+import OpenAI from 'openai';
 import chalk from 'chalk';
 import { z } from 'zod';
-import { parseConfig } from '../config.js';
+import { parseConfig, SupportedModel } from '../config.js';
 import { ankiRequest, ankiRequestRaw, NoteInfo } from '../anki-connect.js';
-import { logDebug, logInfo, logInfoTee } from '../batch-processing/logger.js';
+import { readConfigFile } from '../config-manager.js';
+import {
+  initLogger,
+  logDebug,
+  logInfo,
+  logInfoTee,
+} from '../batch-processing/logger.js';
 import { processDirect } from '../batch-processing/direct-processor.js';
-import { requireNoteId } from '../batch-processing/util.js';
+import { printSummary } from '../batch-processing/reporting.js';
+import { requireNoteId, fillTemplate } from '../batch-processing/util.js';
 import type { RowData, ProcessedRow } from '../batch-processing/types.js';
 import { AbortError } from 'p-retry';
 import type { Command } from './types.js';
-import {
-  applyCommonProcessingOptions,
-  createOpenAIClient,
-  finalizeProcessing,
-  loadPromptTemplate,
-  maybeHandleDryRun,
-  printProcessingHeader,
-  resolveModelOrExit,
-  setupProcessingLogger,
-  type CommonProcessingArgs,
-} from './process-shared.js';
 
 type NoteInfoType = z.infer<typeof NoteInfo>;
 
-interface ProcessDeckArgs extends CommonProcessingArgs {
+interface ProcessDeckArgs {
   deck: string;
+  field?: string;
+  json: boolean;
+  prompt: string;
+  model?: string;
+  'batch-size': number;
+  'max-tokens'?: number;
+  temperature: number;
+  retries: number;
+  'dry-run': boolean;
+  'require-result-tag': boolean;
   limit?: number;
+  log: boolean;
+  'very-verbose': boolean;
 }
 
 /**
@@ -47,16 +57,96 @@ const command: Command<ProcessDeckArgs> = {
   describe: 'Process notes directly from an Anki deck (no intermediate files)',
 
   builder: (yargs) => {
-    return applyCommonProcessingOptions(
-      yargs.positional('deck', {
+    return yargs
+      .positional('deck', {
         describe: 'Name of the Anki deck to process',
         type: 'string',
         demandOption: true,
-      }),
-      {
-        limitDescription: 'Limit the number of notes to process (for testing)',
-      },
-    )
+      })
+      .option('field', {
+        describe:
+          'Field name to update with AI response (mutually exclusive with --json)',
+        type: 'string',
+      })
+      .option('json', {
+        describe:
+          'Expect JSON response and merge all fields (mutually exclusive with --field)',
+        type: 'boolean',
+        default: false,
+      })
+      .option('prompt', {
+        alias: 'p',
+        describe: 'Path to prompt template file',
+        type: 'string',
+        demandOption: true,
+      })
+      .option('model', {
+        alias: 'm',
+        describe: `Model to use. Available: ${SupportedModel.options.join(', ')}`,
+        type: 'string',
+      })
+      .option('batch-size', {
+        alias: 'b',
+        describe: 'Number of concurrent API requests',
+        type: 'number',
+        default: 5,
+      })
+      .option('max-tokens', {
+        describe: 'Maximum tokens for completion',
+        type: 'number',
+      })
+      .option('temperature', {
+        alias: 't',
+        describe: 'Temperature for model sampling',
+        type: 'number',
+        default: 0.0,
+      })
+      .option('retries', {
+        alias: 'r',
+        describe: 'Number of retries for failed requests',
+        type: 'number',
+        default: 3,
+      })
+      .option('dry-run', {
+        alias: 'd',
+        describe: 'Preview operation without making API calls',
+        type: 'boolean',
+        default: false,
+      })
+      .option('require-result-tag', {
+        describe: 'Require <result> tags in AI responses',
+        type: 'boolean',
+        default: false,
+      })
+      .option('limit', {
+        describe: 'Limit the number of notes to process (for testing)',
+        type: 'number',
+      })
+      .option('log', {
+        describe: 'Generate a log file',
+        type: 'boolean',
+        default: false,
+      })
+      .option('very-verbose', {
+        describe: 'Log LLM responses to log file (automatically enables --log)',
+        type: 'boolean',
+        default: false,
+      })
+      .check((argv) => {
+        if (argv.limit !== undefined && argv.limit <= 0) {
+          throw new Error('Error: --limit must be a positive number.');
+        }
+        // Require either --field or --json (but not both)
+        if (!argv.field && !argv.json) {
+          throw new Error('Error: Either --field or --json must be specified.');
+        }
+        if (argv.field && argv.json) {
+          throw new Error(
+            'Error: --field and --json are mutually exclusive. Use only one.',
+          );
+        }
+        return true;
+      })
       .example(
         '$0 process-deck "Japanese Core 1k" --field Translation -p prompt.txt',
         'Process a deck and update a single field',
@@ -74,18 +164,42 @@ const command: Command<ProcessDeckArgs> = {
   handler: async (argv) => {
     const startTime = Date.now();
 
-    const model = await resolveModelOrExit(argv.model);
+    // Load config and use as fallback for model
+    const userConfig = await readConfigFile();
+    const storedModel =
+      typeof userConfig.model === 'string' ? userConfig.model : undefined;
+    const model = argv.model ?? storedModel;
+
+    if (!model) {
+      console.log(
+        chalk.red(
+          '✗ Error: A model must be specified via the --model flag or set in the configuration.',
+        ),
+      );
+      console.log(
+        chalk.dim(
+          '\nTo set a default model, run: anki-llm-batch config set model <model-name>',
+        ),
+      );
+      console.log(
+        chalk.dim(`Available models: ${SupportedModel.options.join(', ')}`),
+      );
+      process.exit(1);
+    }
 
     // Initialize logger
-    const logFilePath = await setupProcessingLogger({
-      enabled: argv.log || argv['very-verbose'],
-      getLogFilePath: () => {
-        const deckSlug = slugifyDeckName(argv.deck);
-        return `${deckSlug}-process.log`;
-      },
-      sessionName: 'Direct Processing',
-      veryVerbose: argv['very-verbose'],
-    });
+    let logFilePath: string | null = null;
+    if (argv.log || argv['very-verbose']) {
+      const deckSlug = slugifyDeckName(argv.deck);
+      logFilePath = `${deckSlug}-process.log`;
+      await initLogger(logFilePath, argv['very-verbose']);
+      await logDebug('='.repeat(60));
+      await logDebug('Direct Processing - Session Started');
+      await logDebug('='.repeat(60));
+      if (argv['very-verbose']) {
+        await logDebug('Very verbose mode enabled - will log LLM responses');
+      }
+    }
 
     // Parse configuration
     const config = parseConfig({
@@ -99,17 +213,32 @@ const command: Command<ProcessDeckArgs> = {
     });
 
     // Read prompt template
-    const promptTemplate = await loadPromptTemplate(argv.prompt);
+    const promptTemplate = await readFile(argv.prompt, 'utf-8');
+    await logDebug(`Prompt template loaded (${promptTemplate.length} chars)`);
 
     // Print header
-    printProcessingHeader({
-      title: 'Direct Anki Processing',
-      extraLines: [`Deck:              ${argv.deck}`],
-      logFilePath,
-      jsonMode: argv.json,
-      fieldName: argv.field,
-      config,
-    });
+    logInfo(chalk.bold('='.repeat(60)));
+    logInfo(chalk.bold('Direct Anki Processing'));
+    logInfo(chalk.bold('='.repeat(60)));
+    logInfo(`Deck:              ${argv.deck}`);
+    if (logFilePath) {
+      logInfo(`Log file:          ${logFilePath}`);
+    }
+    if (argv.json) {
+      logInfo(`Mode:              JSON merge`);
+    } else {
+      logInfo(`Field to process:  ${argv.field}`);
+    }
+    logInfo(`Model:             ${config.model}`);
+    logInfo(`Batch size:        ${config.batchSize}`);
+    logInfo(`Retries:           ${config.retries}`);
+    logInfo(`Temperature:       ${config.temperature}`);
+    if (config.maxTokens) {
+      logInfo(`Max tokens:        ${config.maxTokens}`);
+    }
+    logInfo(`Dry run:           ${config.dryRun}`);
+    logInfo(`Require result tag: ${config.requireResultTag}`);
+    logInfo(chalk.bold('='.repeat(60)));
 
     try {
       const deckName = argv.deck;
@@ -175,22 +304,25 @@ const command: Command<ProcessDeckArgs> = {
       }
 
       // Handle dry run
-      if (
-        await maybeHandleDryRun({
-          config,
-          rows: notesToProcess,
-          promptTemplate,
-          itemLabel: 'notes',
-          sampleLabel: 'Sample note:',
-          dryRunMessage: 'No changes will be made',
-        })
-      ) {
+      if (config.dryRun) {
+        logInfo(chalk.yellow('\n⚠️  DRY RUN MODE - No changes will be made'));
+        logInfo(`Would process ${notesToProcess.length} notes`);
+        logInfo(`\n${chalk.bold('Prompt template:')}`);
+        logInfo(promptTemplate);
+        logInfo(`\n${chalk.bold('Sample note:')}`);
+        logInfo(JSON.stringify(notesToProcess[0], null, 2));
+        logInfo(`\n${chalk.bold('Sample prompt:')}`);
+        logInfo(fillTemplate(promptTemplate, notesToProcess[0]));
+        await logDebug('Dry run complete. Exiting.');
         return;
       }
 
       // Initialize OpenAI client
       await logDebug(`Initializing OpenAI client for model: ${config.model}`);
-      const client = createOpenAIClient(config);
+      const client = new OpenAI({
+        apiKey: config.apiKey,
+        ...(config.apiBaseUrl && { baseURL: config.apiBaseUrl }),
+      });
 
       // Process notes and update Anki directly
       const errorLogPath = `${slugifyDeckName(deckName)}-errors.jsonl`;
@@ -198,7 +330,7 @@ const command: Command<ProcessDeckArgs> = {
         `\n${chalk.cyan('Processing')} ${notesToProcess.length} notes...`,
       );
 
-      const { failures, tokenStats } = await processDirect(
+      const { successes, failures, tokenStats } = await processDirect(
         notesToProcess,
         argv.field ?? null,
         promptTemplate,
@@ -220,14 +352,22 @@ const command: Command<ProcessDeckArgs> = {
       });
 
       // Print summary
-      const exitCode = await finalizeProcessing({
-        processedRows,
-        tokenStats,
-        config,
-        startTime,
+      const elapsedMs = Date.now() - startTime;
+      printSummary(processedRows, tokenStats, config, elapsedMs, {
         errorLogPath: failures.length > 0 ? errorLogPath : undefined,
       });
-      process.exit(exitCode);
+
+      // Log summary to file
+      await logDebug(
+        `Summary: ${successes} successful, ${failures.length} failed`,
+      );
+      await logDebug(
+        `Total tokens: ${tokenStats.input + tokenStats.output} (input: ${tokenStats.input}, output: ${tokenStats.output})`,
+      );
+      await logDebug(`Total time: ${(elapsedMs / 1000).toFixed(2)}s`);
+      await logDebug('Session completed successfully');
+
+      process.exit(failures.length > 0 ? 1 : 0);
     } catch (error) {
       if (error instanceof Error) {
         console.log(`\n${chalk.red('✗ Error:')} ${error.message}`);
