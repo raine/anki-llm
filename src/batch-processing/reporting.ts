@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { Config, SupportedChatModel } from '../config.js';
+import { MODEL_PRICING } from '../config.js';
 import type { ProcessedRow, TokenStats } from './types.js';
-import { MODEL_PRICING } from './types.js';
 
 /**
  * Calculate total cost from token stats and model pricing

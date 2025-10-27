@@ -4,6 +4,8 @@ export const SupportedModel = z.enum([
   'gpt-4.1',
   'gpt-4o',
   'gpt-4o-mini',
+  'gpt-5',
+  'gpt-5-mini',
   'gpt-5-nano',
   'gemini-2.0-flash',
   'gemini-2.5-flash',
@@ -12,6 +14,60 @@ export const SupportedModel = z.enum([
 ]);
 
 export type SupportedChatModel = z.infer<typeof SupportedModel>;
+
+/**
+ * Model pricing information
+ */
+export type ModelPricing = {
+  inputCostPerMillion: number;
+  outputCostPerMillion: number;
+};
+
+/**
+ * Pricing data for all supported models
+ */
+export const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
+  'gpt-4.1': {
+    inputCostPerMillion: 2.5,
+    outputCostPerMillion: 10,
+  },
+  'gpt-4o': {
+    inputCostPerMillion: 2.5,
+    outputCostPerMillion: 10,
+  },
+  'gpt-4o-mini': {
+    inputCostPerMillion: 0.15,
+    outputCostPerMillion: 0.6,
+  },
+  'gpt-5': {
+    inputCostPerMillion: 1.25,
+    outputCostPerMillion: 10,
+  },
+  'gpt-5-mini': {
+    inputCostPerMillion: 0.25,
+    outputCostPerMillion: 2,
+  },
+  'gpt-5-nano': {
+    inputCostPerMillion: 0.05,
+    outputCostPerMillion: 0.4,
+  },
+  'gemini-2.0-flash': {
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
+  },
+  'gemini-2.5-flash': {
+    inputCostPerMillion: 0.3,
+    outputCostPerMillion: 2.5,
+  },
+  'gemini-2.5-flash-lite': {
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
+  },
+  'gemini-2.5-pro': {
+    inputCostPerMillion: 1.25,
+    outputCostPerMillion: 10,
+  },
+};
 
 const Config = z.object({
   apiKey: z.string().min(1, 'API key is required'),
