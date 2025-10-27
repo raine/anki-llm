@@ -411,7 +411,8 @@ select which ones to keep, and adds them directly to your deck.
 **Common options:**
 
 - `-c, --count`: Number of card examples to generate (default: `3`).
-- `-m, --model`: AI model to use (required unless set via `config set model`).
+- `-m, --model`: AI model to use (defaults to `gpt-5-mini` or `gemini-2.5-flash`
+  depending on your API key; can also be set via `config set model`).
 - `-d, --dry-run`: Display generated cards without starting the interactive
   selection or import process.
 - `-r, --retries`: Number of retries for failed requests (default: `3`).

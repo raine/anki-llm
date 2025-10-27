@@ -133,18 +133,18 @@ const command: Command<GenerateArgs> = {
 
       // Step 3: Resolve configuration
       const userConfig = await readConfigFile();
-      const model = argv.model ?? userConfig.model;
+      let model = argv.model ?? userConfig.model;
 
+      // If no model specified, use defaults
       if (!model) {
-        console.error(
-          chalk.red(
-            '❌ A model must be specified via the --model flag or set in the configuration.',
+        const useGemini =
+          !process.env.OPENAI_API_KEY && process.env.GEMINI_API_KEY;
+        model = useGemini ? 'gemini-2.5-flash' : 'gpt-5-mini';
+        console.log(
+          chalk.gray(
+            `ℹ️  Using default model: ${model} (override with --model)`,
           ),
         );
-        console.error(
-          chalk.dim(`Available models: ${SupportedModel.options.join(', ')}`),
-        );
-        process.exit(1);
       }
 
       const appConfig = parseConfig({
