@@ -1,18 +1,7 @@
 import { z } from 'zod';
 import chalk from 'chalk';
 import { ankiRequest } from '../anki-connect.js';
-import type { ValidatedCard } from './validator.js';
-
-// Assuming a type for frontmatter
-interface PromptFrontmatter {
-  deck: string;
-  noteType: string;
-}
-
-export interface ImportResult {
-  successes: number;
-  failures: number;
-}
+import type { ValidatedCard, ImportResult, Frontmatter } from '../types.js';
 
 /**
  * Adds selected cards as notes to Anki.
@@ -20,7 +9,7 @@ export interface ImportResult {
  */
 export async function importCardsToAnki(
   selectedCards: ValidatedCard[],
-  frontmatter: PromptFrontmatter,
+  frontmatter: Pick<Frontmatter, 'deck' | 'noteType'>,
 ): Promise<ImportResult> {
   if (selectedCards.length === 0) {
     return { successes: 0, failures: 0 };

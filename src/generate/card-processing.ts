@@ -1,15 +1,8 @@
 import chalk from 'chalk';
 import { sanitizeFields } from '../utils/sanitize-html.js';
-import { validateCards, type ValidatedCard } from './validator.js';
+import { validateCards } from './validator.js';
 import { selectCards, displayCards } from './selector.js';
-import type { CardCandidate } from './processor.js';
-
-// Assuming a type for frontmatter
-interface PromptFrontmatter {
-  deck: string;
-  noteType: string;
-  fieldMap: Record<string, string>;
-}
+import type { CardCandidate, ValidatedCard, Frontmatter } from '../types.js';
 
 /**
  * Sanitizes, validates, and allows user selection of generated cards.
@@ -18,7 +11,7 @@ interface PromptFrontmatter {
  */
 export async function processAndSelectCards(
   generatedCards: CardCandidate[],
-  frontmatter: PromptFrontmatter,
+  frontmatter: Pick<Frontmatter, 'deck' | 'noteType' | 'fieldMap'>,
   noteTypeFields: string[],
   isDryRun: boolean,
 ): Promise<ValidatedCard[]> {

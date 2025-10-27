@@ -6,11 +6,7 @@ import { writeFile, appendFile } from 'fs/promises';
 import { parseLlmJson } from '../utils/parse-llm-json.js';
 import { fillTemplate } from '../batch-processing/util.js';
 import type { Config } from '../config.js';
-
-export interface CardCandidate {
-  fields: Record<string, string>;
-  rawResponse: string;
-}
+import type { CardCandidate } from '../types.js';
 
 export interface GenerationResult {
   successful: CardCandidate[];

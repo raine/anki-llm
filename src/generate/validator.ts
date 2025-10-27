@@ -1,12 +1,6 @@
 import { z } from 'zod';
 import { ankiRequest } from '../anki-connect.js';
-import type { CardCandidate } from './processor.js';
-import type { Frontmatter } from '../utils/parse-frontmatter.js';
-
-export interface ValidatedCard extends CardCandidate {
-  isDuplicate: boolean;
-  ankiFields: Record<string, string>; // Mapped to actual Anki field names
-}
+import type { CardCandidate, ValidatedCard, Frontmatter } from '../types.js';
 
 /**
  * Maps card fields from LLM JSON keys to actual Anki field names.
@@ -35,6 +29,20 @@ export function mapFieldsToAnki(
 }
 
 /**
+ * Escapes a string for use within a double-quoted search term in an Anki query.
+ * Anki's search syntax requires escaping the following characters with a backslash:
+ * - Double quote (")
+ * - Backslash (\)
+ * - Asterisk (*)
+ * - Underscore (_)
+ */
+function escapeAnkiQueryValue(value: string): string {
+  // The regex matches any character in the set: \ " * _
+  // The replacement function prepends a backslash to the matched character.
+  return value.replace(/[\\"*_]/g, '\\$&');
+}
+
+/**
  * Checks if a card already exists in Anki by querying the first field.
  *
  * Anki's uniqueness constraint is: Note Type + First Field value.
@@ -53,7 +61,8 @@ async function checkDuplicate(
   try {
     // Query for notes with this exact first field value in this deck and note type
     // AnkiConnect's findNotes uses a query string
-    const query = `"note:${noteType}" "deck:${deck}" "${firstFieldValue}"`;
+    const escapedFieldValue = escapeAnkiQueryValue(firstFieldValue);
+    const query = `"note:${noteType}" "deck:${deck}" "${escapedFieldValue}"`;
 
     const noteIds = await ankiRequest('findNotes', z.array(z.number()), {
       query,

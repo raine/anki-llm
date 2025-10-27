@@ -1,13 +1,7 @@
 import { z } from 'zod';
 import { ankiRequest } from '../anki-connect.js';
 import { getFieldNamesForModel } from '../anki-schema.js';
-
-// Assuming a type for frontmatter exists
-interface PromptFrontmatter {
-  deck: string;
-  noteType: string;
-  fieldMap: Record<string, string>;
-}
+import type { Frontmatter } from '../types.js';
 
 export interface AnkiValidationResult {
   noteTypeFields: string[];
@@ -19,7 +13,7 @@ export interface AnkiValidationResult {
  * @returns The list of fields for the validated note type.
  */
 export async function validateAnkiAssets(
-  frontmatter: PromptFrontmatter,
+  frontmatter: Pick<Frontmatter, 'deck' | 'noteType' | 'fieldMap'>,
 ): Promise<AnkiValidationResult> {
   // Validate deck
   const deckNames = await ankiRequest('deckNames', z.array(z.string()), {});

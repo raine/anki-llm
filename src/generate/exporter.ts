@@ -4,7 +4,7 @@ import * as path from 'path';
 import Papa from 'papaparse';
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
-import type { ValidatedCard } from './validator.js';
+import type { ValidatedCard } from '../types.js';
 
 type CardData = Record<string, string>;
 

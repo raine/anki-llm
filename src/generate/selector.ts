@@ -1,6 +1,6 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import type { ValidatedCard } from './validator.js';
+import type { ValidatedCard } from '../types.js';
 
 const BOLD_START_MARK = '\u0000';
 const BOLD_END_MARK = '\u0001';
