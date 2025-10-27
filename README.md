@@ -177,9 +177,8 @@ are updated, while new entries create new notes.
 
 **Common options:**
 
-- `-m, --model`: The name of the Anki note type/model to use when creating new
-  notes. If not specified, the model will be inferred from existing notes in the
-  deck.
+- `-n, --note-type`: The Anki note type to use when creating new notes. If not
+  specified, it will be inferred from existing notes in the deck.
 - `-k, --key-field`: Field to use for identifying existing notes (default:
   `noteId`).
 

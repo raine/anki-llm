@@ -27,7 +27,7 @@ type AnkiNote = z.infer<typeof AnkiNote>;
 interface ImportDeckArgs {
   input: string;
   deck: string;
-  model?: string;
+  'note-type'?: string;
   'key-field': string;
 }
 
@@ -48,10 +48,9 @@ const command: Command<ImportDeckArgs> = {
         type: 'string',
         demandOption: true,
       })
-      .option('model', {
-        alias: 'm',
-        describe:
-          'Anki note type/model name (inferred from deck if not specified)',
+      .option('note-type', {
+        alias: 'n',
+        describe: 'Anki note type name (inferred from deck if not specified)',
         type: 'string',
         demandOption: false,
       })
@@ -62,11 +61,11 @@ const command: Command<ImportDeckArgs> = {
         default: 'noteId',
       })
       .example(
-        '$0 import export.csv --deck "My Deck" --model "Basic" --key-field noteId',
+        '$0 import export.csv --deck "My Deck" --note-type "Basic" --key-field noteId',
         'Import using noteId as key',
       )
       .example(
-        '$0 import data.yaml -d "Japanese" -m "Custom" -k Id',
+        '$0 import data.yaml -d "Japanese" -n "Custom" -k Id',
         'Import using Id as key',
       );
   },
@@ -76,21 +75,21 @@ const command: Command<ImportDeckArgs> = {
     console.log(`Importing from ${argv.input} to deck: ${argv.deck}`);
 
     try {
-      // Infer model if not specified
-      let modelName = argv.model;
+      // Infer note type if not specified
+      let modelName = argv['note-type'];
       if (!modelName) {
-        console.log(`\nModel not specified, inferring from deck...`);
+        console.log(`\nNote type not specified, inferring from deck...`);
         const inferredModel = await findModelNameForDeck(argv.deck);
         if (!inferredModel) {
           throw new Error(
-            `Could not infer model from deck '${argv.deck}'. The deck may be empty or not exist. Please specify the model explicitly using --model.`,
+            `Could not infer note type from deck '${argv.deck}'. The deck may be empty or not exist. Please specify the note type explicitly using --note-type.`,
           );
         }
         modelName = inferredModel;
-        console.log(`✓ Inferred model: ${modelName}`);
+        console.log(`✓ Inferred note type: ${modelName}`);
       }
 
-      console.log(`Model: ${modelName}`);
+      console.log(`Note type: ${modelName}`);
       console.log(`Key field: ${argv['key-field']}`);
       console.log('='.repeat(60));
 
@@ -111,12 +110,12 @@ const command: Command<ImportDeckArgs> = {
         );
       }
 
-      // Get model fields to validate against
-      console.log(`\nValidating fields against model '${modelName}'...`);
+      // Get note type fields to validate against
+      console.log(`\nValidating fields against note type '${modelName}'...`);
       const modelFields = await getFieldNamesForModel(modelName);
-      console.log(`✓ Model fields: ${modelFields.join(', ')}`);
+      console.log(`✓ Note type fields: ${modelFields.join(', ')}`);
 
-      // Check which fields from the file are valid for the model
+      // Check which fields from the file are valid for the note type
       const fileFields = Object.keys(rows[0]).filter(
         (f) => f !== argv['key-field'],
       );
@@ -124,7 +123,7 @@ const command: Command<ImportDeckArgs> = {
 
       if (invalidFields.length > 0) {
         console.warn(
-          `\n⚠️  Warning: The following fields in the input file do not exist in the model and will be ignored:`,
+          `\n⚠️  Warning: The following fields in the input file do not exist in the note type and will be ignored:`,
         );
         console.warn(`  ${invalidFields.join(', ')}`);
       }
@@ -182,7 +181,7 @@ const command: Command<ImportDeckArgs> = {
         [];
 
       for (const row of rows) {
-        // Extract only valid fields for the model
+        // Extract only valid fields for the note type
         const fields: Record<string, string> = {};
         for (const field of validFields) {
           fields[field] = String(row[field] ?? '');
@@ -272,7 +271,9 @@ const command: Command<ImportDeckArgs> = {
       console.log('\nMake sure:');
       console.log('  1. Anki Desktop is running with AnkiConnect installed.');
       console.log(`  2. The deck '${argv.deck}' exists.`);
-      console.log(`  3. The model exists and its fields match the input file.`);
+      console.log(
+        `  3. The note type exists and its fields match the input file.`,
+      );
       process.exit(1);
     }
   },
