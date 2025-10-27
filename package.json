@@ -22,7 +22,7 @@
     "install-global": "npm run build && npm install -g .",
     "check": "concurrently \"pnpm:check:*\"",
     "check:types": "tsgo --noEmit",
-    "check:format": "prettier --write .",
+    "check:format": "prettier --write --list-different .",
     "check:lint": "eslint .",
     "publish:patch": "npm version patch && npm publish",
     "publish:minor": "npm version minor && npm publish",
