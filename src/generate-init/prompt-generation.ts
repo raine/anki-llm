@@ -61,7 +61,7 @@ async function generateContextualPromptBody(
   } else {
     // Auto-detect based on available API key
     const useGemini = !process.env.OPENAI_API_KEY && process.env.GEMINI_API_KEY;
-    model = useGemini ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    model = useGemini ? 'gemini-2.5-flash' : 'gpt-5';
   }
 
   // Get provider configuration and API key for the model

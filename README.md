@@ -970,15 +970,18 @@ Let's create several new example flashcards for the Japanese word `会議`
 ### Step 1: Create a prompt template with `generate-init`
 
 First, run the `generate-init` wizard. It will ask you to select your deck and
-note type, then generate a prompt file tailored to your collection.
+note type, then use an LLM to analyze your existing cards and generate a prompt
+file tailored to your collection.
 
 ```bash
 anki-llm generate-init
 ```
 
-Follow the interactive prompts. The wizard will analyze existing cards in your
-deck to create a smart prompt that matches their style and formatting. When it's
-done, it will save a new file, for example `japanese-vocabulary-prompt.md`.
+Follow the interactive prompts. The wizard will use an AI model (defaults to
+`gpt-5` or `gemini-2.5-flash` depending on your API key) to analyze existing
+cards in your deck and create a smart prompt that matches their style and
+formatting. When it's done, it will save a new file, for example
+`japanese-vocabulary-prompt.md`.
 
 The generated file will look something like this:
 
