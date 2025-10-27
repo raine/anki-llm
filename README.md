@@ -992,7 +992,7 @@ Now, use the `generate` command with your new prompt file to create card
 examples for `会議`.
 
 ```bash
-anki-llm generate "会議" -p japanese-vocabulary-prompt.md -m gpt-4o-mini
+anki-llm generate "会議" -p japanese-vocabulary-prompt.md -m gemini-2.5-flash
 ```
 
 The tool will make a single API call asking the LLM to generate 3 distinct cards
