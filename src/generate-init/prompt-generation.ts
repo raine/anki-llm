@@ -14,25 +14,31 @@ function generateGenericPromptBody(fieldKeys: string[]): string {
     exampleJson[key] = `Example value for ${key}`;
   }
 
-  return `You are an expert assistant who creates one excellent Anki flashcard for a vocabulary term.
-The term to create a card for is: **{term}**
+  // Format the example as an array element with proper indentation
+  const arrayExample =
+    '[\n' + JSON.stringify(exampleJson, null, 2).replace(/^/gm, '  ') + '\n]';
 
-IMPORTANT: Your output must be a single, valid JSON object and nothing else.
+  return `You are an expert assistant who creates {count} distinct Anki flashcards for a vocabulary term.
+The term to create cards for is: **{term}**
+
+IMPORTANT: Your output must be a single, valid JSON array of objects and nothing else.
 Do not include any explanation, markdown formatting, or additional text.
+Each object in the array should represent a unique flashcard.
 All field values must be strings.
 For fields that require formatting (like lists or emphasis), generate a single string containing well-formed HTML.
 
 Follow the structure and HTML formatting shown in this example precisely:
 
 \`\`\`json
-${JSON.stringify(exampleJson, null, 2)}
+${arrayExample}
 \`\`\`
 
-Return only valid JSON matching this structure.
+Return only a valid JSON array matching this structure. Ensure you generate {count} varied and high-quality cards.
 
 Tips for creating high-quality cards:
 - Provide clear, concise definitions or translations
-- Include natural, contextual examples
+- Include natural, contextual examples that highlight different nuances of the term
+- Ensure each card offers a unique perspective, context, or usage example
 - Use HTML tags like <b>, <i>, <ul>, <li> for formatting when helpful
 - For language learning: include pronunciation guides if relevant
 - Keep the content focused and easy to review`;
@@ -75,7 +81,7 @@ async function generateContextualPromptBody(
 
   // Build the meta-prompt
   const metaPrompt = `You are an expert prompt engineer creating a prompt template for another AI.
-Your goal is to generate a helpful and flexible prompt body that instructs an AI to create new Anki cards that match the general style of the provided examples.
+Your goal is to generate a helpful and flexible prompt body that instructs an AI to create multiple new Anki cards that match the general style of the provided examples.
 
 **IMPORTANT CONTEXT:**
 - The user's deck is named "${deckName}".
@@ -98,20 +104,21 @@ Analyze the examples to understand the deck's high-level principles:
    - What is the *purpose* of tags like \`<b>\` or \`<ul>\`?
    - For linguistic formatting (like Japanese furigana \`漢字[かんじ]\`), identify the general pattern but **avoid creating overly strict spacing rules** from this small sample. Focus on high-confidence patterns only.
 
-**Step 2: Generate a Flexible Prompt Body**
-Using your analysis, generate a prompt body that guides the AI to create cards that *fit the spirit* of the examples, while allowing for natural variation.
+**Step 2: Generate a Flexible Prompt Body for MULTIPLE Cards**
+Using your analysis, generate a prompt body that guides the AI to create a batch of cards that *fit the spirit* of the examples, while allowing for natural variation.
 
-1. **Persona & Goal**: Start with a concise instruction for the AI, mentioning the deck's purpose.
+1. **Persona & Goal**: Start with a concise instruction for the AI, mentioning the deck's purpose and that it should generate **{count} distinct cards**. This placeholder is critical. For example: "You are an expert assistant who creates {count} distinct Anki flashcards for...".
 
-2. **Term Placeholder**: Include a natural sentence that introduces the term/phrase using the **{term}** placeholder. For example: "The term to create a card for is: **{term}**" or "Create a flashcard for: **{term}**". Do NOT explain what {term} contains - just use it naturally in a sentence.
+2. **Term Placeholder**: Include a natural sentence that introduces the term/phrase using the **{term}** placeholder. For example: "The term to create cards for is: **{term}**".
 
-3. **One-Shot Example**: Provide a single, plausible, **NEW** example in a JSON code block. This example should be a good demonstration of the deck's style. The JSON keys must be exactly: ${fieldKeys.join(', ')}.
+3. **One-Shot Example (Array Format)**: Provide a single, plausible, **NEW** example inside a JSON array code block. This example should be a good demonstration of the deck's style. The JSON keys must be exactly: ${fieldKeys.join(', ')}. The output format must be \`[ { ...card_object...} ]\`.
 
-4. **Boilerplate**: Include the standard instruction: "IMPORTANT: Your output must be a single, valid JSON object and nothing else. Do not include any explanation, markdown formatting, or additional text. All field values must be strings."
+4. **Boilerplate**: Include the standard instruction: "IMPORTANT: Your output must be a single, valid JSON array of objects and nothing else. Do not include any explanation, markdown formatting, or additional text. All field values must be strings."
 
-5. **Stylistic Guidelines (Not Strict Rules)**:
+5. **Stylistic & Diversity Guidelines (Not Strict Rules)**:
    - Create sections with headings like "Formatting Guidelines" and "Content Guidelines".
    - Phrase instructions as recommendations, not commands. Use words like "Generally," "Typically," "Aim to," "Consider including."
+   - **Add instructions to encourage diversity**: "Ensure each card offers a unique perspective on the term, such as a different definition, context, or example sentence."
    - **Good Example**: "Typically, use \`<b>\` tags to highlight the main term within example sentences."
    - **Bad Example**: "You must always bold the second word of every sentence."
    - If a field was often empty in the samples, suggest its purpose rather than mandating it be empty. Example: "The 'notes' field is optional but can be used for extra cultural context."

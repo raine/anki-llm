@@ -18,7 +18,6 @@ interface GenerateArgs {
   count: number;
   model?: string;
   'dry-run': boolean;
-  'batch-size': number;
   retries: number;
   'max-tokens'?: number;
   temperature: number;
@@ -55,12 +54,6 @@ const command: Command<GenerateArgs> = {
         describe: 'Display cards without importing to Anki',
         type: 'boolean',
         default: false,
-      })
-      .option('batch-size', {
-        alias: 'b',
-        describe: 'Number of concurrent API requests',
-        type: 'number',
-        default: 5,
       })
       .option('retries', {
         alias: 'r',
@@ -133,7 +126,6 @@ const command: Command<GenerateArgs> = {
 
       const appConfig = parseConfig({
         model,
-        batchSize: argv['batch-size'],
         maxTokens: argv['max-tokens'],
         temperature: argv.temperature,
         retries: argv.retries,

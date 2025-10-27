@@ -59,7 +59,7 @@ export function getApiKeyForModel(model: string): string | undefined {
 
 export function parseConfig(cliArgs: {
   model: string;
-  batchSize: number;
+  batchSize?: number;
   maxTokens?: number;
   temperature: number;
   retries: number;
@@ -102,7 +102,7 @@ export function parseConfig(cliArgs: {
     apiKey: apiKey || 'dummy-key-for-dry-run',
     apiBaseUrl,
     model,
-    batchSize: cliArgs.batchSize,
+    batchSize: cliArgs.batchSize ?? 5, // Default to 5 if not provided (used by batch command)
     dryRun,
     maxTokens: cliArgs.maxTokens,
     temperature: cliArgs.temperature,
