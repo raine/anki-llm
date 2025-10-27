@@ -989,10 +989,10 @@ You can now edit this file to further refine the instructions for the AI.
 ### Step 2: Generate cards for your term
 
 Now, use the `generate` command with your new prompt file to create card
-examples for `会議`. Let's ask for 3 examples using `--count 3`.
+examples for `会議`.
 
 ```bash
-anki-llm generate "会議" -p japanese-vocabulary-prompt.md --count 3 -m gpt-4o-mini
+anki-llm generate "会議" -p japanese-vocabulary-prompt.md -m gpt-4o-mini
 ```
 
 The tool will make a single API call asking the LLM to generate 3 distinct cards
