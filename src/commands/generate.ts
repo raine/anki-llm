@@ -3,8 +3,8 @@ import chalk from 'chalk';
 import type { Command } from './types.js';
 import { parseFrontmatter } from '../utils/parse-frontmatter.js';
 import { generateCards } from '../generation/processor.js';
-import { SupportedModel } from '../config.js';
-import { resolveAppConfig, getGenerationConfig } from '../generate/config.js';
+import { SupportedModel, parseConfig } from '../config.js';
+import { readConfigFile } from '../config-manager.js';
 import { validateAnkiAssets } from '../generate/anki-validation.js';
 import { processAndSelectCards } from '../generate/card-processing.js';
 import {
@@ -116,15 +116,37 @@ const command: Command<GenerateArgs> = {
       );
 
       // Step 3: Resolve configuration
-      const appConfig = await resolveAppConfig(argv);
-      const generationConfig = getGenerationConfig(appConfig);
+      const userConfig = await readConfigFile();
+      const model = argv.model ?? userConfig.model;
+
+      if (!model) {
+        console.error(
+          chalk.red(
+            '❌ A model must be specified via the --model flag or set in the configuration.',
+          ),
+        );
+        console.error(
+          chalk.dim(`Available models: ${SupportedModel.options.join(', ')}`),
+        );
+        process.exit(1);
+      }
+
+      const appConfig = parseConfig({
+        model,
+        batchSize: argv['batch-size'],
+        maxTokens: argv['max-tokens'],
+        temperature: argv.temperature,
+        retries: argv.retries,
+        dryRun: argv['dry-run'],
+        requireResultTag: false, // Not used by generate command
+      });
 
       // Step 4: Generate cards
       const { successful, failed } = await generateCards(
         argv.term,
         body,
         argv.count,
-        generationConfig,
+        appConfig,
         frontmatter.fieldMap,
       );
 

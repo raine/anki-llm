@@ -5,16 +5,7 @@ import chalk from 'chalk';
 import { z } from 'zod';
 import { parseLlmJson, isObject } from '../utils/parse-llm-json.js';
 import { fillTemplate } from '../batch-processing/util.js';
-
-export interface GenerationConfig {
-  apiKey: string;
-  apiBaseUrl?: string;
-  model: string;
-  temperature: number;
-  maxTokens?: number;
-  retries: number;
-  batchSize: number;
-}
+import type { Config } from '../config.js';
 
 export interface CardCandidate {
   fields: Record<string, string>;
@@ -35,7 +26,7 @@ export interface GenerationResult {
  * @param term - The term/word to generate cards for
  * @param promptTemplate - Template with {term} placeholder
  * @param count - Number of cards to generate
- * @param config - LLM configuration
+ * @param config - Application configuration
  * @param fieldMap - Mapping from LLM JSON keys to expected field names
  * @returns Results with successful cards and failed attempts
  */
@@ -43,7 +34,7 @@ export async function generateCards(
   term: string,
   promptTemplate: string,
   count: number,
-  config: GenerationConfig,
+  config: Config,
   fieldMap: Record<string, string>,
 ): Promise<GenerationResult> {
   // Create a Zod schema dynamically based on the fieldMap keys
