@@ -572,8 +572,15 @@ anki-llm query docs
 
 **Real-world AI agent example:**
 
-Here's a real example of Claude Code autonomously exporting all Anki decks when
-given the simple instruction: "Use anki-llm to export my decks in csv"
+AI agents can use `anki-llm query` to discover information about your collection
+and then take action. For example, an agent tasked with "export all my decks to
+CSV" can first run `anki-llm query deckNames` to find all decks, then loop
+through the results to run the `export` command for each one.
+
+<details>
+<summary>Click to see a full conversation log of Claude Code autonomously exporting all Anki decks.</summary>
+
+Given the simple instruction: "Use anki-llm to export my decks in csv"
 
 ```
 > Use anki-llm to export my decks in csv
@@ -634,8 +641,9 @@ given the simple instruction: "Use anki-llm to export my decks in csv"
 
 The AI agent used `query deckNames` to discover available decks, then
 automatically generated appropriate filenames and exported all 12 decks without
-further human intervention. This demonstrates how the `query` command enables AI
-agents to work autonomously with your Anki collection.
+further human intervention.
+
+</details>
 
 **Another example: Sampling random cards from decks**
 
