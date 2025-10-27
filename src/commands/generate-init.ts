@@ -28,6 +28,7 @@ function suggestKeyForField(fieldName: string): string {
   const commonMappings: Record<string, string> = {
     english: 'en',
     japanese: 'jp',
+    kanji: 'kanji',
     furigana: 'furigana',
     romaji: 'rom',
     context: 'context',
