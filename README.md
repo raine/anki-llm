@@ -367,6 +367,12 @@ based on an LLM analysis of your existing cards.
 - `-m, --model`: The LLM model to use for the smart prompt generation step
   (e.g., `gpt-4o-mini`).
 
+<!-- prettier-ignore -->
+> [!TIP]
+> Using a more capable reasoning model like `gemini-2.5-pro` for the
+> `generate-init` step can produce higher-quality prompt templates that better
+> capture the nuances and style of your existing cards.
+
 **Workflow:**
 
 1. Run the wizard: `anki-llm generate-init`
@@ -450,7 +456,6 @@ select which ones to keep, and adds them directly to your deck.
 - `-m, --model`: AI model to use (required unless set via `config set model`).
 - `-d, --dry-run`: Display generated cards without starting the interactive
   selection or import process.
-- `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
 - `-t, --temperature`: LLM temperature, a value between 0 and 2 that controls
   creativity (default: `1.0`).
@@ -477,10 +482,14 @@ The body contains your instructions for the LLM. It must:
 
 1. Include the `{term}` placeholder, which will be replaced by the `<term>` you
    provide on the command line.
-2. Instruct the LLM to return a single, valid JSON object that uses the keys
-   defined in `fieldMap`.
-3. Include a "one-shot" example showing the exact JSON structure and desired
-   formatting (e.g., HTML for bolding or lists).
+2. Include the `{count}` placeholder, which will be replaced by the number of
+   cards requested.
+3. Instruct the LLM to return a JSON array of objects, where each object
+   represents one card and uses the keys defined in `fieldMap`.
+4. Include a "one-shot" example showing the exact JSON array structure and
+   desired formatting (e.g., HTML for bolding or lists).
+5. Encourage the LLM to generate diverse cards that highlight different nuances,
+   contexts, or usage examples of the term.
 
 **Example Prompt File (`japanese-vocab-prompt.md`)**
 
@@ -494,23 +503,28 @@ fieldMap:
   context: Context
 ---
 
-You are an expert assistant who creates one excellent Anki flashcard for a
-Japanese vocabulary word. The term to create a card for is: **{term}**
+You are an expert assistant who creates {count} distinct Anki flashcards for a
+Japanese vocabulary word. The term to create cards for is: **{term}**
 
-IMPORTANT: Your output must be a single, valid JSON object and nothing else. All
-field values must be strings.
+IMPORTANT: Your output must be a single, valid JSON array of objects and nothing
+else. Each object in the array should represent a unique flashcard. All field
+values must be strings.
 
 Follow the structure shown in this example precisely:
 
 ```json
-{
-  "en": "How was your <b>today</b>?",
-  "jp": "<b>今日</b>の一日はどうでしたか？",
-  "context": "A common, friendly way to ask about someone's day."
-}
+[
+  {
+    "en": "How was your <b>today</b>?",
+    "jp": "<b>今日</b>の一日はどうでしたか？",
+    "context": "A common, friendly way to ask about someone's day."
+  }
+]
 ```
 
-Return only valid JSON matching this structure.
+Return only a valid JSON array matching this structure. Ensure you generate
+{count} varied and high-quality cards that highlight different nuances, contexts,
+or usage examples of the term.
 ````
 
 **Examples:**
@@ -528,6 +542,9 @@ anki-llm generate "maison" -p french-prompt.md -m gemini-2.5-pro
 
 **Key features:**
 
+- ✅ **Diverse card generation**: Makes a single API call with full context,
+  allowing the LLM to generate varied cards that highlight different nuances and
+  usage examples.
 - ✅ **Interactive selection**: Review and choose which generated cards to keep.
 - ✅ **Duplicate detection**: Automatically flags cards that may already exist
   in your deck.
@@ -1002,25 +1019,30 @@ fieldMap:
   context: Context
 ---
 
-You are an expert Japanese language assistant. Your goal is to create one
-high-quality, contextual Anki flashcard for a vocabulary term. The term to
-create a card for is: **{term}**
+You are an expert Japanese language assistant. Your goal is to create {count}
+distinct, high-quality, contextual Anki flashcards for a vocabulary term. The
+term to create cards for is: **{term}**
 
-IMPORTANT: Your output must be a single, valid JSON object and nothing else. All
-field values must be strings. Use `<b>` tags to highlight the term in the
-example sentence.
+IMPORTANT: Your output must be a single, valid JSON array of objects and nothing
+else. Each object in the array should represent a unique flashcard. All field
+values must be strings. Use `<b>` tags to highlight the term in the example
+sentence.
 
 Follow the structure shown in this example precisely:
 
 ```json
-{
-  "en": "The <b>meeting</b> is scheduled for 3 PM.",
-  "jp": "<b>会議</b>は午後3時に予定されています。",
-  "context": "Used in a formal business context."
-}
+[
+  {
+    "en": "The <b>meeting</b> is scheduled for 3 PM.",
+    "jp": "<b>会議</b>は午後3時に予定されています。",
+    "context": "Used in a formal business context."
+  }
+]
 ```
 
-Return only valid JSON matching this structure.
+Return only a valid JSON array matching this structure. Ensure you generate
+{count} varied cards that highlight different nuances, contexts, or usage
+examples of the term.
 ````
 
 You can now edit this file to further refine the instructions for the AI.
@@ -1034,15 +1056,11 @@ examples for `会議`. Let's ask for 3 examples using `--count 3`.
 anki-llm generate "会議" -p japanese-vocabulary-prompt.md --count 3 -m gpt-4o-mini
 ```
 
-The tool will make three parallel API calls and show progress:
+The tool will make a single API call asking the LLM to generate 3 distinct cards
+and show progress:
 
 ```
-🔄 Generating 3 cards for "会議"...
-
-  ✓ Card 1 generated
-  ✓ Card 2 generated
-  ✗ Card 3 failed: LLM returned invalid JSON, retrying...
-  ✓ Card 3 generated
+🔄 Generating 3 card candidates for "会議"...
 
 ✓ Generation complete: 3 succeeded, 0 failed
 
