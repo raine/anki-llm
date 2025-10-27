@@ -359,13 +359,12 @@ generates a prompt file with the correct frontmatter and a "smart" prompt body
 based on an LLM analysis of your existing cards.
 
 - `[output]`: Optional output file path. If omitted, automatically generates a
-  filename from the deck name (e.g., `"Japanese Vocab"` →
-  `japanese-vocab-prompt.md`).
+  filename from the deck name.
 
 **Common options:**
 
 - `-m, --model`: The LLM model to use for the smart prompt generation step
-  (e.g., `gpt-4o-mini`).
+  (e.g., `gemini-2.5-pro`).
 
 <!-- prettier-ignore -->
 > [!TIP]
@@ -381,51 +380,6 @@ based on an LLM analysis of your existing cards.
 4. Review and customize the generated prompt file.
 5. Use the file with the `generate` command:
    `anki-llm generate "term" -p my-deck-prompt.md`
-
-**Example:**
-
-```bash
-# Start the interactive wizard
-anki-llm generate-init
-
-> ✨ Welcome to anki-llm generate-init!
->
-> 📚 Fetching your Anki decks...
->
-> ? Select the target deck: (Use arrow keys)
-> ❯ Japanese::Vocabulary
->   French::Grammar
->   Medical::Anatomy
-
-> ✓ Selected deck: Japanese::Vocabulary
->
-> 📋 Fetching note types used in this deck...
->
-> ? Select the note type:
-> ❯ Japanese (recognition)
->
-> ✓ Selected note type: Japanese (recognition)
->
-> 🗺️  Creating field mapping (LLM JSON keys → Anki fields)...
-> Proposed mapping:
->   en → English
->   jp → Japanese
->   furigana → Furigana
->   context → Context
-> ? Accept this mapping? (Y/n) › true
->
-> 🧠 Attempting to generate a smart prompt based on your existing cards...
-> ✓ Smart prompt generated successfully!
->
-> 📝 Creating prompt file...
->
-> ✓ Prompt template saved to japanese-vocabulary-prompt.md
->
-> 🎉 Setup complete!
->
-> Try it out:
->   anki-llm generate "example term" -p japanese-vocabulary-prompt.md
-```
 
 **Key features:**
 
