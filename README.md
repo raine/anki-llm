@@ -9,6 +9,9 @@ A command-line interface for bulk-processing Anki flashcards with LLMs.
 - **Add a Key Vocabulary field** – Create a per-note field highlighting 1–3 key
   words with readings, meanings, and HTML context.
   [Prompt + steps](#example-use-case-adding-a-key-vocabulary-field)
+- **Generate new cards** – Interactively create multiple contextual flashcards
+  for a vocabulary word or concept from a single command.
+  [Read more](#example-use-case-generating-new-vocabulary-cards)
 - **Scriptable collection access** – Query AnkiConnect directly from the CLI or
   AI agents. [Command reference](#anki-llm-query-action-params)
 
@@ -342,6 +345,198 @@ Imports data from a file into an Anki deck, updating existing notes.
   the model will be inferred from existing notes in the deck.
 - `-k, --key-field`: Field to use for identifying existing notes (default:
   `noteId`).
+
+---
+
+### `anki-llm generate-init [output]`
+
+Creates a prompt template file for the `generate` command by interactively
+querying your Anki collection. This is the best way to get started with card
+generation.
+
+The wizard guides you through selecting a deck and note type, then automatically
+generates a prompt file with the correct frontmatter and a "smart" prompt body
+based on an LLM analysis of your existing cards.
+
+- `[output]`: Optional output file path. If omitted, automatically generates a
+  filename from the deck name (e.g., `"Japanese Vocab"` →
+  `japanese-vocab-prompt.md`).
+
+**Common options:**
+
+- `-m, --model`: The LLM model to use for the smart prompt generation step
+  (e.g., `gpt-4o-mini`).
+
+**Workflow:**
+
+1. Run the wizard: `anki-llm generate-init`
+2. Follow the interactive steps to select a deck and note type.
+3. A prompt file (e.g., `my-deck-prompt.md`) is created for you.
+4. Review and customize the generated prompt file.
+5. Use the file with the `generate` command:
+   `anki-llm generate "term" -p my-deck-prompt.md`
+
+**Example:**
+
+```bash
+# Start the interactive wizard
+anki-llm generate-init
+
+> ✨ Welcome to anki-llm generate-init!
+>
+> 📚 Fetching your Anki decks...
+>
+> ? Select the target deck: (Use arrow keys)
+> ❯ Japanese::Vocabulary
+>   French::Grammar
+>   Medical::Anatomy
+
+> ✓ Selected deck: Japanese::Vocabulary
+>
+> 📋 Fetching note types used in this deck...
+>
+> ? Select the note type:
+> ❯ Japanese (recognition)
+>
+> ✓ Selected note type: Japanese (recognition)
+>
+> 🗺️  Creating field mapping (LLM JSON keys → Anki fields)...
+> Proposed mapping:
+>   en → English
+>   jp → Japanese
+>   furigana → Furigana
+>   context → Context
+> ? Accept this mapping? (Y/n) › true
+>
+> 🧠 Attempting to generate a smart prompt based on your existing cards...
+> ✓ Smart prompt generated successfully!
+>
+> 📝 Creating prompt file...
+>
+> ✓ Prompt template saved to japanese-vocabulary-prompt.md
+>
+> 🎉 Setup complete!
+>
+> Try it out:
+>   anki-llm generate "example term" -p japanese-vocabulary-prompt.md
+```
+
+**Key features:**
+
+- ✅ **Interactive setup**: No manual configuration needed.
+- ✅ **Smart prompt generation**: Analyzes your existing cards to create a
+  high-quality prompt template that matches your deck's style.
+- ✅ **Lowers barrier to entry**: The easiest way to create a valid prompt file
+  for the `generate` command.
+
+---
+
+### `anki-llm generate <term>`
+
+Generates multiple new Anki card examples for a given term, lets you review and
+select which ones to keep, and adds them directly to your deck.
+
+- `<term>`: The word or phrase to generate cards for (must be in quotes if it
+  contains spaces).
+
+**Required options:**
+
+- `-p, --prompt`: Path to the prompt template file (created with
+  `generate-init`).
+
+**Common options:**
+
+- `-c, --count`: Number of card examples to generate (default: `3`).
+- `-m, --model`: AI model to use (required unless set via `config set model`).
+- `-d, --dry-run`: Display generated cards without starting the interactive
+  selection or import process.
+- `-b, --batch-size`: Number of concurrent API requests (default: `5`).
+- `-r, --retries`: Number of retries for failed requests (default: `3`).
+- `-t, --temperature`: LLM temperature, a value between 0 and 2 that controls
+  creativity (default: `1.0`).
+- `--max-tokens`: Set a maximum number of tokens for the LLM response.
+
+#### **Understanding the Prompt File**
+
+The `--prompt` file is a text or markdown file that contains two parts: YAML
+"frontmatter" for configuration and a prompt body with instructions for the LLM.
+
+**Frontmatter (Required)**
+
+The frontmatter is a YAML block at the top of the file enclosed by `---`.
+
+- `deck`: The target Anki deck name.
+- `noteType`: The name of the Anki note type (model) to use.
+- `fieldMap`: Maps the keys from the LLM's JSON output to your actual Anki field
+  names. The LLM will be instructed to generate JSON with the keys on the left,
+  and `anki-llm` will use them to populate the Anki fields on the right.
+
+**Prompt Body**
+
+The body contains your instructions for the LLM. It must:
+
+1. Include the `{term}` placeholder, which will be replaced by the `<term>` you
+   provide on the command line.
+2. Instruct the LLM to return a single, valid JSON object that uses the keys
+   defined in `fieldMap`.
+3. Include a "one-shot" example showing the exact JSON structure and desired
+   formatting (e.g., HTML for bolding or lists).
+
+**Example Prompt File (`japanese-vocab-prompt.md`)**
+
+````markdown
+---
+deck: Japanese::Vocabulary
+noteType: Japanese (recognition)
+fieldMap:
+  en: English
+  jp: Japanese
+  context: Context
+---
+
+You are an expert assistant who creates one excellent Anki flashcard for a
+Japanese vocabulary word. The term to create a card for is: **{term}**
+
+IMPORTANT: Your output must be a single, valid JSON object and nothing else. All
+field values must be strings.
+
+Follow the structure shown in this example precisely:
+
+```json
+{
+  "en": "How was your <b>today</b>?",
+  "jp": "<b>今日</b>の一日はどうでしたか？",
+  "context": "A common, friendly way to ask about someone's day."
+}
+```
+
+Return only valid JSON matching this structure.
+````
+
+**Examples:**
+
+```bash
+# Generate 3 cards for a term using a prompt file
+anki-llm generate "新しい" -p japanese-vocab-prompt.md
+
+# Generate 5 cards and preview them without importing
+anki-llm generate "ambiguous" -p english-vocab-prompt.md --count 5 --dry-run
+
+# Use a different model for a specific run
+anki-llm generate "maison" -p french-prompt.md -m gemini-2.5-pro
+```
+
+**Key features:**
+
+- ✅ **Interactive selection**: Review and choose which generated cards to keep.
+- ✅ **Duplicate detection**: Automatically flags cards that may already exist
+  in your deck.
+- ✅ **Direct import**: Adds selected cards straight to Anki without
+  intermediate files.
+- ✅ **Highly customizable**: Full control over card generation via the prompt
+  file.
+
+---
 
 ### `anki-llm query <action> [params]`
 
@@ -774,6 +969,126 @@ Key Vocabulary: |
 
 After verifying the results, import the updated file back into Anki to add the
 structured vocabulary explanations to your cards.
+
+## Example use case: Generating new vocabulary cards
+
+Let's create several new example flashcards for the Japanese word `会議`
+(meeting) and add them to our "Japanese::Vocabulary" deck.
+
+### Step 1: Create a prompt template with `generate-init`
+
+First, run the `generate-init` wizard. It will ask you to select your deck and
+note type, then generate a prompt file tailored to your collection.
+
+```bash
+anki-llm generate-init
+```
+
+Follow the interactive prompts. The wizard will analyze existing cards in your
+deck to create a smart prompt that matches their style and formatting. When it's
+done, it will save a new file, for example `japanese-vocabulary-prompt.md`.
+
+The generated file will look something like this:
+
+**File: `japanese-vocabulary-prompt.md`**
+
+````markdown
+---
+deck: Japanese::Vocabulary
+noteType: Japanese (recognition)
+fieldMap:
+  en: English
+  jp: Japanese
+  context: Context
+---
+
+You are an expert Japanese language assistant. Your goal is to create one
+high-quality, contextual Anki flashcard for a vocabulary term. The term to
+create a card for is: **{term}**
+
+IMPORTANT: Your output must be a single, valid JSON object and nothing else. All
+field values must be strings. Use `<b>` tags to highlight the term in the
+example sentence.
+
+Follow the structure shown in this example precisely:
+
+```json
+{
+  "en": "The <b>meeting</b> is scheduled for 3 PM.",
+  "jp": "<b>会議</b>は午後3時に予定されています。",
+  "context": "Used in a formal business context."
+}
+```
+
+Return only valid JSON matching this structure.
+````
+
+You can now edit this file to further refine the instructions for the AI.
+
+### Step 2: Generate cards for your term
+
+Now, use the `generate` command with your new prompt file to create card
+examples for `会議`. Let's ask for 3 examples using `--count 3`.
+
+```bash
+anki-llm generate "会議" -p japanese-vocabulary-prompt.md --count 3 -m gpt-4o-mini
+```
+
+The tool will make three parallel API calls and show progress:
+
+```
+🔄 Generating 3 cards for "会議"...
+
+  ✓ Card 1 generated
+  ✓ Card 2 generated
+  ✗ Card 3 failed: LLM returned invalid JSON, retrying...
+  ✓ Card 3 generated
+
+✓ Generation complete: 3 succeeded, 0 failed
+
+🔍 Checking for duplicates...
+```
+
+### Step 3: Select which cards to import
+
+After generation, an interactive checklist appears in your terminal. You can use
+the arrow keys and spacebar to select the cards you want to add to Anki.
+
+```
+📋 Select cards to add to Anki (use Space to select, Enter to confirm):
+
+❯ ◯ Card 1
+│     English: The *meeting* was very productive.
+│     Japanese: その*会議*は非常に生産的でした。
+│     Context: General business context.
+│
+│ ◯ Card 2
+│     English: I have a *meeting* with a client tomorrow.
+│     Japanese: 明日、クライアントとの*会議*があります。
+│     Context: A common phrase for scheduling.
+│
+│ ◯ Card 3 (⚠️  Duplicate)
+│     English: The *meeting* is scheduled for 3 PM.
+│     Japanese: *会議*は午後3時に予定されています。
+│     Context: Used in a formal business context.
+```
+
+Here, we see three options. Card 3 has been flagged as a potential duplicate
+because a similar card already exists in the deck. Let's select the first two
+cards and press Enter.
+
+### Step 4: Confirm the import
+
+The selected cards are immediately added to your Anki deck.
+
+```
+📥 Adding 2 card(s) to Anki...
+
+✓ Successfully added 2 new note(s) to "Japanese::Vocabulary"
+```
+
+That's it! You have successfully generated, reviewed, and imported multiple
+high-quality, contextual Anki cards from a single command.
 
 ## Development
 
