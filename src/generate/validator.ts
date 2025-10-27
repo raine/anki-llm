@@ -84,9 +84,7 @@ export async function validateCards(
   frontmatter: Frontmatter,
   firstFieldName: string,
 ): Promise<ValidatedCard[]> {
-  const validatedCards: ValidatedCard[] = [];
-
-  for (const card of cards) {
+  const validationPromises = cards.map(async (card) => {
     // Map fields from LLM keys to Anki field names
     const ankiFields = mapFieldsToAnki(card, frontmatter.fieldMap);
 
@@ -97,12 +95,11 @@ export async function validateCards(
       console.warn(
         `Warning: Card is missing first field "${firstFieldName}", skipping duplicate check`,
       );
-      validatedCards.push({
+      return {
         ...card,
         isDuplicate: false,
         ankiFields,
-      });
-      continue;
+      };
     }
 
     // Check if this card already exists
@@ -112,12 +109,12 @@ export async function validateCards(
       frontmatter.deck,
     );
 
-    validatedCards.push({
+    return {
       ...card,
       isDuplicate,
       ankiFields,
-    });
-  }
+    };
+  });
 
-  return validatedCards;
+  return Promise.all(validationPromises);
 }
