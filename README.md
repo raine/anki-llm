@@ -350,13 +350,11 @@ Imports data from a file into an Anki deck, updating existing notes.
 
 ### `anki-llm generate-init [output]`
 
-Creates a prompt template file for the `generate` command by interactively
-querying your Anki collection. This is the best way to get started with card
-generation.
-
-The wizard guides you through selecting a deck and note type, then automatically
-generates a prompt file with the correct frontmatter and a "smart" prompt body
-based on an LLM analysis of your existing cards.
+Interactively creates a prompt template file for the `generate` command. The
+wizard guides you through selecting a deck and note type, then uses an LLM to
+analyze your existing cards and generate a tailored prompt that matches your
+deck's style and formatting. This is the recommended way to get started with
+card generation.
 
 - `[output]`: Optional output file path. If omitted, automatically generates a
   filename from the deck name.
@@ -380,14 +378,6 @@ based on an LLM analysis of your existing cards.
 4. Review and customize the generated prompt file.
 5. Use the file with the `generate` command:
    `anki-llm generate "term" -p my-deck-prompt.md`
-
-**Key features:**
-
-- ✅ **Interactive setup**: No manual configuration needed.
-- ✅ **Smart prompt generation**: Analyzes your existing cards to create a
-  high-quality prompt template that matches your deck's style.
-- ✅ **Lowers barrier to entry**: The easiest way to create a valid prompt file
-  for the `generate` command.
 
 ---
 
