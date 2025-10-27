@@ -2,17 +2,17 @@ import type { Frontmatter } from './utils/parse-frontmatter.js';
 
 export { Frontmatter }; // Re-export for convenience
 
-export interface CardCandidate {
+export type CardCandidate = {
   fields: Record<string, string>;
   rawResponse: string;
-}
+};
 
-export interface ValidatedCard extends CardCandidate {
+export type ValidatedCard = CardCandidate & {
   isDuplicate: boolean;
   ankiFields: Record<string, string>; // Mapped to actual Anki field names
-}
+};
 
-export interface ImportResult {
+export type ImportResult = {
   successes: number;
   failures: number;
-}
+};
