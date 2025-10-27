@@ -14,12 +14,10 @@ import type { ValidatedCard } from './validator.js';
  *
  * @param cards - The validated and selected cards to export
  * @param outputPath - The path to the output file
- * @param firstFieldName - The name of the first field, used in the import hint
  */
 export async function exportCards(
   cards: ValidatedCard[],
   outputPath: string,
-  firstFieldName: string,
 ): Promise<void> {
   console.log(
     chalk.cyan(`\n📦 Exporting ${cards.length} card(s) to ${outputPath}...`),
@@ -46,8 +44,6 @@ export async function exportCards(
   console.log(chalk.green(`\n✓ Successfully exported cards to ${outputPath}`));
   console.log(chalk.gray('\nTo import this file into Anki, run:'));
   console.log(
-    chalk.white(
-      `  anki-llm import "${outputPath}" --deck "Your Deck Name" --key-field "${firstFieldName}"`,
-    ),
+    chalk.white(`  anki-llm import "${outputPath}" --deck "Your Deck Name"`),
   );
 }

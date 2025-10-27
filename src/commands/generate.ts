@@ -130,7 +130,6 @@ const command: Command<GenerateArgs> = {
       console.log(
         chalk.green(`✓ Note type fields: ${noteTypeFields.join(', ')}`),
       );
-      const firstFieldName = noteTypeFields[0];
 
       // Step 3: Resolve configuration
       const userConfig = await readConfigFile();
@@ -212,7 +211,7 @@ const command: Command<GenerateArgs> = {
 
       // Step 8: Export or import to Anki
       if (argv.output) {
-        await exportCards(selectedCards, argv.output, firstFieldName);
+        await exportCards(selectedCards, argv.output);
       } else {
         const importResult = await importCardsToAnki(
           selectedCards,

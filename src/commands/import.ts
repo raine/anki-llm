@@ -28,7 +28,7 @@ interface ImportDeckArgs {
   input: string;
   deck: string;
   'note-type'?: string;
-  'key-field': string;
+  'key-field'?: string;
 }
 
 const command: Command<ImportDeckArgs> = {
@@ -56,9 +56,9 @@ const command: Command<ImportDeckArgs> = {
       })
       .option('key-field', {
         alias: 'k',
-        describe: 'Field name to use for identifying existing notes',
+        describe:
+          'Field name to use for identifying existing notes (auto-detected if not specified)',
         type: 'string',
-        default: 'noteId',
       })
       .example(
         '$0 import export.csv --deck "My Deck" --note-type "Basic" --key-field noteId',
@@ -90,7 +90,6 @@ const command: Command<ImportDeckArgs> = {
       }
 
       console.log(`Note type: ${modelName}`);
-      console.log(`Key field: ${argv['key-field']}`);
       console.log('='.repeat(60));
 
       // Read and Parse file (CSV or YAML)
@@ -103,22 +102,48 @@ const command: Command<ImportDeckArgs> = {
         return;
       }
 
-      // Validate that the key field exists in the parsed data
-      if (!(argv['key-field'] in rows[0])) {
-        throw new Error(
-          `Key field "${argv['key-field']}" not found in input file. Available fields: ${Object.keys(rows[0]).join(', ')}`,
-        );
-      }
-
-      // Get note type fields to validate against
+      // Get note type fields (used for auto-detection and validation)
       console.log(`\nValidating fields against note type '${modelName}'...`);
       const modelFields = await getFieldNamesForModel(modelName);
       console.log(`✓ Note type fields: ${modelFields.join(', ')}`);
 
+      // Auto-detect key field if not specified
+      let keyField = argv['key-field'];
+      const inputFileFields = Object.keys(rows[0]);
+
+      if (!keyField) {
+        console.log('\nAuto-detecting key field...');
+        if (inputFileFields.includes('noteId')) {
+          keyField = 'noteId';
+          console.log(`✓ Found 'noteId' column. Using as key field.`);
+        } else {
+          // Use first field of note type as fallback
+          const firstModelField = modelFields[0];
+          if (firstModelField && inputFileFields.includes(firstModelField)) {
+            keyField = firstModelField;
+            console.log(
+              `✓ Using first field of note type '${modelName}' as key: ${keyField}`,
+            );
+          } else {
+            throw new Error(
+              `Could not auto-detect key field. 'noteId' column not found, and the note type's first field ('${firstModelField}') is not in the input file. Please specify the key field manually with --key-field.`,
+            );
+          }
+        }
+      }
+
+      console.log(`Key field: ${keyField}`);
+      console.log('='.repeat(60));
+
+      // Validate that the key field exists in the parsed data
+      if (!(keyField in rows[0])) {
+        throw new Error(
+          `Key field "${keyField}" not found in input file. Available fields: ${inputFileFields.join(', ')}`,
+        );
+      }
+
       // Check which fields from the file are valid for the note type
-      const fileFields = Object.keys(rows[0]).filter(
-        (f) => f !== argv['key-field'],
-      );
+      const fileFields = Object.keys(rows[0]).filter((f) => f !== keyField);
       const invalidFields = fileFields.filter((f) => !modelFields.includes(f));
 
       if (invalidFields.length > 0) {
@@ -156,10 +181,10 @@ const command: Command<ImportDeckArgs> = {
           let keyValue: string | undefined;
 
           // Special handling for noteId as key
-          if (argv['key-field'] === 'noteId') {
+          if (keyField === 'noteId') {
             keyValue = String(note.noteId);
           } else {
-            const fieldValue = note.fields[argv['key-field']]?.value;
+            const fieldValue = note.fields[keyField]?.value;
             if (fieldValue) {
               keyValue = fieldValue;
             }
@@ -171,7 +196,7 @@ const command: Command<ImportDeckArgs> = {
         }
       }
       console.log(
-        `✓ Found ${keyToNoteIdMap.size} existing notes with a '${argv['key-field']}' field.`,
+        `✓ Found ${keyToNoteIdMap.size} existing notes with a '${keyField}' field.`,
       );
 
       // Partition rows into notes to add and notes to update
@@ -187,7 +212,7 @@ const command: Command<ImportDeckArgs> = {
           fields[field] = String(row[field] ?? '');
         }
 
-        const keyValue = String(row[argv['key-field']]);
+        const keyValue = String(row[keyField]);
         const existingNoteId = keyToNoteIdMap.get(keyValue);
 
         if (existingNoteId) {
@@ -197,8 +222,8 @@ const command: Command<ImportDeckArgs> = {
           });
         } else {
           // For new notes, include the key field if it's not noteId
-          if (argv['key-field'] !== 'noteId') {
-            fields[argv['key-field']] = keyValue;
+          if (keyField !== 'noteId') {
+            fields[keyField] = keyValue;
           }
 
           notesToAdd.push({
