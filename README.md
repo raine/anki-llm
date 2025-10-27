@@ -595,7 +595,7 @@ Given the simple instruction: "Use anki-llm to export my decks in csv"
        anki-llm export <deck> <output>              Export deck to file
        anki-llm process-file <input>                Process notes from file with AI
        anki-llm process-deck <deck>                 Process notes from deck with AI
-       anki-llm import <input> <deck> <model>       Import data to deck
+       anki-llm import <input>                      Import data to deck
        anki-llm query <action> [params]             Query AnkiConnect API
 
 ⏺ Now let me check what decks are available:
