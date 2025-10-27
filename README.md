@@ -408,7 +408,7 @@ select which ones to keep, and adds them directly to your deck.
 #### **Understanding the Prompt File**
 
 The `--prompt` file is a text or markdown file that contains two parts: YAML
-"frontmatter" for configuration and a prompt body with instructions for the LLM.
+frontmatter for configuration and a prompt body with instructions for the LLM.
 
 **Frontmatter (Required)**
 
@@ -486,14 +486,9 @@ anki-llm generate "maison" -p french-prompt.md -m gemini-2.5-pro
 
 **Key features:**
 
-- ✅ **Diverse card generation**: Makes a single API call with full context,
-  allowing the LLM to generate varied cards that highlight different nuances and
-  usage examples.
 - ✅ **Interactive selection**: Review and choose which generated cards to keep.
 - ✅ **Duplicate detection**: Automatically flags cards that may already exist
   in your deck.
-- ✅ **Direct import**: Adds selected cards straight to Anki without
-  intermediate files.
 - ✅ **Highly customizable**: Full control over card generation via the prompt
   file.
 
