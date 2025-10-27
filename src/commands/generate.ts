@@ -2,7 +2,7 @@ import { readFile } from 'fs/promises';
 import chalk from 'chalk';
 import type { Command } from './types.js';
 import { parseFrontmatter } from '../utils/parse-frontmatter.js';
-import { generateCards } from '../generation/processor.js';
+import { generateCards } from '../generate/processor.js';
 import { SupportedModel, parseConfig } from '../config.js';
 import { readConfigFile } from '../config-manager.js';
 import { validateAnkiAssets } from '../generate/anki-validation.js';

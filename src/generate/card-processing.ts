@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 import { sanitizeFields } from '../utils/sanitize-html.js';
-import { validateCards, type ValidatedCard } from '../generation/validator.js';
-import { selectCards, displayCards } from '../generation/selector.js';
-import type { CardCandidate } from '../generation/processor.js';
+import { validateCards, type ValidatedCard } from './validator.js';
+import { selectCards, displayCards } from './selector.js';
+import type { CardCandidate } from './processor.js';
 
 // Assuming a type for frontmatter
 interface PromptFrontmatter {

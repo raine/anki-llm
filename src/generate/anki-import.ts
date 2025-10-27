@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import chalk from 'chalk';
 import { ankiRequest } from '../anki-connect.js';
-import type { ValidatedCard } from '../generation/validator.js';
+import type { ValidatedCard } from './validator.js';
 
 // Assuming a type for frontmatter
 interface PromptFrontmatter {
