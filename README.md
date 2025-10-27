@@ -130,6 +130,14 @@ Config file lives at `~/.config/anki-llm/config.json`.
 
 ## Commands reference
 
+- [`export`](#anki-llm-export-deck-output) - Export deck to file
+- [`process-file`](#anki-llm-process-file-input) - Process notes from file with AI
+- [`process-deck`](#anki-llm-process-deck-deck) - Process notes from deck with AI
+- [`import`](#anki-llm-import-input) - Import data to deck
+- [`generate-init`](#anki-llm-generate-init-output) - Create prompt template for generate
+- [`generate`](#anki-llm-generate-term) - Generate new cards for a term
+- [`query`](#anki-llm-query-action-params) - Query AnkiConnect API
+
 ### `anki-llm export <deck> [output]`
 
 Exports notes from an Anki deck.
