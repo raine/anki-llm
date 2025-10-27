@@ -179,8 +179,9 @@ are updated, while new entries create new notes.
 
 - `-n, --note-type`: The Anki note type to use when creating new notes. If not
   specified, it will be inferred from existing notes in the deck.
-- `-k, --key-field`: Field to use for identifying existing notes (default:
-  `noteId`).
+- `-k, --key-field`: Field to use for identifying existing notes. If not
+  specified, auto-detects using this priority: (1) `noteId` column if present,
+  (2) first field of the note type, (3) error if neither found.
 
 ---
 
@@ -415,6 +416,9 @@ select which ones to keep, and adds them directly to your deck.
 - `-t, --temperature`: LLM temperature, a value between 0 and 2 that controls
   creativity (default: `1.0`).
 - `--max-tokens`: Set a maximum number of tokens for the LLM response.
+- `-o, --output`: Export cards to a file instead of importing to Anki (e.g.,
+  `cards.yaml`, `cards.csv`).
+- `--log`: Enable logging of LLM responses to a file (useful for debugging).
 
 #### **Understanding the Prompt File**
 
@@ -493,6 +497,15 @@ anki-llm generate "ambiguous" -p english-vocab-prompt.md --count 5 --dry-run
 
 # Use a different model for a specific run
 anki-llm generate "maison" -p french-prompt.md -m gemini-2.5-pro
+
+# Generate cards and export to YAML for later review/import
+anki-llm generate "今日" -p japanese-vocab-prompt.md -o cards.yaml
+
+# Import the exported cards when ready
+anki-llm import cards.yaml --deck "Japanese::Vocabulary"
+
+# Enable logging for debugging
+anki-llm generate "新しい" -p prompt.md --log
 ```
 
 **Key features:**
@@ -500,6 +513,8 @@ anki-llm generate "maison" -p french-prompt.md -m gemini-2.5-pro
 - ✅ **Interactive selection**: Review and choose which generated cards to keep.
 - ✅ **Duplicate detection**: Automatically flags cards that may already exist
   in your deck.
+- ✅ **Export option**: Save generated cards to YAML/CSV for review before
+  importing.
 - ✅ **Highly customizable**: Full control over card generation via the prompt
   file.
 
