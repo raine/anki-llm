@@ -7,6 +7,7 @@ import { SupportedModel, parseConfig } from '../config.js';
 import { readConfigFile } from '../config-manager.js';
 import { validateAnkiAssets } from '../generate/anki-validation.js';
 import { processAndSelectCards } from '../generate/card-processing.js';
+import { exportCards } from '../generate/exporter.js';
 import {
   importCardsToAnki,
   reportImportResult,
@@ -21,6 +22,8 @@ interface GenerateArgs {
   retries: number;
   'max-tokens'?: number;
   temperature: number;
+  output?: string;
+  log: boolean;
 }
 
 const command: Command<GenerateArgs> = {
@@ -71,6 +74,18 @@ const command: Command<GenerateArgs> = {
         type: 'number',
         default: 1.0,
       })
+      .option('output', {
+        alias: 'o',
+        describe:
+          'Export cards to a file instead of importing to Anki (e.g., cards.yaml, cards.csv)',
+        type: 'string',
+      })
+      .option('log', {
+        describe:
+          'Enable logging of LLM responses to a file (useful for debugging)',
+        type: 'boolean',
+        default: false,
+      })
       .example('$0 generate "今日" -p prompt.md', 'Generate cards for a term')
       .example(
         '$0 generate "hello" -p prompt.md --count 5',
@@ -79,6 +94,14 @@ const command: Command<GenerateArgs> = {
       .example(
         '$0 generate "test" -p prompt.md --dry-run',
         'Preview without importing',
+      )
+      .example(
+        '$0 generate "今日" -p prompt.md -o cards.yaml',
+        'Export cards to YAML',
+      )
+      .example(
+        '$0 generate "今日" -p prompt.md --log',
+        'Generate with response logging',
       );
   },
 
@@ -107,6 +130,7 @@ const command: Command<GenerateArgs> = {
       console.log(
         chalk.green(`✓ Note type fields: ${noteTypeFields.join(', ')}`),
       );
+      const firstFieldName = noteTypeFields[0];
 
       // Step 3: Resolve configuration
       const userConfig = await readConfigFile();
@@ -133,13 +157,25 @@ const command: Command<GenerateArgs> = {
         requireResultTag: false, // Not used by generate command
       });
 
-      // Step 4: Generate cards
+      // Step 4: Setup logging if requested
+      let logFilePath: string | undefined;
+      if (argv.log) {
+        const timestamp = new Date()
+          .toISOString()
+          .replace(/[:.]/g, '-')
+          .replace('T', '_')
+          .substring(0, 19);
+        logFilePath = `generate-${timestamp}.log`;
+      }
+
+      // Step 5: Generate cards
       const { successful, failed } = await generateCards(
         argv.term,
         body,
         argv.count,
         appConfig,
         frontmatter.fieldMap,
+        logFilePath,
       );
 
       // Handle complete failure
@@ -154,7 +190,7 @@ const command: Command<GenerateArgs> = {
         process.exit(1);
       }
 
-      // Step 5: Process and select cards
+      // Step 6: Process and select cards
       const selectedCards = await processAndSelectCards(
         successful,
         frontmatter,
@@ -162,9 +198,11 @@ const command: Command<GenerateArgs> = {
         argv['dry-run'],
       );
 
-      // Step 6: Handle dry-run or no selection
+      // Step 7: Handle dry-run or no selection
       if (argv['dry-run']) {
-        console.log(chalk.cyan('\nDry run complete. No cards were imported.'));
+        console.log(
+          chalk.cyan('\nDry run complete. No cards were imported or exported.'),
+        );
         process.exit(0);
       }
       if (selectedCards.length === 0) {
@@ -172,12 +210,19 @@ const command: Command<GenerateArgs> = {
         process.exit(0);
       }
 
-      // Step 7: Import to Anki and report
-      const importResult = await importCardsToAnki(selectedCards, frontmatter);
-      reportImportResult(importResult, frontmatter.deck);
+      // Step 8: Export or import to Anki
+      if (argv.output) {
+        await exportCards(selectedCards, argv.output, firstFieldName);
+      } else {
+        const importResult = await importCardsToAnki(
+          selectedCards,
+          frontmatter,
+        );
+        reportImportResult(importResult, frontmatter.deck);
 
-      if (importResult.failures > 0) {
-        process.exit(1);
+        if (importResult.failures > 0) {
+          process.exit(1);
+        }
       }
     } catch (error) {
       if (error instanceof Error) {

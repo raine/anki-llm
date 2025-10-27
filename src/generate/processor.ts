@@ -2,6 +2,7 @@ import pRetry from 'p-retry';
 import OpenAI from 'openai';
 import chalk from 'chalk';
 import { z } from 'zod';
+import { writeFile, appendFile } from 'fs/promises';
 import { parseLlmJson } from '../utils/parse-llm-json.js';
 import { fillTemplate } from '../batch-processing/util.js';
 import type { Config } from '../config.js';
@@ -17,6 +18,26 @@ export interface GenerationResult {
 }
 
 /**
+ * Logs a message to the specified log file.
+ */
+async function logToFile(
+  logFilePath: string | undefined,
+  message: string,
+): Promise<void> {
+  if (!logFilePath) return;
+
+  try {
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] ${message}\n`;
+    await appendFile(logFilePath, logEntry, 'utf-8');
+  } catch (error) {
+    // Don't let log failures crash the program
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`Failed to write to log file: ${errorMsg}`));
+  }
+}
+
+/**
  * Generates multiple flashcard candidates by making a single LLM API call.
  *
  * This processor is lightweight and purpose-built for the generate command,
@@ -27,6 +48,7 @@ export interface GenerationResult {
  * @param count - Number of cards to generate
  * @param config - Application configuration
  * @param fieldMap - Mapping from LLM JSON keys to expected field names
+ * @param logFilePath - Optional path to log file for LLM responses
  * @returns Results with successful cards and failed attempts
  */
 export async function generateCards(
@@ -35,6 +57,7 @@ export async function generateCards(
   count: number,
   config: Config,
   fieldMap: Record<string, string>,
+  logFilePath?: string,
 ): Promise<GenerationResult> {
   // 1. Validate template contract
   if (
@@ -58,11 +81,27 @@ export async function generateCards(
   );
   const CardArraySchema = z.array(CardObjectSchema);
 
-  // 3. Fill the template with both term and count
+  // 3. Initialize log file if needed
+  if (logFilePath) {
+    await writeFile(logFilePath, '', 'utf-8');
+    await logToFile(logFilePath, '='.repeat(60));
+    await logToFile(logFilePath, `Generate Session Started`);
+    await logToFile(logFilePath, `Term: ${term}`);
+    await logToFile(logFilePath, `Count: ${count}`);
+    await logToFile(logFilePath, '='.repeat(60));
+  }
+
+  // 4. Fill the template with both term and count
   const filledPrompt = fillTemplate(promptTemplate, {
     term,
     count: String(count),
   });
+
+  if (logFilePath) {
+    await logToFile(logFilePath, '\n--- PROMPT ---');
+    await logToFile(logFilePath, filledPrompt);
+    await logToFile(logFilePath, '--- END PROMPT ---\n');
+  }
 
   const client = new OpenAI({
     apiKey: config.apiKey,
@@ -75,8 +114,12 @@ export async function generateCards(
     ),
   );
 
+  if (logFilePath) {
+    console.log(chalk.gray(`📝 Logging to: ${logFilePath}`));
+  }
+
   try {
-    // 4. Perform a single, retry-able API call
+    // 5. Perform a single, retry-able API call
     const { cards, rawResponse } = await pRetry(
       async () => {
         const response = await client.chat.completions.create({
@@ -87,6 +130,14 @@ export async function generateCards(
         });
 
         const rawContent = response.choices[0]?.message?.content?.trim() || '';
+
+        // Log the raw response (even if it's empty or will fail parsing)
+        if (logFilePath) {
+          await logToFile(logFilePath, '\n--- RAW RESPONSE ---');
+          await logToFile(logFilePath, rawContent || '(empty response)');
+          await logToFile(logFilePath, '--- END RAW RESPONSE ---\n');
+        }
+
         if (!rawContent) {
           throw new Error('Empty response from LLM');
         }
@@ -107,14 +158,30 @@ export async function generateCards(
         retries: config.retries,
         minTimeout: 1000,
         factor: 2,
-        onFailedAttempt: (error) => {
-          const errorMsg =
-            error instanceof Error ? error.message : 'Unknown error';
+        onFailedAttempt: async ({ error, attemptNumber, retriesLeft }) => {
+          const errorMsg = error.message || String(error);
           console.warn(
             chalk.yellow(
-              `  ⚠️  Attempt ${error.attemptNumber} failed. ${error.retriesLeft} retries left. Reason: ${errorMsg}`,
+              `  ⚠️  Attempt ${attemptNumber} failed. ${retriesLeft} retries left. Reason: ${errorMsg}`,
             ),
           );
+
+          // Log to file
+          if (logFilePath) {
+            await logToFile(
+              logFilePath,
+              `\n--- RETRY ATTEMPT ${attemptNumber} FAILED ---`,
+            );
+            await logToFile(logFilePath, `Retries left: ${retriesLeft}`);
+            await logToFile(logFilePath, `Error: ${errorMsg}`);
+            if (error.stack) {
+              await logToFile(logFilePath, `Stack: ${error.stack}`);
+            }
+            await logToFile(
+              logFilePath,
+              `--- END RETRY ATTEMPT ${attemptNumber} ---\n`,
+            );
+          }
         },
       },
     );
@@ -135,14 +202,32 @@ export async function generateCards(
 
     console.log(
       chalk.cyan(
-        `\n✓ Generation complete: ${successful.length} succeeded, 0 failed\n`,
+        `✓ Generation complete: ${successful.length} succeeded, 0 failed\n`,
       ),
     );
 
     return { successful, failed: [] };
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
+    let err: Error;
+    if (error instanceof Error) {
+      err = error;
+    } else if (typeof error === 'object' && error !== null) {
+      // Try to extract useful info from objects (like API errors)
+      err = new Error(JSON.stringify(error, null, 2));
+    } else {
+      err = new Error(String(error));
+    }
     console.error(chalk.red(`\n✗ Generation failed: ${err.message}`));
+
+    // Log the error
+    if (logFilePath) {
+      await logToFile(logFilePath, '\n--- ERROR ---');
+      await logToFile(logFilePath, err.message);
+      if (err.stack) {
+        await logToFile(logFilePath, err.stack);
+      }
+      await logToFile(logFilePath, '--- END ERROR ---\n');
+    }
 
     return {
       successful: [],

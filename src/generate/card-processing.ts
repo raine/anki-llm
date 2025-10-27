@@ -29,7 +29,7 @@ export async function processAndSelectCards(
   }));
 
   // 2. Validate (check for duplicates)
-  console.log(chalk.cyan('\n🔍 Checking for duplicates...'));
+  console.log(chalk.cyan('🔍 Checking for duplicates...'));
   const firstFieldName = noteTypeFields[0];
   const validatedCards = await validateCards(
     sanitizedCards,
