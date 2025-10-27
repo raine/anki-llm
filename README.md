@@ -131,9 +131,9 @@ Config file lives at `~/.config/anki-llm/config.json`.
 ## Commands reference
 
 - [`export`](#anki-llm-export-deck-output) - Export deck to file
+- [`import`](#anki-llm-import-input) - Import data to deck
 - [`process-file`](#anki-llm-process-file-input) - Process notes from file with AI
 - [`process-deck`](#anki-llm-process-deck-deck) - Process notes from deck with AI
-- [`import`](#anki-llm-import-input) - Import data to deck
 - [`generate-init`](#anki-llm-generate-init-output) - Create prompt template for generate
 - [`generate`](#anki-llm-generate-term) - Generate new cards for a term
 - [`query`](#anki-llm-query-action-params) - Query AnkiConnect API
@@ -163,6 +163,27 @@ anki-llm export "Japanese Core 1k" .csv
 # Specify custom filename
 anki-llm export "Japanese Core 1k" my-custom-name.yaml
 ```
+
+### `anki-llm import <input>`
+
+Imports data from a file into an Anki deck. Existing notes (matched by key field)
+are updated, while new entries create new notes.
+
+- `<input>`: Path to the data file to import (CSV or YAML).
+
+**Required options:**
+
+- `-d, --deck`: The name of the target Anki deck.
+
+**Common options:**
+
+- `-m, --model`: The name of the Anki note type/model to use when creating new
+  notes. If not specified, the model will be inferred from existing notes in the
+  deck.
+- `-k, --key-field`: Field to use for identifying existing notes (default:
+  `noteId`).
+
+---
 
 ### `anki-llm process-file <input>`
 
@@ -336,23 +357,6 @@ Both `process-file` and `process-deck` support two response formats:
   Both fields will be updated. Only fields present in the JSON are updated
   (partial updates are allowed). If the response is not valid JSON, the
   operation will fail and retry.
-
-### `anki-llm import <input>`
-
-Imports data from a file into an Anki deck, updating existing notes.
-
-- `<input>`: Path to the data file to import (CSV or YAML).
-
-**Required options:**
-
-- `-d, --deck`: The name of the target Anki deck.
-
-**Common options:**
-
-- `-m, --model`: The name of the Anki note type/model to use. If not specified,
-  the model will be inferred from existing notes in the deck.
-- `-k, --key-field`: Field to use for identifying existing notes (default:
-  `noteId`).
 
 ---
 
