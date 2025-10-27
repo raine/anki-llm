@@ -1,19 +1,16 @@
 import { readFile } from 'fs/promises';
 import chalk from 'chalk';
-import { z } from 'zod';
 import type { Command } from './types.js';
 import { parseFrontmatter } from '../utils/parse-frontmatter.js';
-import { sanitizeFields } from '../utils/sanitize-html.js';
+import { generateCards } from '../generation/processor.js';
+import { SupportedModel } from '../config.js';
+import { resolveAppConfig, getGenerationConfig } from '../generate/config.js';
+import { validateAnkiAssets } from '../generate/anki-validation.js';
+import { processAndSelectCards } from '../generate/card-processing.js';
 import {
-  generateCards,
-  type GenerationConfig,
-} from '../generation/processor.js';
-import { validateCards } from '../generation/validator.js';
-import { selectCards, displayCards } from '../generation/selector.js';
-import { ankiRequest } from '../anki-connect.js';
-import { getFieldNamesForModel } from '../anki-schema.js';
-import { parseConfig, SupportedModel } from '../config.js';
-import { readConfigFile } from '../config-manager.js';
+  importCardsToAnki,
+  reportImportResult,
+} from '../generate/anki-import.js';
 
 interface GenerateArgs {
   term: string;
@@ -111,116 +108,18 @@ const command: Command<GenerateArgs> = {
       console.log(chalk.green(`✓ Loaded prompt for deck: ${frontmatter.deck}`));
       console.log(chalk.green(`✓ Note type: ${frontmatter.noteType}`));
 
-      // Step 2: Validate deck and note type existence
+      // Step 2: Validate Anki assets
       console.log(chalk.cyan('\n🔍 Validating Anki configuration...'));
-
-      // Check if deck exists
-      const deckNames = await ankiRequest('deckNames', z.array(z.string()), {});
-      if (!deckNames.includes(frontmatter.deck)) {
-        console.error(
-          chalk.red(`❌ Deck "${frontmatter.deck}" does not exist in Anki.`),
-        );
-        console.log(
-          chalk.yellow('\nAvailable decks:\n  ' + deckNames.join('\n  ')),
-        );
-        console.log(
-          chalk.gray(
-            '\nCreate the deck in Anki first, or update the prompt file.',
-          ),
-        );
-        process.exit(1);
-      }
-
-      // Check if note type exists and get field names
-      let noteTypeFields: string[];
-      try {
-        noteTypeFields = await getFieldNamesForModel(frontmatter.noteType);
-      } catch {
-        console.error(
-          chalk.red(`❌ Note type "${frontmatter.noteType}" does not exist.`),
-        );
-        const modelNames = await ankiRequest(
-          'modelNames',
-          z.array(z.string()),
-          {},
-        );
-        console.log(
-          chalk.yellow('\nAvailable note types:\n  ' + modelNames.join('\n  ')),
-        );
-        console.log(chalk.gray('\nUpdate the note type in your prompt file.'));
-        process.exit(1);
-      }
-
+      const { noteTypeFields } = await validateAnkiAssets(frontmatter);
       console.log(
         chalk.green(`✓ Note type fields: ${noteTypeFields.join(', ')}`),
       );
 
-      // Validate that fieldMap target fields exist in the note type
-      const mappedFields = Object.values(frontmatter.fieldMap);
-      const invalidFields = mappedFields.filter(
-        (f) => !noteTypeFields.includes(f),
-      );
+      // Step 3: Resolve configuration
+      const appConfig = await resolveAppConfig(argv);
+      const generationConfig = getGenerationConfig(appConfig);
 
-      if (invalidFields.length > 0) {
-        console.error(
-          chalk.red(
-            `❌ The following fields in your fieldMap do not exist in note type "${frontmatter.noteType}":`,
-          ),
-        );
-        console.log(chalk.red('  ' + invalidFields.join(', ')));
-        console.log(
-          chalk.yellow(
-            '\nUpdate the fieldMap in your prompt file to match the note type fields.',
-          ),
-        );
-        process.exit(1);
-      }
-
-      // Determine model (CLI argument overrides stored config)
-      const userConfig = await readConfigFile();
-      const storedModel =
-        typeof userConfig.model === 'string' ? userConfig.model : undefined;
-      const model = argv.model ?? storedModel;
-
-      if (!model) {
-        console.log(
-          chalk.red(
-            '✗ Error: A model must be specified via the --model flag or set in the configuration.',
-          ),
-        );
-        console.log(
-          chalk.dim(
-            '\nTo set a default model, run: anki-llm config set model <model-name>',
-          ),
-        );
-        console.log(
-          chalk.dim(`Available models: ${SupportedModel.options.join(', ')}`),
-        );
-        process.exit(1);
-      }
-
-      // Parse config (for API keys and model validation)
-      const config = parseConfig({
-        model,
-        batchSize: argv['batch-size'],
-        maxTokens: argv['max-tokens'],
-        temperature: argv.temperature,
-        retries: argv.retries,
-        dryRun: argv['dry-run'],
-        requireResultTag: false, // Not used for generation
-      });
-
-      // Step 3: Generate cards
-      const generationConfig: GenerationConfig = {
-        apiKey: config.apiKey,
-        apiBaseUrl: config.apiBaseUrl,
-        model: config.model,
-        temperature: config.temperature,
-        maxTokens: config.maxTokens,
-        retries: config.retries,
-        batchSize: config.batchSize,
-      };
-
+      // Step 4: Generate cards
       const { successful, failed } = await generateCards(
         argv.term,
         body,
@@ -229,7 +128,7 @@ const command: Command<GenerateArgs> = {
         frontmatter.fieldMap,
       );
 
-      // Step 4: Handle complete failure
+      // Handle complete failure
       if (successful.length === 0) {
         console.error(
           chalk.red(`\n❌ All ${argv.count} generation attempts failed.`),
@@ -241,84 +140,30 @@ const command: Command<GenerateArgs> = {
         process.exit(1);
       }
 
-      // Step 5: Sanitize HTML in all generated cards
-      const sanitizedCards = successful.map((card) => ({
-        ...card,
-        fields: sanitizeFields(card.fields),
-      }));
-
-      // Step 6: Validate cards and check for duplicates
-      console.log(chalk.cyan('\n🔍 Checking for duplicates...'));
-      const firstFieldName = noteTypeFields[0];
-      const validatedCards = await validateCards(
-        sanitizedCards,
+      // Step 5: Process and select cards
+      const selectedCards = await processAndSelectCards(
+        successful,
         frontmatter,
-        firstFieldName,
+        noteTypeFields,
+        argv['dry-run'],
       );
 
-      const duplicateCount = validatedCards.filter((c) => c.isDuplicate).length;
-      if (duplicateCount > 0) {
-        console.log(
-          chalk.yellow(
-            `⚠️  Found ${duplicateCount} duplicate(s) (already in Anki)`,
-          ),
-        );
-      }
-
-      // Step 7: Dry run mode - display and exit
+      // Step 6: Handle dry-run or no selection
       if (argv['dry-run']) {
-        displayCards(validatedCards);
+        console.log(chalk.cyan('\nDry run complete. No cards were imported.'));
         process.exit(0);
       }
-
-      // Step 8: Interactive selection
-      const selectedIndices = await selectCards(validatedCards);
-      const selectedCards = selectedIndices.map((i) => validatedCards[i]);
-
       if (selectedCards.length === 0) {
         console.log(chalk.yellow('\n⚠️  No cards selected. Exiting.'));
         process.exit(0);
       }
 
-      // Step 9: Import to Anki
-      console.log(
-        chalk.cyan(`\n📥 Adding ${selectedCards.length} card(s) to Anki...`),
-      );
+      // Step 7: Import to Anki and report
+      const importResult = await importCardsToAnki(selectedCards, frontmatter);
+      reportImportResult(importResult, frontmatter.deck);
 
-      const notesToAdd = selectedCards.map((card) => ({
-        deckName: frontmatter.deck,
-        modelName: frontmatter.noteType,
-        fields: card.ankiFields,
-        tags: ['anki-llm-generate'],
-      }));
-
-      const addResult = await ankiRequest(
-        'addNotes',
-        z.array(z.number().nullable()),
-        { notes: notesToAdd },
-      );
-
-      const successes = addResult.filter((r) => r !== null).length;
-      const failures = addResult.length - successes;
-
-      // Step 10: Report outcome
-      if (failures > 0) {
-        console.log(
-          chalk.yellow(`\n⚠️  Added ${successes} card(s), ${failures} failed`),
-        );
-        console.log(
-          chalk.gray(
-            'Some cards may have been duplicates or had invalid field values.',
-          ),
-        );
+      if (importResult.failures > 0) {
         process.exit(1);
-      } else {
-        console.log(
-          chalk.green(
-            `\n✓ Successfully added ${successes} new note(s) to "${frontmatter.deck}"`,
-          ),
-        );
-        process.exit(0);
       }
     } catch (error) {
       if (error instanceof Error) {
