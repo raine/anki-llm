@@ -202,6 +202,7 @@ command and it will skip already-processed notes.
 - **Either** `--field` **or** `--json` (mutually exclusive):
   - `--field <name>`: Update a single field with the AI response.
   - `--json`: Expect JSON response and merge all fields into the note.
+  - See [Understanding `--field` vs `--json` modes](#understanding---field-vs---json-modes) for more details.
 
 **Common options:**
 
