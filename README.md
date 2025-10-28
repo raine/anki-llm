@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="meta/icon-dark.svg">
-    <img src="meta/icon.svg" alt="anki-llm icon" width="300">
+    <source media="(prefers-color-scheme: dark)" srcset="meta/logo-dark.svg">
+    <img src="meta/logo.svg" alt="anki-llm icon" width="300">
   </picture>
 </p>
 
