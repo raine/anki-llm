@@ -27,18 +27,18 @@
 ## Why?
 
 Manually editing hundreds or thousands of Anki cards is tedious, error-prone,
-and time-consuming. Whether you're fixing translations, generating example
-sentences, or adding phonetic readings, doing it one-by-one is a non-starter.
+and time-consuming. Whether it's verifying translations, adding grammar notes, or
+generating contextual examples, doing it by hand doesn't scale.
 
 `anki-llm` provides a bridge between your Anki collection and modern AI models.
 It offers two workflows:
 
 **File-based workflow** (3 steps, with resume support):
 
-1.  Export: Pull notes from a specified Anki deck into a CSV or YAML.
-2.  Process: Run an AI model (e.g., GPT-4o mini) on a specific field in every
-    note, using a prompt template.
-3.  Import: Update the original notes by importing the CSV or YAML back to Anki.
+1. Export: Pull notes from a specified Anki deck into a CSV or YAML.
+2. Process: Run an AI model (e.g., GPT-4o mini) on a specific field in every
+   note, using a prompt template.
+3. Import: Update the original notes by importing the CSV or YAML back to Anki.
 
 **Direct workflow** (1 step):
 
