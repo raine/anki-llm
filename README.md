@@ -884,6 +884,10 @@ Sentence flashcards often benefit from a focused vocabulary breakdown. You can
 use `anki-llm` to populate a dedicated `Key Vocabulary` field with structured
 HTML that spotlights the most important words in each sentence.
 
+<p align="center">
+  <img src="meta/key_vocabulary3.webp" alt="Key Vocabulary field example in Anki" width="600">
+</p>
+
 ### Prompt template
 
 Create a prompt that instructs the model to reason about the sentence, pick the
