@@ -1,6 +1,6 @@
 # anki-llm
 
-A command-line interface for bulk-processing Anki flashcards with LLMs.
+A CLI toolkit for bulk-processing and generating Anki flashcards with LLMs.
 
 ## Example workflows
 
