@@ -332,7 +332,7 @@ anki-llm process-deck "Spanish" --field Translation -p prompt.txt
 
 #### **Understanding `--field` vs `--json` modes**
 
-Both `process-file` and `process-deck` support two response formats:
+Both `process-file` and `process-deck` support two response formats for the LLM:
 
 - **`--field` mode** (single field update): The LLM response is saved to the
   specified field.
