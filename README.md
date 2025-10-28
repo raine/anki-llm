@@ -27,32 +27,30 @@
 ## Why?
 
 Manually editing hundreds or thousands of Anki cards is tedious, error-prone,
-and time-consuming. Whether it's verifying translations, adding grammar notes, or
-generating contextual examples, doing it by hand doesn't scale.
+and time-consuming. Whether it's verifying translations, adding grammar notes,
+or generating contextual examples, doing it by hand doesn't scale.
 
 `anki-llm` provides a bridge between your Anki collection and modern AI models.
-It offers two workflows:
 
-**File-based workflow** (3 steps, with resume support):
+**Batch processing**
 
-1. Export: Pull notes from a specified Anki deck into a CSV or YAML.
-2. Process: Run an AI model (e.g., GPT-4o mini) on a specific field in every
-   note, using a prompt template.
-3. Import: Update the original notes by importing the CSV or YAML back to Anki.
+- **File-based**: _Export_ deck to file, _process_ with LLM, _import_ results
+  back to Anki.
+- **Direct**: Process and update notes in-place.
 
-**Direct workflow** (1 step):
+**Card generation**
 
-- Process notes directly from your deck and update them in-place with a single
-  command.
+Generate multiple contextual flashcard examples for a term, review
+interactively, and add selected cards to your deck.
 
 ## Features
 
-- **Two flexible workflows**: File-based (with resume) or direct-to-Anki (one
+- **Batch processing workflows**: File-based (with resume) or direct-to-Anki (one
   command).
 - **Export** Anki decks to clean CSV or YAML files.
-- **Batch process** note fields using any OpenAI-compatible API.
-- **Custom prompts**: Use flexible template files to define exactly how the AI
-  should process your data.
+- **Batch process** note fields using OpenAI or Google Gemini models.
+- **Custom prompts**: Use flexible template files to define exactly how the LLM
+  should process your cards.
 - **Concurrent processing**: Make multiple parallel API requests to speed up
   large jobs.
 - **Resilient**: Automatically retries failed requests and saves progress
@@ -61,8 +59,6 @@ It offers two workflows:
   (file mode).
 - **Direct updates**: Process and update Anki notes in-place without
   intermediate files (direct mode).
-- **Smart updates**: Imports data back into Anki by updating existing notes, not
-  creating duplicates.
 
 ## Installation
 
@@ -103,7 +99,8 @@ The tool supports two API providers:
 | `gemini-2.5-flash-lite`  | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-lite) |
 | `gemini-2.5-pro`         | $1.25/M | $10.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)        |
 
-Pricing is per million tokens (M).
+Pricing is per million tokens (M). Check the latest prices on the provider's
+website to be sure.
 
 ### Setting up API Keys
 
@@ -522,6 +519,8 @@ anki-llm import cards.yaml --deck "Japanese::Vocabulary"
 anki-llm generate "新しい" -p prompt.md --log
 ```
 
+<img src="meta/generate.webp" alt="Interactive card selection in terminal" width="450">
+
 **Key features:**
 
 - ✅ **Interactive selection**: Review and choose which generated cards to keep.
@@ -584,87 +583,14 @@ anki-llm query version
 anki-llm query docs
 ```
 
-**Real-world AI agent example:**
+**Example: Sampling random cards from decks**
 
-AI agents can use `anki-llm query` to discover information about your collection
-and then take action. For example, an agent tasked with "export all my decks to
-CSV" can first run `anki-llm query deckNames` to find all decks, then loop
-through the results to run the `export` command for each one.
-
-<details>
-<summary>Click to see a full conversation log of Claude Code autonomously exporting all Anki decks.</summary>
-
-Given the simple instruction: "Use anki-llm to export my decks in csv"
-
-```
-> Use anki-llm to export my decks in csv
-
-⏺ I'll help you export your Anki decks to CSV. Let me first check
-  the available commands:
-
-⏺ Bash(anki-llm --help)
-  ⎿  anki-llm <command>
-
-     Commands:
-       anki-llm export <deck> <output>              Export deck to file
-       anki-llm process-file <input>                Process notes from file with AI
-       anki-llm process-deck <deck>                 Process notes from deck with AI
-       anki-llm import <input>                      Import data to deck
-       anki-llm query <action> [params]             Query AnkiConnect API
-
-⏺ Now let me check what decks are available:
-
-⏺ Bash(anki-llm query deckNames)
-  ⎿  [
-       "_",
-       "_::Genki I",
-       "_::Genki II",
-       "_::Japanese Counters",
-       "Glossika-ENJA [0001-1000]",
-       "Japanese Speaking Practice",
-       ... 7 more decks
-     ]
-
-⏺ I can see you have several Anki decks. I'll export each one to CSV.
-
-⏺ Bash(anki-llm export "_::Genki I" "genki_i.csv")
-  ⎿  ✓ Found 342 notes in '_::Genki I'.
-     ✓ Successfully exported 342 notes to genki_i.csv
-
-⏺ Bash(anki-llm export "_::Genki II" "genki_ii.csv")
-  ⎿  ✓ Found 315 notes in '_::Genki II'.
-     ✓ Successfully exported 315 notes to genki_ii.csv
-
-     ... exports continue for remaining 9 decks ...
-
-⏺ Bash(ls -lh *.csv)
-     -rw-r--r--  170K  genki_i.csv
-     -rw-r--r--  138K  genki_ii.csv
-     -rw-r--r--   95K  japanese_counters.csv
-     -rw-r--r--  394K  glossika_enja_0001_1000.csv
-     ... 7 more files
-
-⏺ Successfully exported all your Anki decks to CSV!
-
-  Summary: 12 files, ~4.6MB total
-  - genki_i.csv (170K) - 342 notes
-  - genki_ii.csv (138K) - 315 notes
-  - glossika_enja_0001_1000.csv (394K) - 1,000 notes
-  ... and 8 more decks
-```
-
-The AI agent used `query deckNames` to discover available decks, then
-automatically generated appropriate filenames and exported all 12 decks without
-further human intervention.
-
-</details>
-
-**Another example: Sampling random cards from decks**
-
-Here's another example of Claude Code using the `query` command to sample random
-cards from multiple decks. Given the instruction: "Use anki-llm to pick random
-cards from Glossika decks, and print the English and Japanese fields for each,
-pick 10 cards from each deck, and save to a markdown file"
+AI agents can use `anki-llm query` to discover information about your
+collection and then take action. Here's an example of Claude Code using the
+`query` command to sample random cards from multiple decks. Given the
+instruction: "Use anki-llm to pick random cards from Glossika decks, and print
+the English and Japanese fields for each, pick 10 cards from each deck, and
+save to a markdown file"
 
 [Full conversation](https://gist.github.com/raine/b8d42275a188005bd2dadc34b8e05824)
 
@@ -682,7 +608,7 @@ scripts for data analysis and extraction tasks autonomously.
 See [ANKI_CONNECT.md](./ANKI_CONNECT.md) for the complete list of available
 actions and their parameters.
 
-## Example use case: Fixing 1000 japanese translations
+## Example use case: Fixing 1000 Japanese translations
 
 Let's say you have an Anki deck named "Japanese Core 1k" with 1000 notes. Each
 note has a `Japanese` field with a sentence and a `Translation` field with an
