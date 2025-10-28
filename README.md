@@ -8,7 +8,7 @@ A CLI toolkit for bulk-processing and generating Anki flashcards with LLMs.
   [Read more](#example-use-case-fixing-1000-japanese-translations)
 - **Add a Key Vocabulary field** – Create a per-note field highlighting 1–3 key
   words with readings, meanings, and HTML context.
-  [Prompt + steps](#example-use-case-adding-a-key-vocabulary-field)
+  [Read more](#example-use-case-adding-a-key-vocabulary-field)
 - **Generate new cards** – Interactively create multiple contextual flashcards
   for a vocabulary word or concept from a single command.
   [Read more](#example-use-case-generating-new-vocabulary-cards)
