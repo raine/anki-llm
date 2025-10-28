@@ -338,14 +338,14 @@ Both `process-file` and `process-deck` support two response formats:
   specified field.
 
   ```bash
-  anki-llm process-file notes.yaml -o out.yaml --field Translation -p prompt.txt
+  anki-llm process-file notes.yaml -o out.yaml -p prompt.txt --field Translation
   ```
 
 - **`--json` mode** (multi-field merge): The LLM must return valid JSON. All
   fields in the JSON are merged into your note.
 
   ```bash
-  anki-llm process-file notes.yaml -o out.yaml --json -p prompt.txt
+  anki-llm process-file notes.yaml -o out.yaml -p prompt.txt --json
   ```
 
   Example: If your note has `Japanese` and `Grammar` fields, and the LLM
