@@ -59,7 +59,7 @@ export function reportImportResult(
   } else if (result.successes > 0) {
     console.log(
       chalk.green(
-        `\n✓ Successfully added ${result.successes} new note(s) to "${deckName}"`,
+        `✓ Successfully added ${result.successes} new note(s) to "${deckName}"`,
       ),
     );
   } else {
