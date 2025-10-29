@@ -8,15 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@inquirer/prompts':
+        specifier: ^7.3.2
+        version: 7.9.0(@types/node@24.9.1)
       chalk:
         specifier: ^5.6.2
         version: 5.6.2
       cli-progress:
         specifier: ^3.12.0
         version: 3.12.0
-      inquirer:
-        specifier: ^12.10.0
-        version: 12.10.0(@types/node@24.9.1)
       js-yaml:
         specifier: ^4.1.0
         version: 4.1.0
@@ -51,9 +51,6 @@ importers:
       '@types/cli-progress':
         specifier: ^3.11.6
         version: 3.11.6
-      '@types/inquirer':
-        specifier: ^9.0.9
-        version: 9.0.9
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -580,9 +577,6 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
-  '@types/inquirer@9.0.9':
-    resolution: {integrity: sha512-/mWx5136gts2Z2e5izdoRCo46lPp5TMs9R15GTSsgg/XnZyxDWVqoVU3R9lWnccKpqwsJLvRoxbCjoJtZB7DSw==}
-
   '@types/js-yaml@4.0.9':
     resolution: {integrity: sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg==}
 
@@ -597,9 +591,6 @@ packages:
 
   '@types/sanitize-html@2.16.0':
     resolution: {integrity: sha512-l6rX1MUXje5ztPT0cAFtUayXF06DqPhRyfVXareEN5gGCFaP/iwsxIyKODr9XDhfxPpN6vXUFNfo5kZMXCxBtw==}
-
-  '@types/through@0.0.33':
-    resolution: {integrity: sha512-HsJ+z3QuETzP3cswwtzt2vEIiHBk/dCcHGhbmG5X3ecnwFD/lPrMpliGXxSCg03L9AhrdwA4Oz/qfspkDW+xGQ==}
 
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==}
@@ -1043,15 +1034,6 @@ packages:
     resolution: {integrity: sha512-JmXMZ6wuvDmLiHEml9ykzqO6lwFbof0GG4IkcGaENdCRDDmMVnny7s5HsIgHCbaq0w2MyPhDqkhTUgS2LU2PHA==}
     engines: {node: '>=0.8.19'}
 
-  inquirer@12.10.0:
-    resolution: {integrity: sha512-K/epfEnDBZj2Q3NMDcgXWZye3nhSPeoJnOh8lcKWrldw54UEZfS4EmAMsAsmVbl7qKi+vjAsy39Sz4fbgRMewg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@types/node': '>=18'
-    peerDependenciesMeta:
-      '@types/node':
-        optional: true
-
   is-extglob@2.1.1:
     resolution: {integrity: sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==}
     engines: {node: '>=0.10.0'}
@@ -1246,10 +1228,6 @@ packages:
     resolution: {integrity: sha512-3GuObel8h7Kqdjt0gxkEzaifHTqLVW56Y/bjN7PSQtkKr0w3V/QYSdt6QWYtd7A1xUtYQigtdUfgj1RvWVtorw==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
-
-  run-async@4.0.6:
-    resolution: {integrity: sha512-IoDlSLTs3Yq593mb3ZoKWKXMNu3UpObxhgA/Xuid5p4bbfi2jdY1Hj0m1K+0/tEuQTxIGMhQDqGjKb7RuxGpAQ==}
-    engines: {node: '>=0.12.0'}
 
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
@@ -1875,11 +1853,6 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
-  '@types/inquirer@9.0.9':
-    dependencies:
-      '@types/through': 0.0.33
-      rxjs: 7.8.2
-
   '@types/js-yaml@4.0.9': {}
 
   '@types/json-schema@7.0.15': {}
@@ -1895,10 +1868,6 @@ snapshots:
   '@types/sanitize-html@2.16.0':
     dependencies:
       htmlparser2: 8.0.2
-
-  '@types/through@0.0.33':
-    dependencies:
-      '@types/node': 24.9.1
 
   '@types/yargs-parser@21.0.3': {}
 
@@ -2393,18 +2362,6 @@ snapshots:
 
   imurmurhash@0.1.4: {}
 
-  inquirer@12.10.0(@types/node@24.9.1):
-    dependencies:
-      '@inquirer/ansi': 1.0.1
-      '@inquirer/core': 10.3.0(@types/node@24.9.1)
-      '@inquirer/prompts': 7.9.0(@types/node@24.9.1)
-      '@inquirer/type': 3.0.9(@types/node@24.9.1)
-      mute-stream: 2.0.0
-      run-async: 4.0.6
-      rxjs: 7.8.2
-    optionalDependencies:
-      '@types/node': 24.9.1
-
   is-extglob@2.1.1: {}
 
   is-fullwidth-code-point@3.0.0: {}
@@ -2573,8 +2530,6 @@ snapshots:
       '@rollup/rollup-win32-x64-gnu': 4.52.5
       '@rollup/rollup-win32-x64-msvc': 4.52.5
       fsevents: 2.3.3
-
-  run-async@4.0.6: {}
 
   run-parallel@1.2.0:
     dependencies:

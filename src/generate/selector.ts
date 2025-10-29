@@ -1,4 +1,4 @@
-import inquirer from 'inquirer';
+import { checkbox } from '@inquirer/prompts';
 import chalk from 'chalk';
 import type { ValidatedCard } from '../types.js';
 
@@ -163,25 +163,21 @@ export async function selectCards(cards: ValidatedCard[]): Promise<number[]> {
   const pageSize = Math.min(Math.max(totalChoiceLines, 10), 30);
 
   try {
-    const answers = (await inquirer.prompt([
-      {
-        type: 'checkbox',
-        name: 'selectedCards',
-        message: 'Choose cards to import:',
-        choices,
-        pageSize,
-        // Validate that at least one card is selected
-        validate: (selected: unknown) => {
-          const selectedArray = selected as number[];
-          if (selectedArray.length === 0) {
-            return 'Please select at least one card, or press Ctrl+C to cancel';
-          }
-          return true;
-        },
+    const selectedCards = await checkbox({
+      message: 'Choose cards to import:',
+      choices,
+      pageSize,
+      // Validate that at least one card is selected
+      validate: (selected: unknown) => {
+        const selectedArray = selected as number[];
+        if (selectedArray.length === 0) {
+          return 'Please select at least one card, or press Ctrl+C to cancel';
+        }
+        return true;
       },
-    ])) as { selectedCards: number[] };
+    });
 
-    return answers.selectedCards;
+    return selectedCards;
   } catch (error) {
     // Handle user cancellation (Ctrl+C)
     if (error instanceof Error && error.message.includes('User force closed')) {

@@ -57,7 +57,6 @@
   "devDependencies": {
     "@eslint/js": "^9.38.0",
     "@types/cli-progress": "^3.11.6",
-    "@types/inquirer": "^9.0.9",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.9.1",
     "@types/papaparse": "^5.3.16",
@@ -73,9 +72,9 @@
     "vitest": "^4.0.4"
   },
   "dependencies": {
+    "@inquirer/prompts": "^7.3.2",
     "chalk": "^5.6.2",
     "cli-progress": "^3.12.0",
-    "inquirer": "^12.10.0",
     "js-yaml": "^4.1.0",
     "jsonrepair": "^3.13.1",
     "openai": "^6.6.0",

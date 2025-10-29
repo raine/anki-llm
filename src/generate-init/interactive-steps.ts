@@ -1,4 +1,4 @@
-import inquirer from 'inquirer';
+import { select, confirm, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 import { z } from 'zod';
 import { ankiRequest } from '../anki-connect.js';
@@ -16,15 +16,11 @@ export async function selectDeck(): Promise<string> {
     throw new Error('No decks found in Anki. Create a deck first.');
   }
 
-  const { selectedDeck } = await inquirer.prompt<{ selectedDeck: string }>([
-    {
-      type: 'list',
-      name: 'selectedDeck',
-      message: 'Select the target deck:',
-      choices: deckNames,
-      pageSize: 15,
-    },
-  ]);
+  const selectedDeck = await select({
+    message: 'Select the target deck:',
+    choices: deckNames.map((name) => ({ value: name })),
+    pageSize: 15,
+  });
 
   console.log(chalk.green(`\n✓ Selected deck: ${selectedDeck}\n`));
   return selectedDeck;
@@ -59,17 +55,11 @@ export async function selectNoteType(deckName: string): Promise<string> {
     return selectedNoteType;
   }
 
-  const { selectedNoteType } = await inquirer.prompt<{
-    selectedNoteType: string;
-  }>([
-    {
-      type: 'list',
-      name: 'selectedNoteType',
-      message: 'Select the note type:',
-      choices: modelNameChoices,
-      pageSize: 15,
-    },
-  ]);
+  const selectedNoteType = await select({
+    message: 'Select the note type:',
+    choices: modelNameChoices.map((name) => ({ value: name })),
+    pageSize: 15,
+  });
 
   console.log(chalk.green(`\n✓ Selected note type: ${selectedNoteType}\n`));
   return selectedNoteType;
@@ -111,14 +101,10 @@ export async function configureFieldMapping(
   }
 
   // Ask user to accept or customize
-  const { acceptMapping } = await inquirer.prompt<{ acceptMapping: boolean }>([
-    {
-      type: 'confirm',
-      name: 'acceptMapping',
-      message: 'Accept this mapping?',
-      default: true,
-    },
-  ]);
+  const acceptMapping = await confirm({
+    message: 'Accept this mapping?',
+    default: true,
+  });
 
   if (!acceptMapping) {
     console.log(
@@ -135,23 +121,19 @@ export async function configureFieldMapping(
         (k) => fieldMap[k] === fieldName,
       )!;
 
-      const { jsonKey } = await inquirer.prompt<{ jsonKey: string }>([
-        {
-          type: 'input',
-          name: 'jsonKey',
-          message: `JSON key for "${fieldName}":`,
-          default: currentKey,
-          validate: (input: string) => {
-            if (!input.trim()) {
-              return 'JSON key cannot be empty';
-            }
-            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(input)) {
-              return 'Invalid key. Use letters, numbers, and underscores only.';
-            }
-            return true;
-          },
+      const jsonKey = await input({
+        message: `JSON key for "${fieldName}":`,
+        default: currentKey,
+        validate: (input: string) => {
+          if (!input.trim()) {
+            return 'JSON key cannot be empty';
+          }
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(input)) {
+            return 'Invalid key. Use letters, numbers, and underscores only.';
+          }
+          return true;
         },
-      ]);
+      });
       customFieldMap[jsonKey.trim()] = fieldName;
     }
 
