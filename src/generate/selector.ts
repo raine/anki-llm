@@ -4,46 +4,12 @@ import type { ValidatedCard } from '../types.js';
 
 const BOLD_START_MARK = '\u0000';
 const BOLD_END_MARK = '\u0001';
-const DISPLAY_CHAR_LIMIT = 100;
 
 function stripHtmlPreserveBold(value: string): string {
   return value
     .replace(/<\s*b\s*>/gi, BOLD_START_MARK)
     .replace(/<\s*\/\s*b\s*>/gi, BOLD_END_MARK)
     .replace(/<[^>]*>/g, '');
-}
-
-function truncateWithMarkers(value: string, limit: number): string {
-  let count = 0;
-  let truncated = '';
-  let boldActive = false;
-
-  for (const char of value) {
-    if (char === BOLD_START_MARK) {
-      boldActive = true;
-      truncated += char;
-      continue;
-    }
-
-    if (char === BOLD_END_MARK) {
-      boldActive = false;
-      truncated += char;
-      continue;
-    }
-
-    if (count >= limit) {
-      truncated += '...';
-      if (boldActive) {
-        truncated += BOLD_END_MARK;
-      }
-      break;
-    }
-
-    truncated += char;
-    count += 1;
-  }
-
-  return truncated;
 }
 
 function applyBoldMarkers(value: string): string {
@@ -81,8 +47,7 @@ function applyBoldMarkers(value: string): string {
 
 function formatFieldLine(fieldName: string, value: string): string {
   const plainWithMarkers = stripHtmlPreserveBold(value);
-  const truncated = truncateWithMarkers(plainWithMarkers, DISPLAY_CHAR_LIMIT);
-  const renderedValue = applyBoldMarkers(truncated);
+  const renderedValue = applyBoldMarkers(plainWithMarkers);
   return `  ${chalk.gray(fieldName + ':')} ${renderedValue}`;
 }
 
@@ -108,10 +73,7 @@ function formatCardForDisplay(card: ValidatedCard, index: number): string {
   const fieldsToShow = fieldEntries.slice(0, 3);
 
   for (const [fieldName, value] of fieldsToShow) {
-    // Truncate long values for display
-    const displayValue =
-      value.length > 100 ? `${value.substring(0, 100)}...` : value;
-    lines.push(formatFieldLine(fieldName, displayValue));
+    lines.push(formatFieldLine(fieldName, value));
   }
 
   // Indicate if there are more fields

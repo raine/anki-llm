@@ -198,7 +198,7 @@ export async function generateCards(
 
     console.log(
       chalk.cyan(
-        `✓ Generation complete: ${successful.length} succeeded, 0 failed\n`,
+        `✓ Generation complete: ${successful.length} succeeded, 0 failed`,
       ),
     );
 
