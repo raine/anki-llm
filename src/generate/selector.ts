@@ -167,6 +167,9 @@ export async function selectCards(cards: ValidatedCard[]): Promise<number[]> {
       message: 'Choose cards to import:',
       choices,
       pageSize,
+      theme: {
+        keybindings: ['vim'],
+      },
       // Validate that at least one card is selected
       validate: (selected: unknown) => {
         const selectedArray = selected as number[];

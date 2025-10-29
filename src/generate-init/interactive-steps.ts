@@ -20,6 +20,9 @@ export async function selectDeck(): Promise<string> {
     message: 'Select the target deck:',
     choices: deckNames.map((name) => ({ value: name })),
     pageSize: 15,
+    theme: {
+      keybindings: ['vim'],
+    },
   });
 
   console.log(chalk.green(`\n✓ Selected deck: ${selectedDeck}\n`));
@@ -59,6 +62,9 @@ export async function selectNoteType(deckName: string): Promise<string> {
     message: 'Select the note type:',
     choices: modelNameChoices.map((name) => ({ value: name })),
     pageSize: 15,
+    theme: {
+      keybindings: ['vim'],
+    },
   });
 
   console.log(chalk.green(`\n✓ Selected note type: ${selectedNoteType}\n`));
