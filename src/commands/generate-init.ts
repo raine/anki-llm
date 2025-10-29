@@ -12,6 +12,7 @@ import { createPromptContent } from '../generate-init/prompt-generation.js';
 interface GenerateInitArgs {
   output?: string;
   model?: string;
+  temperature?: number;
 }
 
 const command: Command<GenerateInitArgs> = {
@@ -31,11 +32,21 @@ const command: Command<GenerateInitArgs> = {
           'LLM model to use for prompt generation (e.g., gpt-4o, gemini-2.5-flash)',
         type: 'string',
       })
+      .option('temperature', {
+        alias: 't',
+        describe:
+          'Temperature for LLM generation (0.0-2.0, default varies by model)',
+        type: 'number',
+      })
       .example('$0 generate-init', 'Create prompt file named after the deck')
       .example('$0 generate-init my-prompt.md', 'Save to custom location')
       .example(
         '$0 generate-init --model gemini-2.5-flash',
         'Use Gemini for prompt generation',
+      )
+      .example(
+        '$0 generate-init --temperature 0.5',
+        'Use lower temperature for more consistent output',
       );
   },
 
@@ -75,6 +86,7 @@ const command: Command<GenerateInitArgs> = {
         selectedDeck,
         initialFieldMap,
         argv.model,
+        argv.temperature,
       );
 
       console.log(chalk.cyan('📝 Creating prompt file...\n'));

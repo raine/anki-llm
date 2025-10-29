@@ -385,6 +385,8 @@ card generation.
 
 - `-m, --model`: The LLM model to use for the smart prompt generation step
   (e.g., `gemini-2.5-pro`).
+- `-t, --temperature`: Temperature for LLM generation (0.0-2.0, default varies
+  by model). Lower values produce more consistent output.
 
 <!-- prettier-ignore -->
 > [!TIP]

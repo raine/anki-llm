@@ -52,6 +52,7 @@ async function generateContextualPromptBody(
   sampleCards: Array<Record<string, string>>,
   fieldKeys: string[],
   userModel?: string,
+  temperature?: number,
 ): Promise<string> {
   // Determine model
   let model: string;
@@ -136,7 +137,7 @@ Return ONLY the raw text for the prompt body. Do NOT include frontmatter or expl
           content: metaPrompt,
         },
       ],
-      temperature: 0.7,
+      ...(temperature !== undefined && { temperature }),
     });
 
     const generatedPrompt = response.choices[0]?.message?.content?.trim();
@@ -170,6 +171,7 @@ export async function createPromptContent(
   deckName: string,
   initialFieldMap: Record<string, string>,
   model?: string,
+  temperature?: number,
 ): Promise<{ body: string; finalFieldMap: Record<string, string> }> {
   try {
     // 1. Find notes in the deck
@@ -264,6 +266,7 @@ export async function createPromptContent(
       sampleCards,
       Object.keys(finalFieldMap),
       model,
+      temperature,
     );
 
     console.log(chalk.green('✓ Smart prompt generated successfully!\n'));
