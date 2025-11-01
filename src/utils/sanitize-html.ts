@@ -1,16 +1,41 @@
+import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
 
+// Configure marked once.
+// We disable deprecated options and rely on our own sanitizer.
+marked.setOptions({
+  gfm: true, // Use GitHub Flavored Markdown.
+  breaks: false, // Require newlines for paragraphs, standard behavior.
+});
+
 /**
- * Sanitizes HTML content to prevent XSS attacks when syncing to AnkiWeb.
+ * Converts a string that may contain Markdown into HTML.
+ * Existing HTML is passed through untouched.
+ * Uses parseInline to avoid wrapping content in <p> tags.
+ * @param content - The string to process.
+ * @returns An HTML string.
+ */
+function convertMarkdownToHtml(content: string): string {
+  // Use parseInline to process inline markdown without wrapping in <p> tags
+  // The type assertion is safe as we are not using async extensions.
+  return marked.parseInline(content) as string;
+}
+
+/**
+ * Converts any markdown to HTML and then sanitizes the result to prevent XSS attacks.
  *
- * Strips dangerous tags (<script>, <iframe>, <object>, <embed>) and event handlers.
+ * Strips dangerous tags and event handlers.
  * Allows common formatting tags used in Anki cards.
  *
- * @param dirtyHtml - Raw HTML content from LLM
+ * @param dirtyContent - Raw content from LLM (may be HTML, Markdown, or mixed)
  * @returns Sanitized HTML safe for Anki
  */
-export function sanitize(dirtyHtml: string): string {
-  return sanitizeHtml(dirtyHtml, {
+export function sanitize(dirtyContent: string): string {
+  // 1. Convert any Markdown to HTML.
+  const htmlFromMarkdown = convertMarkdownToHtml(dirtyContent);
+
+  // 2. Sanitize the resulting HTML.
+  return sanitizeHtml(htmlFromMarkdown, {
     // Allow common formatting tags used in Anki cards
     allowedTags: [
       // Text formatting
