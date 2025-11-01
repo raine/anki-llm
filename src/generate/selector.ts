@@ -5,11 +5,20 @@ import type { ValidatedCard } from '../types.js';
 const BOLD_START_MARK = '\u0000';
 const BOLD_END_MARK = '\u0001';
 
-function stripHtmlPreserveBold(value: string): string {
-  return value
-    .replace(/<\s*b\s*>/gi, BOLD_START_MARK)
-    .replace(/<\s*\/\s*b\s*>/gi, BOLD_END_MARK)
-    .replace(/<[^>]*>/g, '');
+export function stripHtmlPreserveBold(value: string): string {
+  return (
+    value
+      .replace(/<\s*b\s*>/gi, BOLD_START_MARK)
+      .replace(/<\s*\/\s*b\s*>/gi, BOLD_END_MARK)
+      // Add space after block-level closing tags to preserve readability
+      .replace(/<\s*\/\s*(li|p|div)\s*>/gi, ' ')
+      // Handle self-closing br tags
+      .replace(/<\s*br\s*\/?>/gi, ' ')
+      .replace(/<[^>]*>/g, '')
+      // Clean up multiple consecutive spaces
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 function applyBoldMarkers(value: string): string {
