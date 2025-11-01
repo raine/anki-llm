@@ -77,19 +77,11 @@ function formatCardForDisplay(card: ValidatedCard, index: number): string {
     : chalk.cyan(`Card ${index}`);
   lines.push(header);
 
-  // Show first 3 fields (or all if fewer than 3)
+  // Show all fields
   const fieldEntries = Object.entries(card.ankiFields);
-  const fieldsToShow = fieldEntries.slice(0, 3);
 
-  for (const [fieldName, value] of fieldsToShow) {
+  for (const [fieldName, value] of fieldEntries) {
     lines.push(formatFieldLine(fieldName, value));
-  }
-
-  // Indicate if there are more fields
-  if (fieldEntries.length > 3) {
-    lines.push(
-      chalk.gray(`  ... and ${fieldEntries.length - 3} more field(s)`),
-    );
   }
 
   return lines.join('\n');
