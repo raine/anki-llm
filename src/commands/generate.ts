@@ -12,6 +12,7 @@ import {
   importCardsToAnki,
   reportImportResult,
 } from '../generate/anki-import.js';
+import { formatCostDisplay } from '../utils/llm-cost.js';
 
 interface GenerateArgs {
   term: string;
@@ -168,7 +169,7 @@ const command: Command<GenerateArgs> = {
       }
 
       // Step 5: Generate cards
-      const { successful, failed } = await generateCards(
+      const { successful, failed, costInfo } = await generateCards(
         argv.term,
         body,
         argv.count,
@@ -176,6 +177,17 @@ const command: Command<GenerateArgs> = {
         frontmatter.fieldMap,
         logFilePath,
       );
+
+      // Report cost if available
+      if (costInfo) {
+        console.log(
+          formatCostDisplay(
+            costInfo.totalCost,
+            costInfo.inputTokens,
+            costInfo.outputTokens,
+          ),
+        );
+      }
 
       // Handle complete failure
       if (successful.length === 0) {

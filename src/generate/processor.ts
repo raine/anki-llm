@@ -4,13 +4,21 @@ import chalk from 'chalk';
 import { z } from 'zod';
 import { writeFile, appendFile } from 'fs/promises';
 import { parseLlmJson } from '../utils/parse-llm-json.js';
+import { calculateCost } from '../utils/llm-cost.js';
 import { fillTemplate } from '../batch-processing/util.js';
 import type { Config } from '../config.js';
 import type { CardCandidate } from '../types.js';
 
+export interface CostInfo {
+  inputTokens: number;
+  outputTokens: number;
+  totalCost: number;
+}
+
 export interface GenerationResult {
   successful: CardCandidate[];
   failed: Array<{ prompt: string; error: Error }>;
+  costInfo?: CostInfo;
 }
 
 /**
@@ -116,7 +124,7 @@ export async function generateCards(
 
   try {
     // 5. Perform a single, retry-able API call
-    const { cards, rawResponse } = await pRetry(
+    const { cards, rawResponse, costInfo } = await pRetry(
       async () => {
         const response = await client.chat.completions.create({
           model: config.model,
@@ -124,6 +132,25 @@ export async function generateCards(
           temperature: config.temperature,
           ...(config.maxTokens && { max_tokens: config.maxTokens }),
         });
+
+        const usage = response.usage;
+        const inputTokens = usage?.prompt_tokens ?? 0;
+        const outputTokens = usage?.completion_tokens ?? 0;
+
+        if (!usage) {
+          console.warn(
+            chalk.yellow(
+              '  ⚠️  Could not determine token usage from API response. Cost will not be calculated.',
+            ),
+          );
+        }
+
+        const totalCost = calculateCost(
+          config.model,
+          inputTokens,
+          outputTokens,
+        );
+        const costInfo: CostInfo = { inputTokens, outputTokens, totalCost };
 
         const rawContent = response.choices[0]?.message?.content?.trim() || '';
 
@@ -148,7 +175,7 @@ export async function generateCards(
         }
 
         const validatedCards = CardArraySchema.parse(parsed);
-        return { cards: validatedCards, rawResponse: rawContent };
+        return { cards: validatedCards, rawResponse: rawContent, costInfo };
       },
       {
         retries: config.retries,
@@ -202,7 +229,7 @@ export async function generateCards(
       ),
     );
 
-    return { successful, failed: [] };
+    return { successful, failed: [], costInfo };
   } catch (error) {
     let err: Error;
     if (error instanceof Error) {

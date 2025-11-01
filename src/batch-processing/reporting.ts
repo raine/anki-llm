@@ -1,22 +1,8 @@
 import chalk from 'chalk';
-import type { Config, SupportedChatModel } from '../config.js';
+import type { Config } from '../config.js';
 import { MODEL_PRICING } from '../config.js';
+import { calculateCost } from '../utils/llm-cost.js';
 import type { ProcessedRow, TokenStats } from './types.js';
-
-/**
- * Calculate total cost from token stats and model pricing
- */
-export function calculateCost(
-  tokenStats: TokenStats,
-  model: SupportedChatModel,
-): number {
-  const pricing = MODEL_PRICING[model];
-  const inputCost =
-    (tokenStats.input / 1_000_000) * pricing.inputCostPerMillion;
-  const outputCost =
-    (tokenStats.output / 1_000_000) * pricing.outputCostPerMillion;
-  return inputCost + outputCost;
-}
 
 /**
  * Print summary statistics
@@ -68,11 +54,15 @@ export function printSummary(
 
   // Get model-specific pricing
   const pricing = MODEL_PRICING[config.model];
+  const totalCost = calculateCost(
+    config.model,
+    tokenStats.input,
+    tokenStats.output,
+  );
   const inputCost =
     (tokenStats.input / 1_000_000) * pricing.inputCostPerMillion;
   const outputCost =
     (tokenStats.output / 1_000_000) * pricing.outputCostPerMillion;
-  const totalCost = inputCost + outputCost;
 
   console.log(`\n${chalk.bold('Cost Breakdown:')}`);
   console.log(`  Model: ${config.model}`);

@@ -12,7 +12,7 @@ import {
 } from './util.js';
 import { logDebug } from './logger.js';
 import { processSingleRow } from './llm.js';
-import { calculateCost } from './reporting.js';
+import { calculateCost } from '../utils/llm-cost.js';
 
 /**
  * Hooks to manage the lifecycle of the processing task.
@@ -136,7 +136,11 @@ export async function runProcessor(
       }
 
       const totalTokens = tokenStats.input + tokenStats.output;
-      const currentCost = calculateCost(tokenStats, config.model);
+      const currentCost = calculateCost(
+        config.model,
+        tokenStats.input,
+        tokenStats.output,
+      );
       progressBar.increment(1, {
         cost: currentCost.toFixed(4),
         tokens: totalTokens.toString(),

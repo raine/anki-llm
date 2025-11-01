@@ -8,6 +8,7 @@ import {
   configureFieldMapping,
 } from '../generate-init/interactive-steps.js';
 import { createPromptContent } from '../generate-init/prompt-generation.js';
+import { formatCostDisplay } from '../utils/llm-cost.js';
 
 interface GenerateInitArgs {
   output?: string;
@@ -82,12 +83,23 @@ const command: Command<GenerateInitArgs> = {
         ),
       );
 
-      const { body, finalFieldMap } = await createPromptContent(
+      const { body, finalFieldMap, costInfo } = await createPromptContent(
         selectedDeck,
         initialFieldMap,
         argv.model,
         argv.temperature,
       );
+
+      // Report cost if available
+      if (costInfo) {
+        console.log(
+          formatCostDisplay(
+            costInfo.totalCost,
+            costInfo.inputTokens,
+            costInfo.outputTokens,
+          ) + '\n',
+        );
+      }
 
       console.log(chalk.cyan('📝 Creating prompt file...\n'));
 
