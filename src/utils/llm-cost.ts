@@ -21,16 +21,9 @@ export function calculateCost(
 
 /**
  * Formats a cost value (in USD) for display.
- * Uses cents for values under $0.01.
+ * Always shows dollars for consistency and easier visual parsing.
  */
 export function formatCost(cost: number): string {
-  if (cost === 0) return '$0.00';
-  if (cost < 0.01) {
-    // Show in cents for small amounts
-    const cents = cost * 100;
-    return `${cents.toFixed(1)}¢`;
-  }
-  // Show in dollars, with enough precision for API costs
   return `$${cost.toFixed(4)}`;
 }
 
