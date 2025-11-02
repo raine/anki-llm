@@ -25,9 +25,9 @@
     "check:format": "prettier --write --list-different .",
     "check:lint": "eslint .",
     "check:test": "vitest run",
-    "publish:patch": "npm version patch && npm publish",
-    "publish:minor": "npm version minor && npm publish",
-    "publish:major": "npm version major && npm publish"
+    "publish:patch": "npm version patch && npm publish --otp",
+    "publish:minor": "npm version minor && npm publish --otp",
+    "publish:major": "npm version major && npm publish --otp"
   },
   "keywords": [
     "anki",
