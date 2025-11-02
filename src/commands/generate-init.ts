@@ -14,6 +14,7 @@ interface GenerateInitArgs {
   output?: string;
   model?: string;
   temperature?: number;
+  copy: boolean;
 }
 
 const command: Command<GenerateInitArgs> = {
@@ -38,6 +39,12 @@ const command: Command<GenerateInitArgs> = {
         describe:
           'Temperature for LLM generation (0.0-2.0, default varies by model)',
         type: 'number',
+      })
+      .option('copy', {
+        describe:
+          'Copy the LLM prompt to clipboard and wait for manual response pasting',
+        type: 'boolean',
+        default: false,
       })
       .example('$0 generate-init', 'Create prompt file named after the deck')
       .example('$0 generate-init my-prompt.md', 'Save to custom location')
@@ -88,6 +95,7 @@ const command: Command<GenerateInitArgs> = {
         initialFieldMap,
         argv.model,
         argv.temperature,
+        argv.copy,
       );
 
       // Report cost if available

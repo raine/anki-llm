@@ -387,6 +387,9 @@ card generation.
   (e.g., `gemini-2.5-pro`).
 - `-t, --temperature`: Temperature for LLM generation (0.0-2.0, default varies
   by model). Lower values produce more consistent output.
+- `--copy`: Copy the LLM prompt to clipboard and wait for manual response
+  pasting. Useful when you don't have API access and want to use a browser LLM
+  interface like ChatGPT.
 
 <!-- prettier-ignore -->
 > [!TIP]
@@ -432,6 +435,9 @@ select which ones to keep, and adds them directly to your deck.
 - `-o, --output`: Export cards to a file instead of importing to Anki (e.g.,
   `cards.yaml`, `cards.csv`).
 - `--log`: Enable logging of LLM responses to a file (useful for debugging).
+- `--copy`: Copy the LLM prompt to clipboard and wait for manual response
+  pasting. Useful when you don't have API access and want to use a browser LLM
+  interface like ChatGPT.
 
 #### **Understanding the Prompt File**
 
@@ -499,6 +505,32 @@ Return only a valid JSON array matching this structure. Ensure you generate
 or usage examples of the term.
 ````
 
+#### Using `--copy` Mode (Manual LLM Workflow)
+
+The `--copy` flag allows you to generate cards without API keys by manually
+copying prompts to a browser-based LLM interface (like ChatGPT, Claude, Gemini,
+etc.) and pasting responses back.
+
+**Workflow:**
+
+1. Run the command with `--copy`:
+   ```bash
+   anki-llm generate "今日" -p prompt.md --copy
+   ```
+2. The program automatically copies the LLM prompt to your clipboard.
+3. Paste the prompt into your preferred LLM interface (ChatGPT, Claude, etc.).
+4. Copy the complete JSON response from the LLM.
+5. Paste it into the terminal.
+6. Type `END` on a new line and press Enter to submit.
+7. The program validates and processes your cards normally.
+
+**Benefits:**
+
+- No API key required
+- Use any LLM interface you prefer
+- Works with free-tier LLM services
+- Full control over the LLM interaction
+
 **Examples:**
 
 ```bash
@@ -519,6 +551,9 @@ anki-llm import cards.yaml --deck "Japanese::Vocabulary"
 
 # Enable logging for debugging
 anki-llm generate "新しい" -p prompt.md --log
+
+# Use manual copy-paste mode (no API key required)
+anki-llm generate "今日" -p japanese-vocab-prompt.md --copy
 ```
 
 <img src="meta/generate.webp" alt="Interactive card selection in terminal" width="450">

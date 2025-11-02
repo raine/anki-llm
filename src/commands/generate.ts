@@ -1,5 +1,6 @@
 import { readFile } from 'fs/promises';
 import chalk from 'chalk';
+import { z } from 'zod';
 import type { Command } from './types.js';
 import { parseFrontmatter } from '../utils/parse-frontmatter.js';
 import { generateCards } from '../generate/processor.js';
@@ -13,6 +14,10 @@ import {
   reportImportResult,
 } from '../generate/anki-import.js';
 import { formatCostDisplay } from '../utils/llm-cost.js';
+import { getLlmResponseManually } from '../utils/manual-llm.js';
+import { fillTemplate } from '../batch-processing/util.js';
+import { parseLlmJson } from '../utils/parse-llm-json.js';
+import type { CardCandidate } from '../types.js';
 
 interface GenerateArgs {
   term: string;
@@ -25,6 +30,7 @@ interface GenerateArgs {
   temperature: number;
   output?: string;
   log: boolean;
+  copy: boolean;
 }
 
 const command: Command<GenerateArgs> = {
@@ -84,6 +90,12 @@ const command: Command<GenerateArgs> = {
       .option('log', {
         describe:
           'Enable logging of LLM responses to a file (useful for debugging)',
+        type: 'boolean',
+        default: false,
+      })
+      .option('copy', {
+        describe:
+          'Copy the LLM prompt to clipboard and wait for manual response pasting',
         type: 'boolean',
         default: false,
       })
@@ -169,36 +181,94 @@ const command: Command<GenerateArgs> = {
       }
 
       // Step 5: Generate cards
-      const { successful, failed, costInfo } = await generateCards(
-        argv.term,
-        body,
-        argv.count,
-        appConfig,
-        frontmatter.fieldMap,
-        logFilePath,
-      );
+      let successful: CardCandidate[];
 
-      // Report cost if available
-      if (costInfo) {
-        console.log(
-          formatCostDisplay(
-            costInfo.totalCost,
-            costInfo.inputTokens,
-            costInfo.outputTokens,
-          ),
-        );
-      }
+      if (argv.copy) {
+        // Manual copy-paste flow
+        if (!process.stdout.isTTY) {
+          throw new Error('--copy mode requires an interactive terminal.');
+        }
+        console.log(chalk.cyan('\n📋 Running in manual copy mode.'));
 
-      // Handle complete failure
-      if (successful.length === 0) {
-        console.error(
-          chalk.red(`\n❌ All ${argv.count} generation attempts failed.`),
-        );
-        console.log(chalk.yellow('\nFailure details:'));
-        failed.forEach((f, i) => {
-          console.log(chalk.gray(`  ${i + 1}. ${f.error.message}`));
+        const filledPrompt = fillTemplate(body, {
+          term: argv.term,
+          count: String(argv.count),
         });
-        process.exit(1);
+
+        const rawResponse = await getLlmResponseManually(filledPrompt);
+
+        try {
+          // Replicate parsing logic from processor.ts
+          const CardObjectSchema = z.object(
+            Object.keys(frontmatter.fieldMap).reduce(
+              (acc, key) => {
+                acc[key] = z.string();
+                return acc;
+              },
+              {} as Record<string, z.ZodString>,
+            ),
+          );
+          const CardArraySchema = z.array(CardObjectSchema);
+
+          const parsed = parseLlmJson(rawResponse);
+          const validatedCards = CardArraySchema.parse(parsed);
+          successful = validatedCards.map((cardFields) => ({
+            fields: cardFields,
+            rawResponse,
+          }));
+
+          console.log(
+            chalk.green(
+              `✓ Successfully parsed ${successful.length} card(s) from response`,
+            ),
+          );
+        } catch (parseError) {
+          const message =
+            parseError instanceof Error
+              ? parseError.message
+              : String(parseError);
+          console.error(chalk.red('\n❌ Failed to parse the pasted response:'));
+          console.error(chalk.gray(message));
+          process.exit(1);
+        }
+      } else {
+        // API-based flow
+        const {
+          successful: apiSuccessful,
+          failed,
+          costInfo,
+        } = await generateCards(
+          argv.term,
+          body,
+          argv.count,
+          appConfig,
+          frontmatter.fieldMap,
+          logFilePath,
+        );
+        successful = apiSuccessful;
+
+        // Report cost if available
+        if (costInfo) {
+          console.log(
+            formatCostDisplay(
+              costInfo.totalCost,
+              costInfo.inputTokens,
+              costInfo.outputTokens,
+            ),
+          );
+        }
+
+        // Handle complete failure from API
+        if (successful.length === 0) {
+          console.error(
+            chalk.red(`\n❌ All ${argv.count} generation attempts failed.`),
+          );
+          console.log(chalk.yellow('\nFailure details:'));
+          failed.forEach((f, i) => {
+            console.log(chalk.gray(`  ${i + 1}. ${f.error.message}`));
+          });
+          process.exit(1);
+        }
       }
 
       // Step 6: Process and select cards
