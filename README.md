@@ -1018,8 +1018,8 @@ and show progress:
 
 ```
 🔄 Generating 3 card candidates for "会議"...
-
 ✓ Generation complete: 3 succeeded, 0 failed
+  Cost: $0.0027 (930 input + 954 output tokens)
 
 🔍 Checking for duplicates...
 ```
