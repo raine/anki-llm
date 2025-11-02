@@ -195,9 +195,10 @@ are updated, while new entries create new notes.
 
 ### `anki-llm process-file <input>`
 
-Process notes from a CSV/YAML file and save results to another file. **Supports
-automatic resume** - if interrupted or if some notes fail, you can re-run the
-command and it will skip already-processed notes.
+Batch-process notes from a CSV/YAML file using an LLM and user-defined prompts.
+This command saves the transformed results to an output file and features
+automatic resume, allowing it to safely skip completed notes if interrupted or
+re-run.
 
 - `<input>`: Input file path (CSV or YAML).
 
@@ -262,16 +263,22 @@ anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.tx
 
 **When to use this command:**
 
-- When you want to review/edit results before updating the actual Anki deck
-- When processing might be interrupted (resume capability needed)
+This command provides a file-based workflow for batch processing notes. It is the primary alternative to the `process-deck` command, which modifies notes directly in your Anki collection.
+
+Use `process-file` instead of `process-deck` when you:
+
+- **Require a manual review step.** The command outputs to a file, creating a safe staging area to inspect results before you commit them to your Anki deck.
+- **Need to process a large number of notes where interruptions are possible.** Its resume capability ensures you don't lose progress if the process fails midway.
+- **Are operating in an environment without a running Anki instance.** This command is fully self-contained and does not need to connect to the Anki application.
 
 ---
 
 ### `anki-llm process-deck <deck>`
 
-Process notes directly from an Anki deck and update them in-place. **No
-intermediate files** needed. This is faster and more convenient when you've
-tested your prompt and know the end result is safe to run.
+Batch-process notes directly from an Anki deck using an LLM and user-defined
+prompts, updating them in-place. No intermediate files needed. This is faster
+and more convenient when you've tested your prompt and know the end result is
+safe to run.
 
 - `<deck>`: Name of the Anki deck to process (must be in quotes if it contains
   spaces).
@@ -493,9 +500,9 @@ Follow the structure shown in this example precisely:
 ```json
 [
   {
-    "en": "How was your <b>today</b>?",
-    "jp": "<b>今日</b>の一日はどうでしたか？",
-    "context": "A common, friendly way to ask about someone's day."
+    "en": "How was your day?",
+    "jp": "今日はどうでしたか？",
+    "context": "A natural and common way to ask about someone's day politely. You can say 「今日どうだった？」 in casual speech."
   }
 ]
 ```
