@@ -57,8 +57,6 @@ interactively, and add selected cards to your deck.
   incrementally (file mode).
 - **Automatic resume**: Pick up where you left off if processing is interrupted
   (file mode).
-- **Direct updates**: Process and update Anki notes in-place without
-  intermediate files (direct mode).
 - **Copy mode**: Alternatively, generate cards without API keys by pasting LLM
   responses from browser interfaces (ChatGPT, Claude, etc.).
 
