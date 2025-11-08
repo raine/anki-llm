@@ -13,10 +13,11 @@ import {
   importCardsToAnki,
   reportImportResult,
 } from '../generate/anki-import.js';
-import { formatCostDisplay } from '../utils/llm-cost.js';
+import { formatCostDisplay, formatCost } from '../utils/llm-cost.js';
 import { getLlmResponseManually } from '../utils/manual-llm.js';
 import { fillTemplate } from '../batch-processing/util.js';
 import { parseLlmJson } from '../utils/parse-llm-json.js';
+import { performQualityCheck } from '../generate/quality-check.js';
 import type { CardCandidate } from '../types.js';
 
 interface GenerateArgs {
@@ -182,6 +183,7 @@ const command: Command<GenerateArgs> = {
 
       // Step 5: Generate cards
       let successful: CardCandidate[];
+      let generationCost = 0;
 
       if (argv.copy) {
         // Manual copy-paste flow
@@ -236,7 +238,7 @@ const command: Command<GenerateArgs> = {
         const {
           successful: apiSuccessful,
           failed,
-          costInfo,
+          costInfo: generationCostInfo,
         } = await generateCards(
           argv.term,
           body,
@@ -248,14 +250,9 @@ const command: Command<GenerateArgs> = {
         successful = apiSuccessful;
 
         // Report cost if available
-        if (costInfo) {
-          console.log(
-            formatCostDisplay(
-              costInfo.totalCost,
-              costInfo.inputTokens,
-              costInfo.outputTokens,
-            ),
-          );
+        if (generationCostInfo) {
+          generationCost = generationCostInfo.totalCost;
+          console.log(formatCostDisplay(generationCostInfo));
         }
 
         // Handle complete failure from API
@@ -279,7 +276,7 @@ const command: Command<GenerateArgs> = {
         argv['dry-run'],
       );
 
-      // Step 7: Handle dry-run or no selection
+      // Handle dry-run before doing any more processing
       if (argv['dry-run']) {
         console.log(
           chalk.cyan('\nDry run complete. No cards were imported or exported.'),
@@ -291,14 +288,37 @@ const command: Command<GenerateArgs> = {
         process.exit(0);
       }
 
+      // Step 7: Perform quality check if configured in frontmatter
+      const { finalCards, cost: qualityCheckCost } = await performQualityCheck(
+        selectedCards,
+        frontmatter,
+        appConfig,
+      );
+
+      // Handle exit if all cards discarded
+      if (finalCards.length === 0) {
+        console.log(
+          chalk.yellow(
+            '\n⚠️  No cards remaining after quality check. Exiting.',
+          ),
+        );
+        process.exit(0);
+      }
+
+      // Report total cost
+      const totalCost = generationCost + qualityCheckCost;
+      if (totalCost > 0 && qualityCheckCost > 0) {
+        // Only show total if both costs are present
+        console.log(
+          chalk.gray(`\n💰 Total estimated cost: ${formatCost(totalCost)}`),
+        );
+      }
+
       // Step 8: Export or import to Anki
       if (argv.output) {
-        await exportCards(selectedCards, argv.output);
+        await exportCards(finalCards, argv.output);
       } else {
-        const importResult = await importCardsToAnki(
-          selectedCards,
-          frontmatter,
-        );
+        const importResult = await importCardsToAnki(finalCards, frontmatter);
         reportImportResult(importResult, frontmatter.deck);
 
         if (importResult.failures > 0) {

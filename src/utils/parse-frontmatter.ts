@@ -1,6 +1,14 @@
 import yaml from 'js-yaml';
 import { z } from 'zod';
 
+const QualityCheckSchema = z.object({
+  field: z
+    .string()
+    .min(1, 'The target field for the quality check is required.'),
+  prompt: z.string().min(1, 'A prompt for the quality check is required.'),
+  model: z.string().optional(),
+});
+
 /**
  * Schema for the YAML frontmatter in prompt template files.
  * Defines the Anki deck, note type, and field mapping configuration.
@@ -14,6 +22,7 @@ export const FrontmatterSchema = z.object({
       (map) => Object.keys(map).length > 0,
       'fieldMap must have at least one key-value pair',
     ),
+  qualityCheck: QualityCheckSchema.optional(),
 });
 
 export type Frontmatter = z.infer<typeof FrontmatterSchema>;

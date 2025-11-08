@@ -114,7 +114,7 @@ export async function generateCards(
 
   console.log(
     chalk.cyan(
-      `\n🔄 Generating ${count} card candidate${count === 1 ? '' : 's'} for "${term}"...`,
+      `\n🔄 Generating ${count} card candidate${count === 1 ? '' : 's'} for "${term}" using ${config.model}...`,
     ),
   );
 

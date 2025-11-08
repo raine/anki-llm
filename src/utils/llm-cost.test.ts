@@ -78,19 +78,31 @@ describe('calculateCost', () => {
 
 describe('formatCostDisplay', () => {
   it('formats cost and token counts for a dollar amount', () => {
-    const displayString = formatCostDisplay(0.1234, 1000, 500);
+    const displayString = formatCostDisplay({
+      totalCost: 0.1234,
+      inputTokens: 1000,
+      outputTokens: 500,
+    });
     expect(displayString).toContain('Cost: $0.1234');
     expect(displayString).toContain('(1000 input + 500 output tokens)');
   });
 
   it('formats cost and token counts for small amounts', () => {
-    const displayString = formatCostDisplay(0.005, 50, 20);
+    const displayString = formatCostDisplay({
+      totalCost: 0.005,
+      inputTokens: 50,
+      outputTokens: 20,
+    });
     expect(displayString).toContain('Cost: $0.0050');
     expect(displayString).toContain('(50 input + 20 output tokens)');
   });
 
   it('handles zero cost and tokens', () => {
-    const displayString = formatCostDisplay(0, 0, 0);
+    const displayString = formatCostDisplay({
+      totalCost: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
     expect(displayString).toContain('Cost: $0.0000');
     expect(displayString).toContain('(0 input + 0 output tokens)');
   });

@@ -460,6 +460,58 @@ The frontmatter is a YAML block at the top of the file enclosed by `---`.
 - `fieldMap`: Maps the keys from the LLM's JSON output to your actual Anki field
   names. The LLM will be instructed to generate JSON with the keys on the left,
   and `anki-llm` will use them to populate the Anki fields on the right.
+- `qualityCheck` (optional): Enables automatic verification that generated
+  cards contain natural-sounding sentences. Added automatically by
+  `generate-init` when you enable this feature.
+
+##### Optional: Quality Check
+
+When running `generate-init`, the wizard will ask if you want to enable automatic
+quality verification. If enabled, after you select cards, the tool will check
+each one using an LLM and flag any that have quality issues for your review.
+
+**Setup (automatic):**
+
+The `generate-init` wizard will:
+
+1. Ask if you want to enable the quality check
+2. Let you choose which field to check for quality
+3. Automatically include a generic prompt that works for any language (no
+   customization needed)
+
+After you select cards during generation, each one is checked via an additional
+API call. Any cards flagged for quality issues are shown for review with the
+LLM's reasoning, and you can decide whether to keep or discard them.
+
+**Manual customization (optional):**
+
+If you need language-specific requirements (e.g., checking formality in
+Japanese), you can edit the `qualityCheck` section in your generated prompt
+file. You can also specify a different (typically cheaper) model for quality
+checks. The section looks like this:
+
+```yaml
+qualityCheck:
+  field: jp
+  model: gpt-4o-mini # Optional: use a cheaper model for checks
+  prompt: |
+    You are an expert native speaker. Evaluate if the following text sounds natural and well-written in its language.
+    Text: {text}
+
+    Consider grammar, syntax, word choice, and common phrasing.
+
+    Respond with JSON only, with no additional text or explanations outside the JSON structure.
+    Your response must be a JSON object with two keys:
+    - "is_valid": a boolean (true if natural, false if unnatural).
+    - "reason": a brief, one-sentence explanation for your decision.
+```
+
+**Cost considerations:**
+
+Each selected card requires one additional API call for the quality check. You
+can can use a cheaper model (like `gpt-4o-mini`) for quality checks by adding a
+`model` field to the `qualityCheck` section. If not specified, it will use the
+same model as card generation.
 
 **Prompt Body**
 

@@ -30,11 +30,12 @@ export function formatCost(cost: number): string {
 /**
  * Formats and displays cost information with token counts.
  */
-export function formatCostDisplay(
-  totalCost: number,
-  inputTokens: number,
-  outputTokens: number,
-): string {
+export function formatCostDisplay(costInfo: {
+  totalCost: number;
+  inputTokens: number;
+  outputTokens: number;
+}): string {
+  const { totalCost, inputTokens, outputTokens } = costInfo;
   return chalk.gray(
     `  Cost: ${formatCost(totalCost)} (${inputTokens} input + ${outputTokens} output tokens)`,
   );

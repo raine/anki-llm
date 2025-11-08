@@ -1,5 +1,6 @@
 import { writeFile } from 'fs/promises';
 import chalk from 'chalk';
+import { select } from '@inquirer/prompts';
 import type { Command } from './types.js';
 import { slugifyDeckName } from '../batch-processing/util.js';
 import {
@@ -100,14 +101,44 @@ const command: Command<GenerateInitArgs> = {
 
       // Report cost if available
       if (costInfo) {
-        console.log(
-          formatCostDisplay(
-            costInfo.totalCost,
-            costInfo.inputTokens,
-            costInfo.outputTokens,
-          ) + '\n',
-        );
+        console.log(formatCostDisplay(costInfo) + '\n');
       }
+
+      // Configure optional quality check
+      let qualityCheckField: string | null = null;
+      const fieldKeys = Object.keys(finalFieldMap);
+
+      if (fieldKeys.length > 0) {
+        const enableCheck = await select({
+          message:
+            'Add automatic quality check?\nVerifies with another LLM call that generated text is natural and correct before import',
+          choices: [
+            { name: 'Yes', value: 'yes' },
+            { name: 'No', value: 'no' },
+          ],
+          default: 'no',
+        });
+
+        if (enableCheck === 'yes') {
+          qualityCheckField = await select({
+            message: 'Which field should be checked for quality?',
+            choices: fieldKeys.map((key) => ({
+              name: finalFieldMap[key],
+              value: key,
+            })),
+          });
+        }
+      }
+
+      const GENERIC_QUALITY_CHECK_PROMPT = `You are an expert native speaker. Evaluate if the following text sounds natural and well-written in its language.
+Text: {text}
+
+Consider grammar, syntax, word choice, and common phrasing.
+
+Respond with JSON only, with no additional text or explanations outside the JSON structure.
+Your response must be a JSON object with two keys:
+- "is_valid": a boolean (true if natural, false if unnatural).
+- "reason": a brief, one-sentence explanation for your decision.`;
 
       console.log(chalk.cyan('📝 Creating prompt file...\n'));
 
@@ -116,8 +147,16 @@ deck: ${selectedDeck}
 noteType: ${selectedNoteType}
 fieldMap:
 ${Object.entries(finalFieldMap)
-  .map(([key, value]) => `  ${key}: ${value}`)
-  .join('\n')}
+  .map(([k, v]) => `  ${k}: ${v}`)
+  .join('\n')}${
+        qualityCheckField
+          ? `
+qualityCheck:
+  field: ${qualityCheckField}
+  prompt: |
+    ${GENERIC_QUALITY_CHECK_PROMPT.replace(/\n/g, '\n    ')}`
+          : ''
+      }
 ---`;
 
       const fullContent = `${frontmatter}\n\n${body}\n`;

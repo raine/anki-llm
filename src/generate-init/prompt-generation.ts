@@ -66,7 +66,10 @@ async function generateContextualPromptBody(
   userModel?: string,
   temperature?: number,
   isCopyMode?: boolean,
-): Promise<{ body: string; costInfo?: PromptGenerationCostInfo }> {
+): Promise<{
+  body: string;
+  costInfo?: PromptGenerationCostInfo;
+}> {
   // Determine model
   let model: string;
 
@@ -124,7 +127,8 @@ Using your analysis, generate a prompt body that guides the AI to create a batch
    - For complex formatting like furigana, provide a single good example and a brief, high-level description of the pattern. Avoid detailed CORRECT/INCORRECT lists unless a pattern is exceptionally clear and consistent across all samples.
 
 **OUTPUT FORMAT:**
-Return ONLY the raw text for the prompt body. Do NOT include frontmatter or explanations about your process.`;
+Return ONLY the raw text for the prompt body. Do NOT include frontmatter or explanations about your process.
+`;
 
   // Handle copy mode - manual workflow
   if (isCopyMode) {
@@ -135,7 +139,11 @@ Return ONLY the raw text for the prompt body. Do NOT include frontmatter or expl
     if (!generatedPrompt) {
       throw new Error('Empty response from LLM');
     }
-    return { body: generatedPrompt };
+
+    return {
+      body: generatedPrompt.trim(),
+      costInfo: undefined,
+    };
   }
 
   // Get provider configuration and API key for the model
@@ -165,8 +173,8 @@ Return ONLY the raw text for the prompt body. Do NOT include frontmatter or expl
       ...(temperature !== undefined && { temperature }),
     });
 
-    const generatedPrompt = response.choices[0]?.message?.content?.trim();
-    if (!generatedPrompt) {
+    const rawContent = response.choices[0]?.message?.content?.trim();
+    if (!rawContent) {
       throw new Error('Empty response from LLM');
     }
 
@@ -190,7 +198,10 @@ Return ONLY the raw text for the prompt body. Do NOT include frontmatter or expl
       }
     }
 
-    return { body: generatedPrompt, costInfo };
+    return {
+      body: rawContent,
+      costInfo,
+    };
   } catch (error) {
     // Enhanced error logging for debugging
     let errorMessage = 'LLM API call failed';
@@ -335,6 +346,9 @@ export async function createPromptContent(
       ),
     );
     const body = generateGenericPromptBody(Object.keys(initialFieldMap));
-    return { body, finalFieldMap: initialFieldMap };
+    return {
+      body,
+      finalFieldMap: initialFieldMap,
+    };
   }
 }
