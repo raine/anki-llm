@@ -74,4 +74,14 @@ describe('sanitizeFields', () => {
     expect(output.front).toBe('This is <strong>bold</strong>');
     expect(output.back).toBe('This is <em>italic</em>');
   });
+
+  it('converts array fields into sanitized unordered lists', () => {
+    const fields = {
+      front: ['First fact', 'Second fact'],
+    };
+    const output = sanitizeFields(fields);
+    expect(output.front).toBe(
+      '<ul><li>First fact</li><li>Second fact</li></ul>',
+    );
+  });
 });

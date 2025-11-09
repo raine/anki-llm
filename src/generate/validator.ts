@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { ankiRequest } from '../anki-connect.js';
-import type { CardCandidate, ValidatedCard, Frontmatter } from '../types.js';
+import type {
+  ValidatedCard,
+  Frontmatter,
+  SanitizedCardCandidate,
+} from '../types.js';
 
 /**
  * Maps card fields from LLM JSON keys to actual Anki field names.
@@ -10,7 +14,7 @@ import type { CardCandidate, ValidatedCard, Frontmatter } from '../types.js';
  * @returns Object with Anki field names
  */
 export function mapFieldsToAnki(
-  card: CardCandidate,
+  card: SanitizedCardCandidate,
   fieldMap: Record<string, string>,
 ): Record<string, string> {
   const ankiFields: Record<string, string> = {};
@@ -89,7 +93,7 @@ async function checkDuplicate(
  * @returns Array of validated cards with duplicate status and mapped fields
  */
 export async function validateCards(
-  cards: CardCandidate[],
+  cards: SanitizedCardCandidate[],
   frontmatter: Frontmatter,
   firstFieldName: string,
 ): Promise<ValidatedCard[]> {

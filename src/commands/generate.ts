@@ -1,6 +1,5 @@
 import { readFile } from 'fs/promises';
 import chalk from 'chalk';
-import { z } from 'zod';
 import type { Command } from './types.js';
 import { parseFrontmatter } from '../utils/parse-frontmatter.js';
 import { generateCards } from '../generate/processor.js';
@@ -18,6 +17,7 @@ import { getLlmResponseManually } from '../utils/manual-llm.js';
 import { fillTemplate } from '../batch-processing/util.js';
 import { parseLlmJson } from '../utils/parse-llm-json.js';
 import { performQualityCheck } from '../generate/quality-check.js';
+import { buildCardSchemas } from '../generate/card-schema.js';
 import type { CardCandidate } from '../types.js';
 
 interface GenerateArgs {
@@ -201,16 +201,9 @@ const command: Command<GenerateArgs> = {
 
         try {
           // Replicate parsing logic from processor.ts
-          const CardObjectSchema = z.object(
-            Object.keys(frontmatter.fieldMap).reduce(
-              (acc, key) => {
-                acc[key] = z.string();
-                return acc;
-              },
-              {} as Record<string, z.ZodString>,
-            ),
+          const { cardArraySchema: CardArraySchema } = buildCardSchemas(
+            frontmatter.fieldMap,
           );
-          const CardArraySchema = z.array(CardObjectSchema);
 
           const parsed = parseLlmJson(rawResponse);
           const validatedCards = CardArraySchema.parse(parsed);

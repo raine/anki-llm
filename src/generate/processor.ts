@@ -1,12 +1,12 @@
 import pRetry from 'p-retry';
 import OpenAI from 'openai';
 import chalk from 'chalk';
-import { z } from 'zod';
 import { writeFile, appendFile } from 'fs/promises';
 import { parseLlmJson } from '../utils/parse-llm-json.js';
 import { calculateCost } from '../utils/llm-cost.js';
 import { fillTemplate } from '../batch-processing/util.js';
 import { Spinner } from '../utils/spinner.js';
+import { buildCardSchemas } from './card-schema.js';
 import type { Config } from '../config.js';
 import type { CardCandidate } from '../types.js';
 
@@ -75,16 +75,7 @@ export async function generateCards(
   }
 
   // 2. Create a Zod schema for an array of card objects
-  const CardObjectSchema = z.object(
-    Object.keys(fieldMap).reduce(
-      (acc, key) => {
-        acc[key] = z.string();
-        return acc;
-      },
-      {} as Record<string, z.ZodString>,
-    ),
-  );
-  const CardArraySchema = z.array(CardObjectSchema);
+  const { cardArraySchema: CardArraySchema } = buildCardSchemas(fieldMap);
 
   // 3. Initialize log file if needed
   if (logFilePath) {

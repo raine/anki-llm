@@ -544,8 +544,9 @@ You are an expert assistant who creates {count} distinct Anki flashcards for a
 Japanese vocabulary word. The term to create cards for is: **{term}**
 
 IMPORTANT: Your output must be a single, valid JSON array of objects and nothing
-else. Each object in the array should represent a unique flashcard. All field
-values must be strings.
+else. Each object in the array should represent a unique flashcard. Field values
+can be strings or JSON arrays, and arrays are automatically converted into
+`<ul><li>` HTML lists before cards are imported.
 
 Follow the structure shown in this example precisely:
 

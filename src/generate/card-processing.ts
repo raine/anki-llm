@@ -2,7 +2,12 @@ import chalk from 'chalk';
 import { sanitizeFields } from '../utils/sanitize-html.js';
 import { validateCards } from './validator.js';
 import { selectCards, displayCards } from './selector.js';
-import type { CardCandidate, ValidatedCard, Frontmatter } from '../types.js';
+import type {
+  CardCandidate,
+  ValidatedCard,
+  Frontmatter,
+  SanitizedCardCandidate,
+} from '../types.js';
 
 /**
  * Sanitizes, validates, and allows user selection of generated cards.
@@ -16,10 +21,12 @@ export async function processAndSelectCards(
   isDryRun: boolean,
 ): Promise<ValidatedCard[]> {
   // 1. Sanitize
-  const sanitizedCards: CardCandidate[] = generatedCards.map((card) => ({
-    ...card,
-    fields: sanitizeFields(card.fields),
-  }));
+  const sanitizedCards: SanitizedCardCandidate[] = generatedCards.map(
+    (card) => ({
+      ...card,
+      fields: sanitizeFields(card.fields),
+    }),
+  );
 
   // 2. Validate (check for duplicates)
   console.log(chalk.cyan('🔍 Checking for duplicates...'));

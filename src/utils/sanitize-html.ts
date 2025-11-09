@@ -112,12 +112,23 @@ export function sanitize(dirtyContent: string): string {
  * @param fields - Object with field names as keys and HTML content as values
  * @returns New object with all values sanitized
  */
+function arrayToListHtml(items: string[]): string {
+  const listItems = items
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .map((item) => `<li>${item}</li>`)
+    .join('');
+
+  return listItems.length > 0 ? `<ul>${listItems}</ul>` : '';
+}
+
 export function sanitizeFields(
-  fields: Record<string, string>,
+  fields: Record<string, string | string[]>,
 ): Record<string, string> {
   const sanitized: Record<string, string> = {};
   for (const [key, value] of Object.entries(fields)) {
-    sanitized[key] = sanitize(value);
+    const content = Array.isArray(value) ? arrayToListHtml(value) : value;
+    sanitized[key] = sanitize(content);
   }
   return sanitized;
 }
