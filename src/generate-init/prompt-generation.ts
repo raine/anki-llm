@@ -237,7 +237,7 @@ export async function createPromptContent(
     // Fetch ALL notes from the deck to find the best examples
     console.log(
       chalk.gray(
-        `  Analyzing ${noteIds.length} card(s) to find best examples...\n`,
+        `  Analyzing ${noteIds.length} card(s) to find best examples...`,
       ),
     );
 
@@ -267,7 +267,7 @@ export async function createPromptContent(
 
     console.log(
       chalk.gray(
-        `  Selected ${sampleCount} card(s) with most populated fields...\n`,
+        `  Selected ${sampleCount} card(s) with most populated fields...`,
       ),
     );
 
@@ -296,7 +296,7 @@ export async function createPromptContent(
     if (skippedFields.length > 0) {
       console.log(
         chalk.gray(
-          `  Skipping auto-generated field(s): ${skippedFields.join(', ')}\n`,
+          `  Skipping auto-generated field(s): ${skippedFields.join(', ')}`,
         ),
       );
     }
@@ -320,7 +320,7 @@ export async function createPromptContent(
       isCopyMode,
     );
 
-    console.log(chalk.green('✓ Smart prompt generated successfully!\n'));
+    console.log(chalk.green('\n✓ Smart prompt generated successfully!'));
 
     return { body, finalFieldMap, costInfo };
   } catch (error) {

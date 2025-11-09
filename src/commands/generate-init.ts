@@ -72,10 +72,10 @@ const command: Command<GenerateInitArgs> = {
 
   handler: async (argv) => {
     try {
-      console.log(chalk.cyan('\n✨ Welcome to anki-llm generate-init!\n'));
+      console.log(chalk.cyan('✨ Welcome to anki-llm generate-init!'));
       console.log(
         chalk.gray(
-          'This wizard will help you create a prompt template for generating Anki cards.\n',
+          'This wizard will help you create a prompt template for generating Anki cards.',
         ),
       );
 
@@ -95,12 +95,12 @@ const command: Command<GenerateInitArgs> = {
 
       console.log(
         chalk.cyan(
-          `\n🧠 Attempting to generate a smart prompt based on your existing cards using ${modelToUse}...\n`,
+          `\n🧠 Attempting to generate a smart prompt based on your existing cards using ${modelToUse}...`,
         ),
       );
       console.log(
         chalk.gray(
-          '(This requires OPENAI_API_KEY or GEMINI_API_KEY environment variable)\n',
+          '(This requires OPENAI_API_KEY or GEMINI_API_KEY environment variable)',
         ),
       );
 
@@ -114,7 +114,7 @@ const command: Command<GenerateInitArgs> = {
 
       // Report cost if available
       if (costInfo) {
-        console.log(formatCostDisplay(costInfo) + '\n');
+        console.log(formatCostDisplay(costInfo));
       }
 
       // Configure optional quality check
@@ -143,7 +143,7 @@ const command: Command<GenerateInitArgs> = {
         }
       }
 
-      console.log(chalk.cyan('📝 Creating prompt file...\n'));
+      console.log(chalk.cyan('\n📝 Creating prompt file...'));
 
       const frontmatter = `---
 deck: ${selectedDeck}
@@ -168,12 +168,12 @@ qualityCheck:
       const outputPath = argv.output || defaultFilename;
       await writeFile(outputPath, fullContent, 'utf-8');
 
-      console.log(chalk.green(`✓ Prompt template saved to ${outputPath}\n`));
+      console.log(chalk.green(`\n✓ Prompt template saved to ${outputPath}`));
 
-      console.log(chalk.cyan('🎉 Setup complete!\n'));
+      console.log(chalk.cyan('\n🎉 Setup complete!'));
       console.log(chalk.gray('Try it out:'));
       console.log(
-        chalk.white(`  anki-llm generate "example term" -p ${outputPath}\n`),
+        chalk.white(`  anki-llm generate "example term" -p ${outputPath}`),
       );
       console.log(
         chalk.gray(

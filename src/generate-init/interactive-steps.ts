@@ -9,7 +9,7 @@ import {
 import { suggestKeyForField, resolveDuplicateKeys } from './util.js';
 
 export async function selectDeck(): Promise<string> {
-  console.log(chalk.cyan('📚 Fetching your Anki decks...\n'));
+  console.log(chalk.cyan('\n📚 Fetching your Anki decks...'));
   const deckNames = await ankiRequest('deckNames', z.array(z.string()), {});
 
   if (deckNames.length === 0) {
@@ -25,12 +25,12 @@ export async function selectDeck(): Promise<string> {
     },
   });
 
-  console.log(chalk.green(`\n✓ Selected deck: ${selectedDeck}\n`));
+  console.log(chalk.green(`✓ Selected deck: ${selectedDeck}`));
   return selectedDeck;
 }
 
 export async function selectNoteType(deckName: string): Promise<string> {
-  console.log(chalk.cyan('📋 Fetching note types used in this deck...\n'));
+  console.log(chalk.cyan('\n📋 Fetching note types used in this deck...'));
   let modelNameChoices = await findModelNamesForDeck(deckName);
 
   if (modelNameChoices.length === 0) {
@@ -52,7 +52,7 @@ export async function selectNoteType(deckName: string): Promise<string> {
     const selectedNoteType = modelNameChoices[0];
     console.log(
       chalk.green(
-        `✓ Auto-selected the only available note type: ${selectedNoteType}\n`,
+        `✓ Auto-selected the only available note type: ${selectedNoteType}`,
       ),
     );
     return selectedNoteType;
@@ -67,25 +67,23 @@ export async function selectNoteType(deckName: string): Promise<string> {
     },
   });
 
-  console.log(chalk.green(`\n✓ Selected note type: ${selectedNoteType}\n`));
+  console.log(chalk.green(`✓ Selected note type: ${selectedNoteType}`));
   return selectedNoteType;
 }
 
 export async function configureFieldMapping(
   noteTypeName: string,
 ): Promise<Record<string, string>> {
-  console.log(chalk.cyan('🔍 Fetching fields...\n'));
+  console.log(chalk.cyan('\n🔍 Fetching fields...'));
   const fieldNames = await getFieldNamesForModel(noteTypeName);
 
   console.log(
-    chalk.gray(
-      `Found ${fieldNames.length} field(s): ${fieldNames.join(', ')}\n`,
-    ),
+    chalk.gray(`Found ${fieldNames.length} field(s): ${fieldNames.join(', ')}`),
   );
 
   // Step 4: Create field mapping with auto-suggestion and review
   console.log(
-    chalk.cyan('🗺️  Creating field mapping (LLM JSON keys → Anki fields)...\n'),
+    chalk.cyan('\n🗺️  Creating field mapping (LLM JSON keys → Anki fields)...'),
   );
 
   // Auto-suggest keys for all fields
@@ -147,6 +145,6 @@ export async function configureFieldMapping(
     fieldMap = customFieldMap;
   }
 
-  console.log(chalk.green('\n✓ Field mapping complete\n'));
+  console.log(chalk.green('\n✓ Field mapping complete'));
   return fieldMap;
 }
