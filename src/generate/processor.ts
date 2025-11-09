@@ -6,6 +6,7 @@ import { writeFile, appendFile } from 'fs/promises';
 import { parseLlmJson } from '../utils/parse-llm-json.js';
 import { calculateCost } from '../utils/llm-cost.js';
 import { fillTemplate } from '../batch-processing/util.js';
+import { Spinner } from '../utils/spinner.js';
 import type { Config } from '../config.js';
 import type { CardCandidate } from '../types.js';
 
@@ -122,6 +123,9 @@ export async function generateCards(
     console.log(chalk.gray(`📝 Logging to: ${logFilePath}`));
   }
 
+  const generationSpinner = new Spinner();
+  generationSpinner.start(`Waiting for ${config.model}...`);
+
   try {
     // 5. Perform a single, retry-able API call
     const { cards, rawResponse, costInfo } = await pRetry(
@@ -138,11 +142,13 @@ export async function generateCards(
         const outputTokens = usage?.completion_tokens ?? 0;
 
         if (!usage) {
-          console.warn(
-            chalk.yellow(
-              '  ⚠️  Could not determine token usage from API response. Cost will not be calculated.',
-            ),
-          );
+          generationSpinner.interrupt(() => {
+            console.warn(
+              chalk.yellow(
+                '  ⚠️  Could not determine token usage from API response. Cost will not be calculated.',
+              ),
+            );
+          });
         }
 
         const totalCost = calculateCost(
@@ -183,11 +189,21 @@ export async function generateCards(
         factor: 2,
         onFailedAttempt: async ({ error, attemptNumber, retriesLeft }) => {
           const errorMsg = error.message || String(error);
-          console.warn(
-            chalk.yellow(
-              `  ⚠️  Attempt ${attemptNumber} failed. ${retriesLeft} retries left. Reason: ${errorMsg}`,
-            ),
-          );
+          generationSpinner.interrupt(() => {
+            console.warn(
+              chalk.yellow(
+                `  ⚠️  Attempt ${attemptNumber} failed. ${retriesLeft} retries left. Reason: ${errorMsg}`,
+              ),
+            );
+          });
+
+          if (retriesLeft > 0) {
+            generationSpinner.update(
+              `Retrying with ${retriesLeft} more attempt${
+                retriesLeft === 1 ? '' : 's'
+              }...`,
+            );
+          }
 
           // Log to file
           if (logFilePath) {
@@ -208,6 +224,8 @@ export async function generateCards(
         },
       },
     );
+
+    generationSpinner.succeed('LLM response received');
 
     // 5. Handle potential count mismatch
     if (cards.length !== count) {
@@ -231,6 +249,7 @@ export async function generateCards(
 
     return { successful, failed: [], costInfo };
   } catch (error) {
+    generationSpinner.fail('LLM generation failed');
     let err: Error;
     if (error instanceof Error) {
       err = error;
