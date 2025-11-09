@@ -10,6 +10,17 @@ import {
 } from '../generate-init/interactive-steps.js';
 import { createPromptContent } from '../generate-init/prompt-generation.js';
 import { formatCostDisplay } from '../utils/llm-cost.js';
+import { resolveModel } from '../config.js';
+
+const GENERIC_QUALITY_CHECK_PROMPT = `You are an expert native speaker. Evaluate if the following text sounds natural and well-written in its language.
+Text: {text}
+
+Consider grammar, syntax, word choice, and common phrasing.
+
+Respond with JSON only, with no additional text or explanations outside the JSON structure.
+Your response must be a JSON object with two keys:
+- "is_valid": a boolean (true if natural, false if unnatural).
+- "reason": a brief, one-sentence explanation for your decision.`;
 
 interface GenerateInitArgs {
   output?: string;
@@ -80,9 +91,11 @@ const command: Command<GenerateInitArgs> = {
       const selectedNoteType = await selectNoteType(selectedDeck);
       const initialFieldMap = await configureFieldMapping(selectedNoteType);
 
+      const modelToUse = resolveModel(argv.model);
+
       console.log(
         chalk.cyan(
-          '\n🧠 Attempting to generate a smart prompt based on your existing cards...\n',
+          `\n🧠 Attempting to generate a smart prompt based on your existing cards using ${modelToUse}...\n`,
         ),
       );
       console.log(
@@ -94,7 +107,7 @@ const command: Command<GenerateInitArgs> = {
       const { body, finalFieldMap, costInfo } = await createPromptContent(
         selectedDeck,
         initialFieldMap,
-        argv.model,
+        modelToUse,
         argv.temperature,
         argv.copy,
       );
@@ -129,16 +142,6 @@ const command: Command<GenerateInitArgs> = {
           });
         }
       }
-
-      const GENERIC_QUALITY_CHECK_PROMPT = `You are an expert native speaker. Evaluate if the following text sounds natural and well-written in its language.
-Text: {text}
-
-Consider grammar, syntax, word choice, and common phrasing.
-
-Respond with JSON only, with no additional text or explanations outside the JSON structure.
-Your response must be a JSON object with two keys:
-- "is_valid": a boolean (true if natural, false if unnatural).
-- "reason": a brief, one-sentence explanation for your decision.`;
 
       console.log(chalk.cyan('📝 Creating prompt file...\n'));
 

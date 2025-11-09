@@ -63,24 +63,13 @@ async function generateContextualPromptBody(
   deckName: string,
   sampleCards: Array<Record<string, string>>,
   fieldKeys: string[],
-  userModel?: string,
+  model: string,
   temperature?: number,
   isCopyMode?: boolean,
 ): Promise<{
   body: string;
   costInfo?: PromptGenerationCostInfo;
 }> {
-  // Determine model
-  let model: string;
-
-  if (userModel) {
-    model = userModel;
-  } else {
-    // Auto-detect based on available API key
-    const useGemini = Boolean(process.env.GEMINI_API_KEY);
-    model = useGemini ? 'gemini-2.5-flash' : 'gpt-5';
-  }
-
   // Build the meta-prompt
   const metaPrompt = `You are an expert prompt engineer creating a prompt template for another AI.
 Your goal is to generate a helpful and flexible prompt body that instructs an AI to create multiple new Anki cards that match the general style of the provided examples.
@@ -226,7 +215,7 @@ Return ONLY the raw text for the prompt body. Do NOT include frontmatter or expl
 export async function createPromptContent(
   deckName: string,
   initialFieldMap: Record<string, string>,
-  model?: string,
+  model: string,
   temperature?: number,
   isCopyMode?: boolean,
 ): Promise<{

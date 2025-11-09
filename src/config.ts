@@ -113,6 +113,20 @@ export function getApiKeyForModel(model: string): string | undefined {
   return process.env[providerConfig.recommendedApiKeyEnv];
 }
 
+/**
+ * Resolves the LLM model to use.
+ * Prefers the user-provided model, otherwise falls back to a default
+ * based on available API keys (Gemini > OpenAI).
+ */
+export function resolveModel(userModel?: string): string {
+  if (userModel) {
+    return userModel;
+  }
+  // Auto-detect based on available API key
+  const useGemini = Boolean(process.env.GEMINI_API_KEY);
+  return useGemini ? 'gemini-2.5-flash' : 'gpt-5';
+}
+
 export function parseConfig(cliArgs: {
   model: string;
   batchSize?: number;
