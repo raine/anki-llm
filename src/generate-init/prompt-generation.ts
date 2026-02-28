@@ -163,7 +163,8 @@ Return ONLY the raw text for the prompt body. Do NOT include frontmatter or expl
           content: metaPrompt,
         },
       ],
-      ...(temperature !== undefined && { temperature }),
+      ...(temperature !== undefined &&
+        !model.startsWith('gpt-5') && { temperature }),
     });
 
     const rawContent = response.choices[0]?.message?.content?.trim();

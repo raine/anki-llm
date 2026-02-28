@@ -97,7 +97,7 @@ export async function commonProcessingHandler<T extends SharedProcessingArgs>(
   logInfo(`Model:             ${config.model}`);
   logInfo(`Batch size:        ${config.batchSize}`);
   logInfo(`Retries:           ${config.retries}`);
-  logInfo(`Temperature:       ${config.temperature}`);
+  logInfo(`Temperature:       ${config.temperature ?? 'default'}`);
   if (config.maxTokens) {
     logInfo(`Max tokens:        ${config.maxTokens}`);
   }

@@ -76,7 +76,9 @@ export async function processSingleRow(params: {
           content: prompt,
         },
       ],
-      temperature: config.temperature,
+      ...(config.temperature !== undefined && {
+        temperature: config.temperature,
+      }),
       ...(config.maxTokens && { max_tokens: config.maxTokens }),
     }),
     60000, // 60 second timeout

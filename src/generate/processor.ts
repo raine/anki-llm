@@ -124,7 +124,9 @@ export async function generateCards(
         const response = await client.chat.completions.create({
           model: config.model,
           messages: [{ role: 'user', content: filledPrompt }],
-          temperature: config.temperature,
+          ...(config.temperature !== undefined && {
+            temperature: config.temperature,
+          }),
           ...(config.maxTokens && { max_tokens: config.maxTokens }),
         });
 

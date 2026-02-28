@@ -106,7 +106,7 @@ const Config = z.object({
   batchSize: z.number().int().positive(),
   dryRun: z.boolean(),
   maxTokens: z.number().int().positive().optional(),
-  temperature: z.number().min(0).max(2),
+  temperature: z.number().min(0).max(2).optional(),
   retries: z.number().int().min(0),
   requireResultTag: z.boolean(),
 });
@@ -198,6 +198,11 @@ export function parseConfig(cliArgs: {
   // Use provider-specific base URL
   const apiBaseUrl = providerConfig.baseURL;
 
+  // GPT-5 models don't support the temperature parameter
+  const temperature = model.startsWith('gpt-5')
+    ? undefined
+    : cliArgs.temperature;
+
   const result = Config.safeParse({
     apiKey: apiKey || 'dummy-key-for-dry-run',
     apiBaseUrl,
@@ -205,7 +210,7 @@ export function parseConfig(cliArgs: {
     batchSize: cliArgs.batchSize ?? 5, // Default to 5 if not provided (used by batch command)
     dryRun,
     maxTokens: cliArgs.maxTokens,
-    temperature: cliArgs.temperature,
+    temperature,
     retries: cliArgs.retries,
     requireResultTag: cliArgs.requireResultTag,
   });

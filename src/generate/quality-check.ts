@@ -47,7 +47,9 @@ async function checkCard(
   const response = await client.chat.completions.create({
     model,
     messages: [{ role: 'user', content: filledPrompt }],
-    temperature: appConfig.temperature,
+    ...(appConfig.temperature !== undefined && {
+      temperature: appConfig.temperature,
+    }),
     response_format: { type: 'json_object' },
     ...(appConfig.maxTokens && { max_tokens: appConfig.maxTokens }),
   });
