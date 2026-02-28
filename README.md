@@ -45,8 +45,8 @@ interactively, and add selected cards to your deck.
 
 ## Features
 
-- **Batch processing workflows**: File-based (with resume) or direct-to-Anki (one
-  command).
+- **Batch processing workflows**: File-based (with resume) or direct-to-Anki
+  (one command).
 - **Export** Anki decks to clean CSV or YAML files.
 - **Batch process** note fields using OpenAI or Google Gemini models.
 - **Custom prompts**: Use flexible template files to define exactly how the LLM
@@ -84,20 +84,22 @@ for the model provider you want to use.
 
 The tool supports two API providers:
 
-| Model                    | Input   | Output   |                                                                          |
-| ------------------------ | ------- | -------- | ------------------------------------------------------------------------ |
+| Model                    | Input   | Output   |                                                                           |
+| ------------------------ | ------- | -------- | ------------------------------------------------------------------------- |
 | **OpenAI models**        |
-| `gpt-4.1`                | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4.1)                    |
-| `gpt-4o`                 | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4o)                     |
-| `gpt-4o-mini`            | $0.15/M | $0.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4o-mini)                |
-| `gpt-5`                  | $1.25/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5)                      |
-| `gpt-5-mini`             | $0.25/M | $2.00/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-mini)                 |
-| `gpt-5-nano`             | $0.05/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-nano)                 |
+| `gpt-4.1`                | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4.1)                     |
+| `gpt-4o`                 | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4o)                      |
+| `gpt-4o-mini`            | $0.15/M | $0.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4o-mini)                 |
+| `gpt-5`                  | $1.25/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5)                       |
+| `gpt-5-mini`             | $0.25/M | $2.00/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-mini)                  |
+| `gpt-5-nano`             | $0.05/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-nano)                  |
 | **Google Gemini models** |
-| `gemini-2.0-flash`       | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)      |
-| `gemini-2.5-flash`       | $0.30/M | $2.50/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)      |
-| `gemini-2.5-flash-lite`  | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-lite) |
-| `gemini-2.5-pro`         | $1.25/M | $10.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)        |
+| `gemini-2.0-flash`       | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)       |
+| `gemini-2.5-flash`       | $0.30/M | $2.50/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)       |
+| `gemini-2.5-flash-lite`  | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-lite)  |
+| `gemini-2.5-pro`         | $1.25/M | $10.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)         |
+| `gemini-3-flash-preview` | $0.50/M | $3.00/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3-flash-preview) |
+| `gemini-3.1-pro-preview` | $2.00/M | $12.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-pro-preview) |
 
 Pricing is per million tokens (M). Check the latest prices on the provider's
 website to be sure.
@@ -140,9 +142,12 @@ Config file lives at `~/.config/anki-llm/config.json`.
 
 - [`export`](#anki-llm-export-deck-output) - Export deck to file
 - [`import`](#anki-llm-import-input) - Import data to deck
-- [`process-file`](#anki-llm-process-file-input) - Process notes from file with AI
-- [`process-deck`](#anki-llm-process-deck-deck) - Process notes from deck with AI
-- [`generate-init`](#anki-llm-generate-init-output) - Create prompt template for generate
+- [`process-file`](#anki-llm-process-file-input) - Process notes from file with
+  AI
+- [`process-deck`](#anki-llm-process-deck-deck) - Process notes from deck with
+  AI
+- [`generate-init`](#anki-llm-generate-init-output) - Create prompt template for
+  generate
 - [`generate`](#anki-llm-generate-term) - Generate new cards for a term
 - [`query`](#anki-llm-query-action-params) - Query AnkiConnect API
 
@@ -174,8 +179,8 @@ anki-llm export "Japanese Core 1k" my-custom-name.yaml
 
 ### `anki-llm import <input>`
 
-Imports data from a file into an Anki deck. Existing notes (matched by key field)
-are updated, while new entries create new notes.
+Imports data from a file into an Anki deck. Existing notes (matched by key
+field) are updated, while new entries create new notes.
 
 - `<input>`: Path to the data file to import (CSV or YAML).
 
@@ -209,7 +214,9 @@ re-run.
 - **Either** `--field` **or** `--json` (mutually exclusive):
   - `--field <name>`: Update a single field with the AI response.
   - `--json`: Expect JSON response and merge all fields into the note.
-  - See [Understanding `--field` vs `--json` modes](#understanding---field-vs---json-modes) for more details.
+  - See
+    [Understanding `--field` vs `--json` modes](#understanding---field-vs---json-modes)
+    for more details.
 
 **Common options:**
 
@@ -263,13 +270,20 @@ anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.tx
 
 **When to use this command:**
 
-This command provides a file-based workflow for batch processing notes. It is the primary alternative to the `process-deck` command, which modifies notes directly in your Anki collection.
+This command provides a file-based workflow for batch processing notes. It is
+the primary alternative to the `process-deck` command, which modifies notes
+directly in your Anki collection.
 
 Use `process-file` instead of `process-deck` when you:
 
-- **Require a manual review step.** The command outputs to a file, creating a safe staging area to inspect results before you commit them to your Anki deck.
-- **Need to process a large number of notes where interruptions are possible.** Its resume capability ensures you don't lose progress if the process fails midway.
-- **Are operating in an environment without a running Anki instance.** This command is fully self-contained and does not need to connect to the Anki application.
+- **Require a manual review step.** The command outputs to a file, creating a
+  safe staging area to inspect results before you commit them to your Anki deck.
+- **Need to process a large number of notes where interruptions are possible.**
+  Its resume capability ensures you don't lose progress if the process fails
+  midway.
+- **Are operating in an environment without a running Anki instance.** This
+  command is fully self-contained and does not need to connect to the Anki
+  application.
 
 ---
 
@@ -289,7 +303,9 @@ safe to run.
 - **Either** `--field` **or** `--json` (mutually exclusive):
   - `--field <name>`: Update a single field with the AI response.
   - `--json`: Expect JSON response and merge all fields into the note.
-  - See [Understanding `--field` vs `--json` modes](#understanding---field-vs---json-modes) for more details.
+  - See
+    [Understanding `--field` vs `--json` modes](#understanding---field-vs---json-modes)
+    for more details.
 
 **Common options:**
 
@@ -467,10 +483,11 @@ The frontmatter is a YAML block at the top of the file enclosed by `---`.
 
 ##### Optional: Quality Check
 
-When running `generate-init`, the wizard will ask if you want to enable automatic
-quality verification. If enabled, after you select cards, the tool will verify
-each one using an additional LLM call and flag any that fail validation for your
-review. You can then decide whether to keep or discard flagged cards.
+When running `generate-init`, the wizard will ask if you want to enable
+automatic quality verification. If enabled, after you select cards, the tool
+will verify each one using an additional LLM call and flag any that fail
+validation for your review. You can then decide whether to keep or discard
+flagged cards.
 
 **Setup (automatic):**
 
@@ -489,9 +506,9 @@ reasoning, and you can interactively decide whether to keep or discard them.
 
 The quality check is fully customizable. You can edit the `qualityCheck` section
 in your generated prompt file to verify any criteria you want (e.g., checking
-formality levels, specific grammar patterns, cultural appropriateness, etc.). You
-can also specify a different (typically cheaper) model for quality checks. The
-section looks like this:
+formality levels, specific grammar patterns, cultural appropriateness, etc.).
+You can also specify a different (typically cheaper) model for quality checks.
+The section looks like this:
 
 ```yaml
 qualityCheck:
@@ -564,8 +581,8 @@ Follow the structure shown in this example precisely:
 ```
 
 Return only a valid JSON array matching this structure. Ensure you generate
-{count} varied and high-quality cards that highlight different nuances, contexts,
-or usage examples of the term.
+{count} varied and high-quality cards that highlight different nuances,
+contexts, or usage examples of the term.
 ````
 
 #### Using `--copy` Mode (Manual LLM Workflow)
@@ -685,12 +702,11 @@ anki-llm query docs
 
 **Example: Sampling random cards from decks**
 
-AI agents can use `anki-llm query` to discover information about your
-collection and then take action. Here's an example of Claude Code using the
-`query` command to sample random cards from multiple decks. Given the
-instruction: "Use anki-llm to pick random cards from Glossika decks, and print
-the English and Japanese fields for each, pick 10 cards from each deck, and
-save to a markdown file"
+AI agents can use `anki-llm query` to discover information about your collection
+and then take action. Here's an example of Claude Code using the `query` command
+to sample random cards from multiple decks. Given the instruction: "Use anki-llm
+to pick random cards from Glossika decks, and print the English and Japanese
+fields for each, pick 10 cards from each deck, and save to a markdown file"
 
 [Full conversation](https://gist.github.com/raine/b8d42275a188005bd2dadc34b8e05824)
 

@@ -11,6 +11,8 @@ export const SupportedModel = z.enum([
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
   'gemini-2.5-pro',
+  'gemini-3-flash-preview',
+  'gemini-3.1-pro-preview',
 ]);
 
 export type SupportedChatModel = z.infer<typeof SupportedModel>;
@@ -66,6 +68,14 @@ export const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
   'gemini-2.5-pro': {
     inputCostPerMillion: 1.25,
     outputCostPerMillion: 10,
+  },
+  'gemini-3-flash-preview': {
+    inputCostPerMillion: 0.5,
+    outputCostPerMillion: 3,
+  },
+  'gemini-3.1-pro-preview': {
+    inputCostPerMillion: 2,
+    outputCostPerMillion: 12,
   },
 };
 
