@@ -87,12 +87,16 @@ The tool supports two API providers:
 | Model                    | Input   | Output   |                                                                           |
 | ------------------------ | ------- | -------- | ------------------------------------------------------------------------- |
 | **OpenAI models**        |
-| `gpt-4.1`                | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4.1)                     |
+| `gpt-4.1`                | $2.00/M | $8.00/M  | [🔗](https://platform.openai.com/docs/models/gpt-4.1)                     |
+| `gpt-4.1-mini`           | $0.40/M | $1.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4.1-mini)                |
+| `gpt-4.1-nano`           | $0.10/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-4.1-nano)                |
 | `gpt-4o`                 | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4o)                      |
 | `gpt-4o-mini`            | $0.15/M | $0.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4o-mini)                 |
 | `gpt-5`                  | $1.25/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5)                       |
 | `gpt-5-mini`             | $0.25/M | $2.00/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-mini)                  |
 | `gpt-5-nano`             | $0.05/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-nano)                  |
+| `gpt-5.1`                | $1.25/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.1)                     |
+| `gpt-5.2`                | $1.75/M | $14.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.2)                     |
 | **Google Gemini models** |
 | `gemini-2.0-flash`       | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)       |
 | `gemini-2.5-flash`       | $0.30/M | $2.50/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)       |

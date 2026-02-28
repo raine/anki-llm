@@ -2,11 +2,15 @@ import { z } from 'zod';
 
 export const SupportedModel = z.enum([
   'gpt-4.1',
+  'gpt-4.1-mini',
+  'gpt-4.1-nano',
   'gpt-4o',
   'gpt-4o-mini',
   'gpt-5',
   'gpt-5-mini',
   'gpt-5-nano',
+  'gpt-5.1',
+  'gpt-5.2',
   'gemini-2.0-flash',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
@@ -30,8 +34,16 @@ export type ModelPricing = {
  */
 export const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
   'gpt-4.1': {
-    inputCostPerMillion: 2.5,
-    outputCostPerMillion: 10,
+    inputCostPerMillion: 2,
+    outputCostPerMillion: 8,
+  },
+  'gpt-4.1-mini': {
+    inputCostPerMillion: 0.4,
+    outputCostPerMillion: 1.6,
+  },
+  'gpt-4.1-nano': {
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
   },
   'gpt-4o': {
     inputCostPerMillion: 2.5,
@@ -52,6 +64,14 @@ export const MODEL_PRICING: Record<SupportedChatModel, ModelPricing> = {
   'gpt-5-nano': {
     inputCostPerMillion: 0.05,
     outputCostPerMillion: 0.4,
+  },
+  'gpt-5.1': {
+    inputCostPerMillion: 1.25,
+    outputCostPerMillion: 10,
+  },
+  'gpt-5.2': {
+    inputCostPerMillion: 1.75,
+    outputCostPerMillion: 14,
   },
   'gemini-2.0-flash': {
     inputCostPerMillion: 0.1,
