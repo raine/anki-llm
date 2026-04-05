@@ -1,0 +1,94 @@
+use std::path::PathBuf;
+
+use clap::Parser;
+
+use crate::STYLES;
+
+#[derive(Parser)]
+#[command(name = "anki-llm")]
+#[command(about = "Bulk-process Anki flashcards with LLMs")]
+#[command(styles = STYLES)]
+#[command(version)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(clap::Subcommand)]
+pub enum Commands {
+    /// Export an Anki deck to CSV or YAML
+    Export(ExportArgs),
+    /// Import CSV or YAML file into an Anki deck
+    Import(ImportArgs),
+    /// Process notes from a file with AI (supports resume)
+    #[command(name = "process-file")]
+    ProcessFile(ProcessFileArgs),
+    /// Process notes directly from an Anki deck
+    #[command(name = "process-deck")]
+    ProcessDeck(ProcessDeckArgs),
+    /// Query AnkiConnect API
+    Query(QueryArgs),
+    /// Manage persistent configuration
+    Config(ConfigArgs),
+    /// Generate Anki cards using an LLM
+    Generate(GenerateArgs),
+    /// Create a prompt template by querying your Anki collection
+    #[command(name = "generate-init")]
+    GenerateInit(GenerateInitArgs),
+}
+
+#[derive(clap::Args)]
+pub struct ExportArgs {
+    /// Deck name to export
+    pub deck: String,
+    /// Output file path
+    pub output: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
+pub struct ImportArgs {
+    /// Input file path
+    pub input: PathBuf,
+}
+
+#[derive(clap::Args)]
+pub struct ProcessFileArgs {
+    /// Input file path
+    pub input: PathBuf,
+}
+
+#[derive(clap::Args)]
+pub struct ProcessDeckArgs {
+    /// Deck name to process
+    pub deck: String,
+}
+
+#[derive(clap::Args)]
+pub struct QueryArgs {
+    /// AnkiConnect action name
+    pub action: String,
+    /// JSON parameters
+    pub params: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct ConfigArgs {
+    /// Action to perform (get, set, list, path)
+    pub action: String,
+    /// Config key
+    pub key: Option<String>,
+    /// Config value
+    pub value: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct GenerateArgs {
+    /// Term to generate cards for
+    pub term: String,
+}
+
+#[derive(clap::Args)]
+pub struct GenerateInitArgs {
+    /// Output file path
+    pub output: Option<PathBuf>,
+}
