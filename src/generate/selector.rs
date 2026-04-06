@@ -1,5 +1,5 @@
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::cards::ValidatedCard;
@@ -88,7 +88,8 @@ pub fn markdown_to_lines(md: &str, indent: &str) -> Vec<Line<'static>> {
     let parser = Parser::new_ext(md, Options::all());
     let mut lines: Vec<Line<'static>> = Vec::new();
     let mut spans: Vec<Span<'static>> = Vec::new();
-    let mut style = Style::default();
+    let base_style = Style::default();
+    let mut style = base_style;
 
     let start_line = |spans: &mut Vec<Span<'static>>, indent: &str| {
         if !indent.is_empty() {
@@ -107,8 +108,10 @@ pub fn markdown_to_lines(md: &str, indent: &str) -> Vec<Line<'static>> {
                 let code_style = Style::default().add_modifier(Modifier::REVERSED);
                 spans.push(Span::styled(t.to_string(), code_style));
             }
-            Event::Start(Tag::Strong) => style = style.add_modifier(Modifier::BOLD),
-            Event::End(TagEnd::Strong) => style = style.remove_modifier(Modifier::BOLD),
+            Event::Start(Tag::Strong) => {
+                style = style.add_modifier(Modifier::BOLD).fg(Color::White);
+            }
+            Event::End(TagEnd::Strong) => style = base_style,
             Event::Start(Tag::Emphasis) => style = style.add_modifier(Modifier::ITALIC),
             Event::End(TagEnd::Emphasis) => style = style.remove_modifier(Modifier::ITALIC),
             Event::Start(Tag::Item) => {
@@ -117,9 +120,9 @@ pub fn markdown_to_lines(md: &str, indent: &str) -> Vec<Line<'static>> {
             Event::InlineHtml(tag) => {
                 let t = tag.trim().to_lowercase();
                 if t == "<b>" || t == "<strong>" {
-                    style = style.add_modifier(Modifier::BOLD);
+                    style = style.add_modifier(Modifier::BOLD).fg(Color::White);
                 } else if t == "</b>" || t == "</strong>" {
-                    style = style.remove_modifier(Modifier::BOLD);
+                    style = base_style;
                 } else if t == "<i>" || t == "<em>" {
                     style = style.add_modifier(Modifier::ITALIC);
                 } else if t == "</i>" || t == "</em>" {
