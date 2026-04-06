@@ -184,13 +184,26 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     }
 
     let selected_indices = select_cards(&validated)?;
-    let selected: Vec<ValidatedCard> = selected_indices
+    let mut selected: Vec<ValidatedCard> = selected_indices
         .iter()
         .filter_map(|&i| validated.get(i).cloned())
         .collect();
 
     if selected.is_empty() {
         eprintln!("\nNo cards selected. Exiting.");
+        return Ok(());
+    }
+
+    // Filter out duplicates — they are shown in the selector as a heads-up,
+    // but adding them to Anki would create duplicate notes.
+    let dup_selected = selected.iter().filter(|c| c.is_duplicate).count();
+    if dup_selected > 0 {
+        eprintln!("\nSkipping {dup_selected} duplicate(s) — already exist in Anki.");
+        selected.retain(|c| !c.is_duplicate);
+    }
+
+    if selected.is_empty() {
+        eprintln!("No non-duplicate cards selected. Exiting.");
         return Ok(());
     }
 
