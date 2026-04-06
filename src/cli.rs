@@ -135,6 +135,14 @@ pub struct ProcessFileArgs {
     /// Require <result></result> tags in LLM responses
     #[arg(long)]
     pub require_result_tag: bool,
+
+    /// Append raw LLM prompts and responses to a log file (relative path)
+    #[arg(long)]
+    pub log: Option<PathBuf>,
+
+    /// Print raw LLM prompts and responses to stderr
+    #[arg(long)]
+    pub very_verbose: bool,
 }
 
 #[derive(clap::Args)]
@@ -195,6 +203,14 @@ pub struct ProcessDeckArgs {
     /// Require <result></result> tags in LLM responses
     #[arg(long)]
     pub require_result_tag: bool,
+
+    /// Append raw LLM prompts and responses to a log file (relative path)
+    #[arg(long)]
+    pub log: Option<PathBuf>,
+
+    /// Print raw LLM prompts and responses to stderr
+    #[arg(long)]
+    pub very_verbose: bool,
 }
 
 #[derive(clap::Args)]
@@ -271,6 +287,14 @@ pub struct GenerateArgs {
     /// Copy prompt to clipboard for manual LLM mode
     #[arg(long)]
     pub copy: bool,
+
+    /// Append raw LLM prompts and responses to a log file (relative path)
+    #[arg(long)]
+    pub log: Option<PathBuf>,
+
+    /// Print raw LLM prompts and responses to stderr
+    #[arg(long)]
+    pub very_verbose: bool,
 }
 
 #[derive(clap::Args)]

@@ -6,6 +6,7 @@ use crate::data::rows::Row;
 use crate::llm::client::LlmClient;
 use crate::llm::error::LlmError;
 use crate::llm::extract::extract_result_tag;
+use crate::llm::logger::LlmLogger;
 use crate::llm::parse_json::{merge_fields_case_insensitive, try_parse_json_object};
 use crate::template::fill_template;
 
@@ -21,6 +22,7 @@ pub struct ProcessRowConfig {
     pub temperature: Option<f64>,
     pub max_tokens: Option<u64>,
     pub require_result_tag: bool,
+    pub logger: Option<Arc<LlmLogger>>,
 }
 
 /// Build the closure that processes a single row through the LLM.
@@ -46,6 +48,11 @@ pub fn build_process_fn(config: ProcessRowConfig) -> ProcessFn {
             })?;
 
         let response_text = result.content;
+
+        if let Some(ref logger) = config.logger {
+            logger.log(&prompt, &response_text);
+        }
+
         let usage = result.usage.map(|u| (u.prompt_tokens, u.completion_tokens));
 
         // Extract from result tags if configured

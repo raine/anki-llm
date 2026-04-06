@@ -3,6 +3,7 @@ use anyhow::Result;
 use crate::anki::client::AnkiClient;
 use crate::cli::GenerateArgs;
 use crate::llm::client::LlmClient;
+use crate::llm::logger::LlmLogger;
 use crate::llm::parse_json::try_parse_json_array;
 use crate::llm::pricing;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
@@ -44,7 +45,10 @@ pub fn run(args: GenerateArgs) -> Result<()> {
         validation.note_type_fields.join(", ")
     );
 
-    // 3. Resolve LLM config
+    // 3. Build logger
+    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
+
+    // 4. Resolve LLM config
     // dry_run: false here because generate always calls the LLM (dry-run only
     // skips the Anki import step, not the generation). Passing dry_run: true
     // would replace the API key with "dry-run" and cause HTTP 400.
@@ -57,7 +61,7 @@ pub fn run(args: GenerateArgs) -> Result<()> {
         dry_run: false,
     })?;
 
-    // 4. Generate cards
+    // 5. Generate cards
     let field_map_keys: Vec<String> = frontmatter.field_map.keys().cloned().collect();
     let mut generation_cost = 0.0;
     let candidates: Vec<CardCandidate>;
@@ -132,6 +136,7 @@ pub fn run(args: GenerateArgs) -> Result<()> {
             runtime.temperature,
             runtime.max_tokens,
             runtime.retries,
+            Some(&logger),
         )?;
         spinner.finish_and_clear();
 
@@ -226,6 +231,7 @@ pub fn run(args: GenerateArgs) -> Result<()> {
             runtime.temperature,
             runtime.max_tokens,
             runtime.retries,
+            Some(&logger),
         )?
     } else {
         super::quality::QualityCheckResult {

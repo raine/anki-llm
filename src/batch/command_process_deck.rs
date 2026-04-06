@@ -10,6 +10,7 @@ use crate::anki::client::{AnkiClient, anki_quote};
 use crate::cli::ProcessDeckArgs;
 use crate::data::slug::slugify_deck_name;
 use crate::llm::client::LlmClient;
+use crate::llm::logger::LlmLogger;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use crate::template::fill_template;
 
@@ -170,6 +171,10 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         return Ok(());
     }
 
+    // Build logger
+    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
+    let logger = Arc::new(logger);
+
     // Build processing closure (shared with process-file)
     let process_fn = build_process_fn(ProcessRowConfig {
         client: Arc::new(LlmClient::from_config(&runtime)),
@@ -179,6 +184,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         temperature: runtime.temperature,
         max_tokens: runtime.max_tokens,
         require_result_tag: args.require_result_tag,
+        logger: Some(logger),
     });
 
     // Set up deck writer. Pass the existing AnkiClient (no need for a second one).

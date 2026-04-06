@@ -8,6 +8,7 @@ use crate::cli::ProcessFileArgs;
 use crate::data::io::{load_existing_output, parse_data_file};
 use crate::data::rows::{Row, get_note_id, require_note_id};
 use crate::llm::client::LlmClient;
+use crate::llm::logger::LlmLogger;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use crate::template::fill_template;
 
@@ -132,6 +133,10 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         return Ok(());
     }
 
+    // Build logger
+    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
+    let logger = Arc::new(logger);
+
     // Build processing closure
     let process_fn = build_process_fn(ProcessRowConfig {
         client: Arc::new(LlmClient::from_config(&runtime)),
@@ -141,6 +146,7 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         temperature: runtime.temperature,
         max_tokens: runtime.max_tokens,
         require_result_tag: args.require_result_tag,
+        logger: Some(logger),
     });
 
     // Set up file writer

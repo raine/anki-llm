@@ -7,6 +7,7 @@ use serde_json::Value;
 use crate::data::Row;
 use crate::llm::client::LlmClient;
 use crate::llm::error::LlmError;
+use crate::llm::logger::LlmLogger;
 use crate::llm::parse_json::try_parse_json_object;
 use crate::llm::pricing;
 use crate::template::fill_template;
@@ -24,6 +25,7 @@ pub struct QualityCheckResult {
 
 /// Perform quality check on selected cards. Returns filtered cards and cost.
 /// If check_config is None, returns all cards unchanged with zero cost.
+#[allow(clippy::too_many_arguments)]
 pub fn perform_quality_check(
     cards: Vec<ValidatedCard>,
     check_config: Option<&QualityCheckConfig>,
@@ -32,6 +34,7 @@ pub fn perform_quality_check(
     temperature: Option<f64>,
     max_tokens: Option<u64>,
     retries: u32,
+    logger: Option<&LlmLogger>,
 ) -> Result<QualityCheckResult, anyhow::Error> {
     let config = match check_config {
         Some(c) => c,
@@ -100,6 +103,7 @@ pub fn perform_quality_check(
                         temperature,
                         max_tokens,
                         retries,
+                        logger,
                     )
                     .map_err(|e| e.to_string());
 
@@ -186,6 +190,7 @@ fn check_single(
     temperature: Option<f64>,
     max_tokens: Option<u64>,
     retries: u32,
+    logger: Option<&LlmLogger>,
 ) -> Result<(bool, String, f64), anyhow::Error> {
     let mut last_error = String::new();
 
@@ -197,6 +202,10 @@ fn check_single(
 
         match client.chat_completion(model, prompt, temperature, max_tokens) {
             Ok(result) => {
+                if let Some(logger) = logger {
+                    logger.log(prompt, &result.content);
+                }
+
                 let obj = try_parse_json_object(&result.content)
                     .ok_or_else(|| anyhow::anyhow!("Quality check response is not valid JSON"))?;
 

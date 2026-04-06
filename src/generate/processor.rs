@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::data::Row;
 use crate::llm::client::LlmClient;
 use crate::llm::error::LlmError;
+use crate::llm::logger::LlmLogger;
 use crate::llm::parse_json::try_parse_json_array;
 use crate::llm::pricing;
 use crate::template::fill_template;
@@ -44,6 +45,7 @@ pub fn generate_cards(
     temperature: Option<f64>,
     max_tokens: Option<u64>,
     retries: u32,
+    logger: Option<&LlmLogger>,
 ) -> Result<GenerationResult, anyhow::Error> {
     // Build row for template filling
     let mut row = Row::new();
@@ -69,6 +71,7 @@ pub fn generate_cards(
             model,
             temperature,
             max_tokens,
+            logger,
         ) {
             Ok(result) => return Ok(result),
             Err(e) => {
@@ -91,8 +94,13 @@ fn try_generate(
     model: &str,
     temperature: Option<f64>,
     max_tokens: Option<u64>,
+    logger: Option<&LlmLogger>,
 ) -> Result<GenerationResult, anyhow::Error> {
     let result = client.chat_completion(model, prompt, temperature, max_tokens)?;
+
+    if let Some(logger) = logger {
+        logger.log(prompt, &result.content);
+    }
 
     let content = result.content.trim().to_string();
     if content.is_empty() {
