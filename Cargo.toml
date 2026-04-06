@@ -10,7 +10,7 @@ repository = "https://github.com/raine/anki-llm"
 homepage = "https://github.com/raine/anki-llm"
 keywords = ["anki", "llm", "flashcards", "cli", "openai"]
 categories = ["command-line-utilities"]
-include = ["src/**/*", "tests/**/*", "README.md", "LICENSE", "CHANGELOG.md"]
+include = ["src/**/*", "tests/**/*", "README.md", "LICENSE", "CHANGELOG.md", "ANKI_CONNECT.md"]
 
 [dependencies]
 # CLI
