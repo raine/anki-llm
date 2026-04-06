@@ -3,7 +3,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
@@ -537,53 +537,54 @@ impl App {
 // ---------------------------------------------------------------------------
 
 fn draw(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+
+    // Persistent shell: sidebar | main content, with footer below
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(area);
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(30), Constraint::Min(0)])
+        .split(rows[0]);
+
+    draw_sidebar(frame, app, cols[0]);
+    draw_footer(frame, app, rows[1]);
+
+    let main_area = cols[1];
     match &app.mode {
-        AppMode::Input(text) => draw_input(frame, text, app.session_info.as_ref()),
-        AppMode::Running => draw_running(frame, app),
-        AppMode::Selecting(state) => draw_selecting(frame, app, state),
-        AppMode::Reviewing(state) => draw_reviewing(frame, state),
-        AppMode::Done(msg) => draw_done(frame, app, msg),
-        AppMode::Error(msg) => draw_error(frame, msg),
+        AppMode::Input(text) => draw_input(frame, text, main_area),
+        AppMode::Running => draw_running(frame, app, main_area),
+        AppMode::Selecting(state) => draw_selecting(frame, state, main_area),
+        AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
+        AppMode::Done(msg) => draw_done(frame, app, msg, main_area),
+        AppMode::Error(msg) => draw_error(frame, msg, main_area),
     }
 }
 
-fn draw_input(frame: &mut Frame, text: &str, session_info: Option<&SessionInfo>) {
-    let area = frame.area();
+fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default().borders(Borders::RIGHT);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    // Centered column: max 50 chars wide
-    let max_width = 50u16.min(area.width.saturating_sub(4));
-    let h_pad = area.width.saturating_sub(max_width) / 2;
+    let info_height: u16 = if app.session_info.is_some() { 4 } else { 0 };
+    let steps_height = app.steps.len() as u16;
 
-    let h_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(h_pad),
-            Constraint::Length(max_width),
-            Constraint::Min(0),
-        ])
-        .split(area);
-
-    let col = h_chunks[1];
-
-    // Build content: session info lines + input box
-    let info_height: u16 = if session_info.is_some() { 4 } else { 0 };
-    let input_height: u16 = 3;
-    let total_height = info_height + input_height;
-    let v_pad = col.height.saturating_sub(total_height) / 2;
-
-    let v_chunks = Layout::default()
+    let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(v_pad),
             Constraint::Length(info_height),
-            Constraint::Length(input_height),
+            Constraint::Length(steps_height),
             Constraint::Min(0),
+            Constraint::Length(1),
         ])
-        .split(col);
+        .split(inner);
 
     // Session info
-    if let Some(info) = session_info {
-        let info_lines = vec![
+    if let Some(info) = &app.session_info {
+        let lines = vec![
             Line::from(vec![
                 Span::styled("Deck  ", Style::default().fg(Color::DarkGray)),
                 Span::raw(&info.deck),
@@ -596,41 +597,16 @@ fn draw_input(frame: &mut Frame, text: &str, session_info: Option<&SessionInfo>)
                 Span::styled("Model ", Style::default().fg(Color::DarkGray)),
                 Span::raw(&info.model),
             ]),
-            Line::from(""),
         ];
-        let info_para = Paragraph::new(Text::from(info_lines));
-        frame.render_widget(info_para, v_chunks[1]);
+        frame.render_widget(Paragraph::new(lines), chunks[0]);
     }
 
-    // Input box
-    let input_area = v_chunks[2];
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Enter term ")
-        .border_style(Style::default().fg(Color::Cyan));
-
-    let para = Paragraph::new(text).block(block);
-    frame.render_widget(para, input_area);
-
-    // Show cursor
-    frame.set_cursor_position((input_area.x + 1 + text.len() as u16, input_area.y + 1));
-}
-
-fn draw_running(frame: &mut Frame, app: &App) {
-    let area = frame.area();
-
-    // Split: top for steps, bottom for logs
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(10), Constraint::Percentage(55)])
-        .split(area);
-
+    // Pipeline steps
     let spinner_frame = format!(
         "{} ",
         SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()]
     );
 
-    // Steps panel
     let step_items: Vec<ListItem> = app
         .steps
         .iter()
@@ -645,9 +621,9 @@ fn draw_running(frame: &mut Frame, app: &App) {
 
             let detail_text = match status {
                 StepStatus::Running(Some(d)) | StepStatus::Done(Some(d)) => {
-                    format!("  {}", d)
+                    format!("  {d}")
                 }
-                StepStatus::Error(e) => format!("  {}", e),
+                StepStatus::Error(e) => format!("  {e}"),
                 _ => String::new(),
             };
 
@@ -665,25 +641,95 @@ fn draw_running(frame: &mut Frame, app: &App) {
         })
         .collect();
 
+    frame.render_widget(List::new(step_items), chunks[1]);
+
+    // Cost
     let total = app.session_cost + app.run_cost;
-    let cost_title = if total > 0.0 {
-        format!(" Steps — {} ", pricing::format_cost(total))
-    } else {
-        " Steps ".to_string()
-    };
-
-    let steps_block = Block::default()
-        .borders(Borders::ALL)
-        .title(cost_title)
-        .title_bottom(Line::from(" [Esc] back  [q] quit ").right_aligned());
-    let steps_list = List::new(step_items).block(steps_block);
-    frame.render_widget(steps_list, chunks[0]);
-
-    // Log panel
-    draw_log_panel(frame, app, chunks[1]);
+    if total > 0.0 {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                pricing::format_cost(total),
+                Style::default().fg(Color::DarkGray),
+            ))),
+            chunks[3],
+        );
+    }
 }
 
-fn draw_log_panel(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
+    let hints = match &app.mode {
+        AppMode::Input(_) => " [Enter] generate  [q] quit".to_string(),
+        AppMode::Running => " [Esc] cancel  [q] quit".to_string(),
+        AppMode::Selecting(state) => {
+            let n = state.selected.len();
+            format!(
+                " [Space] toggle  [a] all  [n] none  [Enter] confirm  [Esc] back  [q] quit  ({n} selected)"
+            )
+        }
+        AppMode::Reviewing(state) => {
+            let cur = (state.cursor + 1).min(state.flagged.len());
+            let total = state.flagged.len();
+            format!(
+                " Flagged {cur}/{total}  [k] keep  [d] discard  [a] keep all  [x] discard all  [q] quit"
+            )
+        }
+        AppMode::Done(_) | AppMode::Error(_) => " [n] new term  [any key] quit".to_string(),
+    };
+
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            hints,
+            Style::default().fg(Color::DarkGray),
+        ))),
+        area,
+    );
+}
+
+fn draw_input(frame: &mut Frame, text: &str, area: Rect) {
+    // Center the input box in the main area
+    let max_width = 50u16.min(area.width.saturating_sub(4));
+    let h_pad = area.width.saturating_sub(max_width) / 2;
+
+    let h_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(h_pad),
+            Constraint::Length(max_width),
+            Constraint::Min(0),
+        ])
+        .split(area);
+
+    let col = h_chunks[1];
+    let input_height: u16 = 3;
+    let v_pad = col.height.saturating_sub(input_height) / 2;
+
+    let v_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(v_pad),
+            Constraint::Length(input_height),
+            Constraint::Min(0),
+        ])
+        .split(col);
+
+    let input_area = v_chunks[1];
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Enter term ")
+        .border_style(Style::default().fg(Color::Cyan));
+
+    let para = Paragraph::new(text).block(block);
+    frame.render_widget(para, input_area);
+
+    frame.set_cursor_position((input_area.x + 1 + text.len() as u16, input_area.y + 1));
+}
+
+fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
+    // Steps are in the sidebar; main area is just the log
+    draw_log_panel(frame, app, area);
+}
+
+fn draw_log_panel(frame: &mut Frame, app: &App, area: Rect) {
     let visible_height = area.height.saturating_sub(2) as usize;
     let total_logs = app.logs.len();
     let start = total_logs.saturating_sub(visible_height);
@@ -701,23 +747,12 @@ fn draw_log_panel(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     frame.render_widget(log_para, area);
 }
 
-fn draw_selecting(frame: &mut Frame, _app: &App, state: &SelectionState) {
-    let area = frame.area();
-
-    let selected_count = state.selected.len();
-    let title = format!(
-        " Select cards  [Space] toggle  [a] all  [n] none  [Enter] confirm  [Esc] back  [q] quit  ({selected_count} selected) "
-    );
-
-    let main_block = Block::default().borders(Borders::ALL).title(title);
-    let inner = main_block.inner(area);
-    frame.render_widget(main_block, area);
-
+fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
     // Split: left list, right detail
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(38), Constraint::Percentage(62)])
-        .split(inner);
+        .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
+        .split(area);
 
     // Card list
     let list_items: Vec<ListItem> = state
@@ -789,32 +824,18 @@ fn draw_selecting(frame: &mut Frame, _app: &App, state: &SelectionState) {
         }
 
         let detail_para = Paragraph::new(Text::from(lines))
-            .block(Block::default().borders(Borders::NONE))
             .wrap(Wrap { trim: false })
             .scroll((state.detail_scroll, 0));
         frame.render_widget(detail_para, chunks[1]);
     }
 }
 
-fn draw_reviewing(frame: &mut Frame, state: &ReviewState) {
-    let area = frame.area();
-
-    let total = state.flagged.len();
-    let current_num = (state.cursor + 1).min(total);
-
-    let title = format!(
-        " Quality check — Flagged {current_num}/{total}  [k] keep  [d] discard  [a] keep all  [x] discard all  [q] quit "
-    );
-
-    let outer_block = Block::default().borders(Borders::ALL).title(title);
-    let inner = outer_block.inner(area);
-    frame.render_widget(outer_block, area);
-
+fn draw_reviewing(frame: &mut Frame, state: &ReviewState, area: Rect) {
     if let Some(flagged) = state.current() {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Min(5)])
-            .split(inner);
+            .split(area);
 
         // Reason
         let reason_para = Paragraph::new(flagged.reason.as_str())
@@ -848,8 +869,7 @@ fn draw_reviewing(frame: &mut Frame, state: &ReviewState) {
     }
 }
 
-fn draw_done(frame: &mut Frame, app: &App, msg: &str) {
-    let area = frame.area();
+fn draw_done(frame: &mut Frame, app: &App, msg: &str, area: Rect) {
     let mut lines = vec![
         Line::from(Span::styled(
             "✓ Done",
@@ -859,10 +879,10 @@ fn draw_done(frame: &mut Frame, app: &App, msg: &str) {
         )),
         Line::from(""),
         Line::from(msg),
-        Line::from(""),
     ];
 
     if app.run_cost > 0.0 {
+        lines.push(Line::from(""));
         lines.push(Line::from(format!(
             "Tokens: {} in / {} out  |  Cost: {}",
             app.run_input_tokens,
@@ -875,22 +895,13 @@ fn draw_done(frame: &mut Frame, app: &App, msg: &str) {
                 pricing::format_cost(app.session_cost + app.run_cost)
             )));
         }
-        lines.push(Line::from(""));
     }
 
-    lines.push(Line::from(Span::styled(
-        "[n] new term  [any other key] quit",
-        Style::default().fg(Color::DarkGray),
-    )));
-
-    let para = Paragraph::new(Text::from(lines))
-        .block(Block::default().borders(Borders::ALL).title(" anki-llm "))
-        .wrap(Wrap { trim: false });
+    let para = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
     frame.render_widget(para, area);
 }
 
-fn draw_error(frame: &mut Frame, msg: &str) {
-    let area = frame.area();
+fn draw_error(frame: &mut Frame, msg: &str, area: Rect) {
     let lines = vec![
         Line::from(Span::styled(
             "✗ Error",
@@ -898,16 +909,9 @@ fn draw_error(frame: &mut Frame, msg: &str) {
         )),
         Line::from(""),
         Line::from(Span::styled(msg, Style::default().fg(Color::Red))),
-        Line::from(""),
-        Line::from(Span::styled(
-            "[n] new term  [any other key] quit",
-            Style::default().fg(Color::DarkGray),
-        )),
     ];
 
-    let para = Paragraph::new(Text::from(lines))
-        .block(Block::default().borders(Borders::ALL).title(" anki-llm "))
-        .wrap(Wrap { trim: false });
+    let para = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
     frame.render_widget(para, area);
 }
 
