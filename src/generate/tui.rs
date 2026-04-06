@@ -32,11 +32,13 @@ pub enum BackendEvent {
         output_tokens: u64,
         cost: f64,
     },
-    Done(String),  // success message
-    Error(String), // fatal error
+    RunDone(String),  // single run finished successfully
+    RunError(String), // single run failed (can retry with new term)
+    Fatal(String),    // session-level error (must exit)
 }
 
-pub enum WorkerResponse {
+pub enum WorkerCommand {
+    Start(String), // term to generate cards for
     Selection(Vec<usize>),
     Review(Vec<bool>), // true = keep, false = discard
     Quit,
@@ -96,6 +98,7 @@ pub enum StepStatus {
 // ---------------------------------------------------------------------------
 
 enum AppMode {
+    Input(String), // term text being typed
     Running,
     Selecting(SelectionState),
     Reviewing(ReviewState),
@@ -236,40 +239,63 @@ struct App {
     mode: AppMode,
     logs: Vec<String>,
     steps: Vec<(PipelineStep, StepStatus)>,
-    total_cost: f64,
-    input_tokens: u64,
-    output_tokens: u64,
+    /// Cost for the current run.
+    run_cost: f64,
+    run_input_tokens: u64,
+    run_output_tokens: u64,
+    /// Accumulated cost across all runs in this session.
+    session_cost: f64,
     log_scroll: u16,
     tick: u64,
     should_quit: bool,
     /// True when the user explicitly pressed q/Ctrl-C (as opposed to natural Done/Error exit).
     user_quit: bool,
     backend_rx: mpsc::Receiver<BackendEvent>,
-    worker_tx: mpsc::SyncSender<WorkerResponse>,
+    worker_tx: mpsc::SyncSender<WorkerCommand>,
 }
 
 impl App {
     fn new(
+        initial_term: Option<String>,
         backend_rx: mpsc::Receiver<BackendEvent>,
-        worker_tx: mpsc::SyncSender<WorkerResponse>,
+        worker_tx: mpsc::SyncSender<WorkerCommand>,
     ) -> Self {
         let steps = ALL_STEPS
             .iter()
             .map(|&s| (s, StepStatus::Pending))
             .collect();
+        let mode = if let Some(term) = initial_term {
+            worker_tx.send(WorkerCommand::Start(term)).ok();
+            AppMode::Running
+        } else {
+            AppMode::Input(String::new())
+        };
         App {
-            mode: AppMode::Running,
+            mode,
             logs: Vec::new(),
             steps,
-            total_cost: 0.0,
-            input_tokens: 0,
-            output_tokens: 0,
+            run_cost: 0.0,
+            run_input_tokens: 0,
+            run_output_tokens: 0,
+            session_cost: 0.0,
             log_scroll: 0,
             tick: 0,
             should_quit: false,
             user_quit: false,
             backend_rx,
             worker_tx,
+        }
+    }
+
+    fn reset_for_new_run(&mut self) {
+        self.logs.clear();
+        self.log_scroll = 0;
+        self.session_cost += self.run_cost;
+        self.run_cost = 0.0;
+        self.run_input_tokens = 0;
+        self.run_output_tokens = 0;
+        for (_, status) in &mut self.steps {
+            *status = StepStatus::Pending;
         }
     }
 
@@ -303,38 +329,79 @@ impl App {
                 output_tokens,
                 cost,
             } => {
-                self.input_tokens += input_tokens;
-                self.output_tokens += output_tokens;
-                self.total_cost += cost;
+                self.run_input_tokens += input_tokens;
+                self.run_output_tokens += output_tokens;
+                self.run_cost += cost;
             }
-            BackendEvent::Done(msg) => {
+            BackendEvent::RunDone(msg) => {
                 self.mode = AppMode::Done(msg);
             }
-            BackendEvent::Error(msg) => {
+            BackendEvent::RunError(msg) => {
                 self.mode = AppMode::Error(msg);
+            }
+            BackendEvent::Fatal(msg) => {
+                self.mode = AppMode::Error(msg);
+                // Fatal means the worker is dead, no point continuing
             }
         }
     }
 
     fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
         match &mut self.mode {
+            AppMode::Input(_) => self.handle_key_input(key),
             AppMode::Running => {
                 if key.code == KeyCode::Char('q')
                     || (key.code == KeyCode::Char('c')
                         && key.modifiers.contains(KeyModifiers::CONTROL))
                 {
-                    // Signal worker to stop
-                    self.worker_tx.send(WorkerResponse::Quit).ok();
+                    self.worker_tx.send(WorkerCommand::Quit).ok();
                     self.should_quit = true;
                     self.user_quit = true;
                 }
             }
             AppMode::Selecting(_) => self.handle_key_selection(key),
             AppMode::Reviewing(_) => self.handle_key_review(key),
-            AppMode::Done(_) | AppMode::Error(_) => {
-                // Any key exits
+            AppMode::Done(_) | AppMode::Error(_) => match key.code {
+                KeyCode::Char('n') => {
+                    self.reset_for_new_run();
+                    self.mode = AppMode::Input(String::new());
+                }
+                _ => {
+                    self.worker_tx.send(WorkerCommand::Quit).ok();
+                    self.should_quit = true;
+                }
+            },
+        }
+    }
+
+    fn handle_key_input(&mut self, key: crossterm::event::KeyEvent) {
+        let AppMode::Input(ref mut text) = self.mode else {
+            return;
+        };
+
+        match key.code {
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.worker_tx.send(WorkerCommand::Quit).ok();
                 self.should_quit = true;
+                self.user_quit = true;
             }
+            KeyCode::Esc => {
+                self.worker_tx.send(WorkerCommand::Quit).ok();
+                self.should_quit = true;
+                self.user_quit = true;
+            }
+            KeyCode::Char(c) => text.push(c),
+            KeyCode::Backspace => {
+                text.pop();
+            }
+            KeyCode::Enter => {
+                let term = text.trim().to_string();
+                if !term.is_empty() {
+                    self.mode = AppMode::Running;
+                    self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                }
+            }
+            _ => {}
         }
     }
 
@@ -350,7 +417,7 @@ impl App {
             KeyCode::Char('a') => state.select_all(),
             KeyCode::Char('n') => state.select_none(),
             KeyCode::Char('q') | KeyCode::Esc => {
-                self.worker_tx.send(WorkerResponse::Quit).ok();
+                self.worker_tx.send(WorkerCommand::Quit).ok();
                 self.should_quit = true;
                 self.user_quit = true;
             }
@@ -360,7 +427,7 @@ impl App {
                     return;
                 };
                 let indices: Vec<usize> = state.selected.into_iter().collect();
-                self.worker_tx.send(WorkerResponse::Selection(indices)).ok();
+                self.worker_tx.send(WorkerCommand::Selection(indices)).ok();
             }
             KeyCode::PageUp => {
                 if let AppMode::Selecting(ref mut s) = self.mode {
@@ -395,7 +462,7 @@ impl App {
                 state.discard_all();
             }
             KeyCode::Char('q') | KeyCode::Esc => {
-                self.worker_tx.send(WorkerResponse::Quit).ok();
+                self.worker_tx.send(WorkerCommand::Quit).ok();
                 self.should_quit = true;
                 self.user_quit = true;
                 return;
@@ -412,7 +479,7 @@ impl App {
                 return;
             };
             let decisions = state.decisions.clone();
-            self.worker_tx.send(WorkerResponse::Review(decisions)).ok();
+            self.worker_tx.send(WorkerCommand::Review(decisions)).ok();
         }
     }
 }
@@ -423,12 +490,48 @@ impl App {
 
 fn draw(frame: &mut Frame, app: &App) {
     match &app.mode {
+        AppMode::Input(text) => draw_input(frame, text),
         AppMode::Running => draw_running(frame, app),
         AppMode::Selecting(state) => draw_selecting(frame, app, state),
         AppMode::Reviewing(state) => draw_reviewing(frame, state),
         AppMode::Done(msg) => draw_done(frame, app, msg),
         AppMode::Error(msg) => draw_error(frame, msg),
     }
+}
+
+fn draw_input(frame: &mut Frame, text: &str) {
+    let area = frame.area();
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(3),
+            Constraint::Min(0),
+        ])
+        .split(area);
+
+    let h_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(15),
+            Constraint::Percentage(70),
+            Constraint::Percentage(15),
+        ])
+        .split(chunks[1]);
+
+    let input_area = h_chunks[1];
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Enter term ")
+        .border_style(Style::default().fg(Color::Cyan));
+
+    let para = Paragraph::new(text).block(block);
+    frame.render_widget(para, input_area);
+
+    // Show cursor
+    frame.set_cursor_position((input_area.x + 1 + text.len() as u16, input_area.y + 1));
 }
 
 fn draw_running(frame: &mut Frame, app: &App) {
@@ -480,8 +583,9 @@ fn draw_running(frame: &mut Frame, app: &App) {
         })
         .collect();
 
-    let cost_title = if app.total_cost > 0.0 {
-        format!(" Steps — {} ", pricing::format_cost(app.total_cost))
+    let total = app.session_cost + app.run_cost;
+    let cost_title = if total > 0.0 {
+        format!(" Steps — {} ", pricing::format_cost(total))
     } else {
         " Steps ".to_string()
     };
@@ -680,18 +784,24 @@ fn draw_done(frame: &mut Frame, app: &App, msg: &str) {
         Line::from(""),
     ];
 
-    if app.total_cost > 0.0 {
+    if app.run_cost > 0.0 {
         lines.push(Line::from(format!(
             "Tokens: {} in / {} out  |  Cost: {}",
-            app.input_tokens,
-            app.output_tokens,
-            pricing::format_cost(app.total_cost)
+            app.run_input_tokens,
+            app.run_output_tokens,
+            pricing::format_cost(app.run_cost)
         )));
+        if app.session_cost > 0.0 {
+            lines.push(Line::from(format!(
+                "Session total: {}",
+                pricing::format_cost(app.session_cost + app.run_cost)
+            )));
+        }
         lines.push(Line::from(""));
     }
 
     lines.push(Line::from(Span::styled(
-        "Press any key to exit",
+        "[n] new term  [any other key] quit",
         Style::default().fg(Color::DarkGray),
     )));
 
@@ -712,7 +822,7 @@ fn draw_error(frame: &mut Frame, msg: &str) {
         Line::from(Span::styled(msg, Style::default().fg(Color::Red))),
         Line::from(""),
         Line::from(Span::styled(
-            "Press any key to exit",
+            "[n] new term  [any other key] quit",
             Style::default().fg(Color::DarkGray),
         )),
     ];
@@ -730,10 +840,11 @@ fn draw_error(frame: &mut Frame, msg: &str) {
 /// Returns `true` if the user explicitly quit (q / Ctrl-C), `false` for natural Done/Error exit.
 fn run_app(
     mut terminal: DefaultTerminal,
+    initial_term: Option<String>,
     backend_rx: mpsc::Receiver<BackendEvent>,
-    worker_tx: mpsc::SyncSender<WorkerResponse>,
+    worker_tx: mpsc::SyncSender<WorkerCommand>,
 ) -> anyhow::Result<bool> {
-    let mut app = App::new(backend_rx, worker_tx);
+    let mut app = App::new(initial_term, backend_rx, worker_tx);
 
     loop {
         app.tick = app.tick.wrapping_add(1);
@@ -778,19 +889,20 @@ fn run_app(
 // ---------------------------------------------------------------------------
 
 pub fn run_tui(args: GenerateArgs) -> anyhow::Result<()> {
+    let initial_term = args.term.clone();
+
     let (tx_events, rx_events) = mpsc::channel::<BackendEvent>();
-    // Capacity 1 so the TUI can send Quit without blocking even when the
-    // worker isn't currently waiting on the response channel.
-    let (tx_response, rx_response) = mpsc::sync_channel::<WorkerResponse>(1);
+    // Capacity 10 so the TUI can send Start/Quit without blocking even when
+    // the worker isn't currently waiting on the command channel.
+    let (tx_cmd, rx_cmd) = mpsc::sync_channel::<WorkerCommand>(10);
 
     // Spawn worker thread
-    let worker_handle = std::thread::spawn(move || {
-        super::command_generate::run_pipeline(args, tx_events, rx_response)
-    });
+    let worker_handle =
+        std::thread::spawn(move || super::command_generate::run_pipeline(args, tx_events, rx_cmd));
 
     // Run TUI on main thread
     let terminal = ratatui::init();
-    let user_quit = run_app(terminal, rx_events, tx_response).unwrap_or(true);
+    let user_quit = run_app(terminal, initial_term, rx_events, tx_cmd).unwrap_or(true);
     ratatui::restore();
 
     if user_quit {

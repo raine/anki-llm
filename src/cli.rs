@@ -249,8 +249,8 @@ pub enum ConfigAction {
 
 #[derive(clap::Args)]
 pub struct GenerateArgs {
-    /// Term to generate cards for
-    pub term: String,
+    /// Term to generate cards for (omit to enter interactively in TUI)
+    pub term: Option<String>,
 
     /// Path to prompt template file with frontmatter
     #[arg(long, short = 'p')]
