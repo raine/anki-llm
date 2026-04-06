@@ -103,6 +103,12 @@ pub fn configure_field_mapping(anki: &AnkiClient, note_type: &str) -> anyhow::Re
                 );
                 continue;
             }
+            if custom_map.values().any(|used| used == &key) {
+                println!(
+                    "Key '{key}' is already used by another field. Please choose a unique key."
+                );
+                continue;
+            }
             // Store as anki_field -> json_key for display consistency; swap before return
             custom_map.insert(field.clone(), key);
             break;
@@ -113,8 +119,8 @@ pub fn configure_field_mapping(anki: &AnkiClient, note_type: &str) -> anyhow::Re
     Ok(custom_map.into_iter().map(|(a, k)| (k, a)).collect())
 }
 
-/// Map inquire errors to our error type.
-fn map_inquire_err(e: inquire::InquireError) -> anyhow::Error {
+/// Map inquire errors to a consistent anyhow error.
+pub(super) fn map_inquire_err(e: inquire::InquireError) -> anyhow::Error {
     match e {
         inquire::InquireError::OperationCanceled | inquire::InquireError::OperationInterrupted => {
             anyhow::anyhow!("User cancelled")

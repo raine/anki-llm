@@ -1,9 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use regex::Regex;
 
-static RE_SOUND: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\[sound:.*\]$").unwrap());
+/// Matches fields that consist entirely of Anki media tokens (sound, image) and whitespace.
+static RE_MEDIA_ONLY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(?:\s*\[sound:[^\]]*\]\s*|\s*<img\b[^>]*/?\s*>\s*)+$").unwrap());
 
 /// Common field name to key mappings.
 fn common_mappings() -> HashMap<&'static str, &'static str> {
@@ -53,29 +55,28 @@ pub fn suggest_key_for_field(field_name: &str) -> String {
     }
 }
 
-/// Resolve duplicate keys by appending numbers.
+/// Resolve duplicate keys by appending numbers, guaranteed unique.
 pub fn resolve_duplicate_keys(keys: Vec<String>) -> Vec<String> {
-    let mut counts: HashMap<String, u32> = HashMap::new();
+    let mut seen: HashSet<String> = HashSet::new();
     let mut result = Vec::with_capacity(keys.len());
 
     for key in keys {
-        let count = counts.get(&key).copied().unwrap_or(0);
-        counts.insert(key.clone(), count + 1);
-
-        let final_key = if count == 0 {
-            key
-        } else {
-            format!("{key}{}", count + 1)
-        };
+        let mut final_key = key.clone();
+        let mut counter = 2u32;
+        while seen.contains(&final_key) {
+            final_key = format!("{key}{counter}");
+            counter += 1;
+        }
+        seen.insert(final_key.clone());
         result.push(final_key);
     }
 
     result
 }
 
-/// Check if a field value looks auto-generated (e.g., sound files).
+/// Check if a field value looks auto-generated (sound files, images).
 pub fn is_auto_generated_field(value: &str) -> bool {
-    RE_SOUND.is_match(value)
+    !value.trim().is_empty() && RE_MEDIA_ONLY.is_match(value)
 }
 
 #[cfg(test)]
@@ -123,10 +124,32 @@ mod tests {
     }
 
     #[test]
+    fn resolve_duplicate_keys_no_collision_with_preexisting_numbered() {
+        // ["front", "front2", "front"] must not produce ["front", "front2", "front2"]
+        let keys = vec![
+            "front".to_string(),
+            "front2".to_string(),
+            "front".to_string(),
+        ];
+        let resolved = resolve_duplicate_keys(keys);
+        let unique: std::collections::HashSet<_> = resolved.iter().collect();
+        assert_eq!(unique.len(), 3, "all keys must be unique: {resolved:?}");
+    }
+
+    #[test]
     fn is_auto_generated_field_sound() {
         assert!(is_auto_generated_field("[sound:test.mp3]"));
         assert!(is_auto_generated_field("[sound:foobar.wav]"));
         assert!(!is_auto_generated_field("regular text"));
         assert!(!is_auto_generated_field("[note:something]"));
+        assert!(!is_auto_generated_field(""));
+    }
+
+    #[test]
+    fn is_auto_generated_field_image() {
+        assert!(is_auto_generated_field("<img src=\"foo.jpg\">"));
+        assert!(is_auto_generated_field("<img src=\"foo.jpg\"/>"));
+        assert!(is_auto_generated_field("[sound:a.mp3][sound:b.mp3]"));
+        assert!(is_auto_generated_field("  [sound:a.mp3]  "));
     }
 }

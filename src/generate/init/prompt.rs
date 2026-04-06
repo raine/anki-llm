@@ -114,26 +114,35 @@ Return ONLY the raw text for the prompt body. Do NOT include frontmatter or expl
     )
 }
 
+/// Maximum notes to fetch from AnkiConnect when sampling a deck.
+const MAX_SAMPLE_NOTES: usize = 200;
+
 /// Create prompt content, either contextual or generic fallback.
+#[allow(clippy::too_many_arguments)]
 pub fn create_prompt_content(
     anki: &AnkiClient,
     deck: &str,
+    note_type: &str,
     initial_field_map: &FieldMap,
     llm_client: &LlmClient,
     model: &str,
     temperature: Option<f64>,
     copy: bool,
 ) -> Result<PromptDraft, anyhow::Error> {
-    // Find notes in the deck
-    let note_ids = anki
-        .find_notes(&format!("deck:{}", anki_quote(deck)))
+    // Find notes for the specific deck + note type
+    let query = format!("deck:{} note:{}", anki_quote(deck), anki_quote(note_type));
+    let mut note_ids = anki
+        .find_notes(&query)
         .map_err(|e| anyhow::anyhow!("Failed to find notes in deck: {e}"))?;
 
     if note_ids.is_empty() {
         return Err(anyhow::anyhow!("No cards found in deck to analyze."));
     }
 
-    // Fetch all notes to find best examples
+    // Limit how many notes we fetch to avoid overwhelming AnkiConnect
+    note_ids.truncate(MAX_SAMPLE_NOTES);
+
+    // Fetch sampled notes to find best examples
     let all_notes = anki
         .notes_info(&note_ids)
         .map_err(|e| anyhow::anyhow!("Failed to fetch note info: {e}"))?;
@@ -243,9 +252,9 @@ pub fn create_prompt_content(
             eprintln!("  Reason: {}\n", e);
             Ok(PromptDraft {
                 body: generate_generic_prompt_body(
-                    &initial_field_map.keys().cloned().collect::<Vec<_>>(),
+                    &final_field_map.keys().cloned().collect::<Vec<_>>(),
                 ),
-                final_field_map: initial_field_map.clone(),
+                final_field_map,
             })
         }
     }

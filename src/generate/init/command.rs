@@ -11,7 +11,9 @@ use crate::llm::client::LlmClient;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use crate::template::frontmatter::{Frontmatter, QualityCheckConfig};
 
-use super::interactive::{FieldMap, configure_field_mapping, select_deck, select_note_type};
+use super::interactive::{
+    FieldMap, configure_field_mapping, map_inquire_err, select_deck, select_note_type,
+};
 use super::prompt::{PromptDraft, create_prompt_content, generate_generic_prompt_body};
 
 pub fn run(args: GenerateInitArgs) -> Result<()> {
@@ -39,13 +41,14 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
     let note_type = select_note_type(&anki, &deck)?;
     let field_map = configure_field_mapping(&anki, &note_type)?;
 
+    // Skip API key validation in copy mode — no LLM call will be made.
     let runtime = build_runtime_config(RuntimeConfigArgs {
         model: args.model.as_deref(),
         batch_size: None,
         max_tokens: None,
         temperature: args.temperature,
         retries: 3,
-        dry_run: false,
+        dry_run: args.copy,
     })?;
     let llm_client = LlmClient::from_config(&runtime);
 
@@ -53,6 +56,7 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
     let draft = match create_prompt_content(
         &anki,
         &deck,
+        &note_type,
         &field_map,
         &llm_client,
         &runtime.model,
@@ -129,7 +133,11 @@ fn configure_quality_check(field_map: &FieldMap) -> Result<Option<QualityCheckCo
         .map_err(map_inquire_err)?;
 
     let prompt = inquire::Text::new("Quality check prompt (use {text} for the field value):")
-        .with_default("Is this flashcard content accurate and appropriate? Reply YES or NO.")
+        .with_default(
+            r#"Review this flashcard content for accuracy and quality.
+Content: {text}
+Respond with JSON only: {"is_valid": true, "reason": "brief explanation"}"#,
+        )
         .prompt()
         .map_err(map_inquire_err)?;
 
@@ -142,13 +150,4 @@ fn configure_quality_check(field_map: &FieldMap) -> Result<Option<QualityCheckCo
 
 fn is_cancelled(e: &anyhow::Error) -> bool {
     e.to_string() == "User cancelled"
-}
-
-fn map_inquire_err(e: inquire::InquireError) -> anyhow::Error {
-    match e {
-        inquire::InquireError::OperationCanceled | inquire::InquireError::OperationInterrupted => {
-            anyhow::anyhow!("User cancelled")
-        }
-        other => anyhow::anyhow!(other),
-    }
 }
