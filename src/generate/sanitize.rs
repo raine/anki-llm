@@ -6,12 +6,22 @@ pub fn sanitize_html(content: &str) -> String {
     clean_html(&html)
 }
 
-/// Convert markdown to HTML.
+/// Convert markdown to HTML using inline-only parsing.
+///
+/// Filters out block-level Paragraph wrapping to match the behaviour of
+/// `marked.parseInline()` in the TypeScript version: plain text stays as-is
+/// instead of being wrapped in `<p>` tags.
 fn markdown_to_html(content: &str) -> String {
-    let parser = pulldown_cmark::Parser::new(content);
+    use pulldown_cmark::{Event, Tag, TagEnd};
+    let parser = pulldown_cmark::Parser::new(content).filter(|event| {
+        !matches!(
+            event,
+            Event::Start(Tag::Paragraph) | Event::End(TagEnd::Paragraph)
+        )
+    });
     let mut html = String::new();
     pulldown_cmark::html::push_html(&mut html, parser);
-    html
+    html.trim_end().to_string()
 }
 
 /// Sanitize HTML, allowing only safe tags and attributes.

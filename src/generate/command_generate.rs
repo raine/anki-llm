@@ -37,13 +37,16 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     );
 
     // 3. Resolve LLM config
+    // dry_run: false here because generate always calls the LLM (dry-run only
+    // skips the Anki import step, not the generation). Passing dry_run: true
+    // would replace the API key with "dry-run" and cause HTTP 400.
     let runtime = build_runtime_config(RuntimeConfigArgs {
         model: args.model.as_deref(),
         batch_size: None,
         max_tokens: args.max_tokens,
         temperature: args.temperature,
         retries: args.retries,
-        dry_run: args.dry_run,
+        dry_run: false,
     })?;
 
     // 4. Generate cards
@@ -172,7 +175,6 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     // 6. Select cards
     if args.dry_run {
         display_cards(&validated);
-        eprintln!("\nDry run complete. No cards were imported or exported.");
         return Ok(());
     }
 
