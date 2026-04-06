@@ -112,10 +112,16 @@ fn configure_quality_check(field_map: &FieldMap) -> Result<Option<QualityCheckCo
         return Ok(None);
     }
 
-    let json_keys: Vec<String> = field_map.keys().cloned().collect();
-    let field = Select::new("Which field to quality-check?", json_keys)
+    // Show Anki field names (values) but store the JSON key (key) in config.
+    let anki_names: Vec<String> = field_map.values().cloned().collect();
+    let selected_anki_name = Select::new("Which field to quality-check?", anki_names)
         .prompt()
         .map_err(map_inquire_err)?;
+    let field = field_map
+        .iter()
+        .find(|(_, v)| *v == &selected_anki_name)
+        .map(|(k, _)| k.clone())
+        .unwrap_or(selected_anki_name);
 
     let prompt = inquire::Text::new("Quality check prompt (use {text} for the field value):")
         .with_default(
