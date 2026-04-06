@@ -65,7 +65,7 @@ interactively, and add selected cards to your deck.
 **Homebrew (macOS/Linux):**
 
 ```bash
-brew install raine/tap/anki-llm
+brew install raine/anki-llm/anki-llm
 ```
 
 **Install script:**
