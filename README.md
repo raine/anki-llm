@@ -9,6 +9,10 @@
   A CLI toolkit for bulk-processing and generating Anki flashcards with LLMs.
 </p>
 
+[Install](#installation) · [Features](#features) ·
+[Commands](#commands-reference) · [Configuration](#configuration) ·
+[Changelog](CHANGELOG.md)
+
 ---
 
 ## Example workflows
@@ -1176,10 +1180,6 @@ The selected cards are immediately added to your Anki deck.
 
 That's it! You have successfully generated, reviewed, and imported multiple
 high-quality, contextual Anki cards from a single command.
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 
