@@ -1,12 +1,15 @@
 #![cfg(feature = "integration")]
 //! Integration tests that require a running Anki instance with AnkiConnect.
 //!
-//! These tests switch to the "Dev" Anki profile so they don't touch your
-//! real collection. They create temporary decks, add notes, exercise the
-//! export/import pipeline, then clean up.
+//! These tests create temporary decks, add notes, exercise the export/import
+//! pipeline, then clean up. Use the Docker container for isolation:
 //!
-//! Run with:
+//!   just test-integration
+//!
+//! Or manually:
+//!   docker run --rm -d -p 8765:8765 --name anki-test anki-test
 //!   cargo test --test anki_integration --features integration -- --test-threads=1
+//!   docker stop anki-test
 //!
 //! Gated behind the `integration` feature so they never run during
 //! `cargo test` or `just check`.
@@ -19,41 +22,13 @@ use tempfile::tempdir;
 
 const TEST_DECK: &str = "anki-llm-integration-test";
 const TEST_MODEL: &str = "Basic";
-const TEST_PROFILE: &str = "Dev";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-use std::sync::OnceLock;
-static PROFILE_SWITCHED: OnceLock<()> = OnceLock::new();
-
-/// Wait for the Anki collection to be fully available after a profile switch.
-/// Verifies both reads and writes work before returning.
-fn wait_for_collection(client: &anki_llm::anki::client::AnkiClient) {
-    for _ in 0..50 {
-        // Check that both reads and writes succeed — deckNames can return
-        // before the collection is fully ready for mutations.
-        if client.deck_names().is_ok() && client.model_field_names(TEST_MODEL).is_ok() {
-            return;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    }
-    panic!("Anki collection did not become available after profile switch");
-}
-
-/// Switch to the Dev profile exactly once for the entire test run.
-fn ensure_dev_profile(client: &anki_llm::anki::client::AnkiClient) {
-    PROFILE_SWITCHED.get_or_init(|| {
-        client
-            .load_profile(TEST_PROFILE)
-            .expect("switch to Dev profile");
-        wait_for_collection(client);
-    });
-}
-
-/// A guard that ensures we're on the Dev profile and creates the test deck.
-/// Cleans up the test deck on drop but does NOT switch profiles back.
+/// A guard that creates the test deck on setup and tears it down on drop.
+/// Works against any Anki instance (local Dev profile or Docker container).
 struct TestDeck {
     client: anki_llm::anki::client::AnkiClient,
 }
@@ -61,7 +36,6 @@ struct TestDeck {
 impl TestDeck {
     fn setup() -> Self {
         let client = anki_llm::anki::client::AnkiClient::new();
-        ensure_dev_profile(&client);
 
         // Clean up any leftover from a previous failed run, then create fresh
         let _ = client.delete_decks(&[TEST_DECK], true);

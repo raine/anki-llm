@@ -42,6 +42,21 @@ build:
 test:
     cargo test
 
+# Run integration tests against a disposable Anki Docker container
+test-integration *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker build -q -t anki-test ./docker
+    docker run --rm -d -p 8765:8765 --name anki-test anki-test
+    cleanup() { docker stop anki-test > /dev/null 2>&1 || true; }
+    trap cleanup EXIT
+    echo "Waiting for AnkiConnect..."
+    for i in $(seq 1 30); do
+        curl -s http://127.0.0.1:8765 -X POST -d '{"action":"version","version":6}' > /dev/null 2>&1 && break
+        sleep 1
+    done
+    cargo test --test anki_integration --features integration -- --test-threads=1 "$@"
+
 # Install release binary globally
 install:
     cargo install --offline --path . --locked
