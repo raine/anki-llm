@@ -39,6 +39,9 @@ regex = "1"
 tempfile = "3"
 home = "0.5"
 
+# Signal handling
+ctrlc = "3.4"
+
 # Clipboard
 arboard = "3"
 

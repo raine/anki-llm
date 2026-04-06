@@ -8,7 +8,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::Query(args) => crate::anki::command::run(args),
         Commands::Export(args) => crate::data::command_export::run(args),
         Commands::Import(args) => crate::data::command_import::run(args),
-        Commands::ProcessFile(_) => bail!("process-file not implemented"),
+        Commands::ProcessFile(args) => crate::batch::command_process_file::run(args),
         Commands::ProcessDeck(_) => bail!("process-deck not implemented"),
         Commands::Generate(_) => bail!("generate not implemented"),
         Commands::GenerateInit(_) => bail!("generate-init not implemented"),

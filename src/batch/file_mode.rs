@@ -1,0 +1,107 @@
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+use indexmap::IndexMap;
+
+use crate::data::io::{atomic_write_file, serialize_rows};
+use crate::data::rows::{Row, get_note_id};
+
+use super::report::RowOutcome;
+
+/// Maintains output state and writes incrementally to disk.
+pub struct FileWriter {
+    /// Path to the output file.
+    output_path: PathBuf,
+    /// All rows keyed by note ID (insertion order doesn't matter — we use
+    /// ordered_ids for output ordering).
+    all_rows: Mutex<IndexMap<String, Row>>,
+    /// Original input row IDs in order — used to preserve row order on flush.
+    ordered_ids: Vec<String>,
+    /// Counter for unflushed updates; flush when >= threshold.
+    pending: Mutex<usize>,
+    /// Flush threshold (typically batch_size).
+    flush_threshold: usize,
+}
+
+impl FileWriter {
+    /// Create a new file writer.
+    ///
+    /// `ordered_ids` is the list of all row IDs in input order.
+    /// `existing` is pre-loaded output from a previous run (for resume).
+    pub fn new(
+        output_path: PathBuf,
+        ordered_ids: Vec<String>,
+        existing: IndexMap<String, Row>,
+        flush_threshold: usize,
+    ) -> Self {
+        // Seed with existing rows (from previous resume)
+        let mut all_rows = IndexMap::new();
+        for (id, row) in existing {
+            all_rows.insert(id, row);
+        }
+
+        Self {
+            output_path,
+            all_rows: Mutex::new(all_rows),
+            ordered_ids,
+            pending: Mutex::new(0),
+            flush_threshold,
+        }
+    }
+
+    /// Record a completed row and flush to disk if threshold reached.
+    pub fn on_row_done(&self, outcome: &RowOutcome) {
+        let row = match outcome {
+            RowOutcome::Success(row) => row,
+            RowOutcome::Failure { row, .. } => row,
+        };
+
+        let id = get_note_id(row).unwrap_or_default();
+        if id.is_empty() {
+            return;
+        }
+
+        {
+            let mut all = self.all_rows.lock().unwrap();
+            all.insert(id, row.clone());
+        }
+
+        let should_flush = {
+            let mut pending = self.pending.lock().unwrap();
+            *pending += 1;
+            if *pending >= self.flush_threshold {
+                *pending = 0;
+                true
+            } else {
+                false
+            }
+        };
+
+        if should_flush && let Err(e) = self.flush() {
+            eprintln!("Warning: failed to flush output: {e}");
+        }
+    }
+
+    /// Write all rows to disk in original input order. Called at end of
+    /// processing and periodically during processing.
+    pub fn flush(&self) -> anyhow::Result<()> {
+        let all = self.all_rows.lock().unwrap();
+        if all.is_empty() {
+            return Ok(());
+        }
+
+        // Emit rows in original input order, skipping IDs not yet processed
+        let rows: Vec<Row> = self
+            .ordered_ids
+            .iter()
+            .filter_map(|id| all.get(id).cloned())
+            .collect();
+
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let content = serialize_rows(&rows, &self.output_path)?;
+        atomic_write_file(&self.output_path, &content)?;
+        Ok(())
+    }
+}
