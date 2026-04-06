@@ -1,0 +1,146 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  BIN_NAME: anki-llm
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS builds (use cargo directly)
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+            use_cross: false
+          - os: macos-15
+            target: x86_64-apple-darwin
+            platform: darwin-amd64
+            use_cross: false
+          # Linux builds (use cross with musl for static linking)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            platform: linux-amd64
+            use_cross: true
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install cross
+        if: matrix.use_cross
+        uses: taiki-e/install-action@cross
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Build
+        run: |
+          if [ "${{ matrix.use_cross }}" == "true" ]; then
+            cross build --release --locked --target ${{ matrix.target }}
+          else
+            cargo build --release --locked --target ${{ matrix.target }}
+          fi
+      - name: Package
+        run: |
+          bin="target/${{ matrix.target }}/release/${BIN_NAME}"
+          # Only strip on Linux to avoid corrupting macOS code signatures
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            strip "$bin" || true
+          fi
+          archive="${BIN_NAME}-${{ matrix.platform }}.tar.gz"
+          tar -C "$(dirname "$bin")" -czf "$archive" ${BIN_NAME}
+          shasum -a 256 "$archive" > "${BIN_NAME}-${{ matrix.platform }}.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: |
+            ${{ env.BIN_NAME }}-${{ matrix.platform }}.tar.gz
+            ${{ env.BIN_NAME }}-${{ matrix.platform }}.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
+          generate_release_notes: true
+          files: |
+            *.tar.gz
+            *.sha256
+
+  update-tap:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: actions/checkout@v4
+        with:
+          repository: raine/homebrew-anki-llm
+          token: ${{ secrets.RELEASE_TOKEN }}
+          path: tap
+      - name: Generate formula and push to tap
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION="${VERSION#v}"
+          SHA_ARM=$(awk '{print $1}' anki-llm-darwin-arm64.sha256)
+          SHA_INTEL=$(awk '{print $1}' anki-llm-darwin-amd64.sha256)
+          SHA_LINUX=$(awk '{print $1}' anki-llm-linux-amd64.sha256)
+
+          cat > tap/Formula/anki-llm.rb << EOF
+          class AnkiLlm < Formula
+            desc "Command-line interface for bulk-processing Anki flashcards with LLMs"
+            homepage "https://github.com/raine/anki-llm"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/raine/anki-llm/releases/download/v${VERSION}/anki-llm-darwin-arm64.tar.gz"
+                sha256 "${SHA_ARM}"
+              else
+                url "https://github.com/raine/anki-llm/releases/download/v${VERSION}/anki-llm-darwin-amd64.tar.gz"
+                sha256 "${SHA_INTEL}"
+              end
+            end
+
+            on_linux do
+              url "https://github.com/raine/anki-llm/releases/download/v${VERSION}/anki-llm-linux-amd64.tar.gz"
+              sha256 "${SHA_LINUX}"
+            end
+
+            def install
+              bin.install "anki-llm"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("\#{bin}/anki-llm --version")
+            end
+          end
+          EOF
+          sed -i 's/^          //' tap/Formula/anki-llm.rb
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/anki-llm.rb
+          git commit -m "anki-llm ${VERSION}"
+          git pull --rebase
+          git push

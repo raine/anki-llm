@@ -1,11 +1,15 @@
 [package]
 name = "anki-llm"
-version = "0.1.0"
+version = "2.0.0"
 edition = "2024"
 authors = ["Raine Virta"]
 description = "A command-line interface for bulk-processing Anki flashcards with LLMs"
+readme = "README.md"
 license = "MIT"
 repository = "https://github.com/raine/anki-llm"
+homepage = "https://github.com/raine/anki-llm"
+keywords = ["anki", "llm", "flashcards", "cli", "openai"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 # CLI
