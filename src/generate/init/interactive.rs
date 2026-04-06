@@ -38,7 +38,9 @@ pub fn select_note_type(anki: &AnkiClient, deck: &str) -> anyhow::Result<String>
     }
 
     if note_types.len() == 1 {
-        return Ok(note_types.into_iter().next().unwrap());
+        let note_type = note_types.into_iter().next().unwrap();
+        eprintln!("Auto-selected the only available note type: {note_type}");
+        return Ok(note_type);
     }
 
     Select::new("Select the note type:", note_types)
@@ -52,6 +54,8 @@ pub fn configure_field_mapping(anki: &AnkiClient, note_type: &str) -> anyhow::Re
     if fields.is_empty() {
         anyhow::bail!("Note type has no fields");
     }
+
+    eprintln!("Found {} field(s): {}", fields.len(), fields.join(", "));
 
     // Generate suggested keys and resolve duplicates
     let suggested_keys: Vec<String> = fields.iter().map(|f| suggest_key_for_field(f)).collect();

@@ -5,6 +5,7 @@ use crate::generate::init::interactive::FieldMap;
 use crate::generate::init::util::is_auto_generated_field;
 use crate::generate::manual::get_llm_response_manually;
 use crate::llm::client::LlmClient;
+use crate::llm::pricing;
 
 pub struct PromptDraft {
     pub body: String,
@@ -139,6 +140,11 @@ pub fn create_prompt_content(
         return Err(anyhow::anyhow!("No cards found in deck to analyze."));
     }
 
+    eprintln!(
+        "  Analyzing {} card(s) to find best examples...",
+        note_ids.len()
+    );
+
     // Limit how many notes we fetch to avoid overwhelming AnkiConnect
     note_ids.truncate(MAX_SAMPLE_NOTES);
 
@@ -167,6 +173,11 @@ pub fn create_prompt_content(
 
     scored.sort_by(|a, b| b.1.cmp(&a.1));
     let top_indices: Vec<usize> = scored.into_iter().take(5).map(|(idx, _)| idx).collect();
+
+    eprintln!(
+        "  Selected {} card(s) with most populated fields...",
+        top_indices.len()
+    );
 
     if top_indices.is_empty() {
         return Err(anyhow::anyhow!(
@@ -244,6 +255,16 @@ pub fn create_prompt_content(
         Ok(response) => {
             spinner.finish_and_clear();
             eprintln!("Smart prompt generated successfully!");
+            if let Some(usage) = &response.usage {
+                let cost =
+                    pricing::calculate_cost(model, usage.prompt_tokens, usage.completion_tokens);
+                eprintln!(
+                    "  Cost: {} ({} input + {} output tokens)",
+                    pricing::format_cost(cost),
+                    usage.prompt_tokens,
+                    usage.completion_tokens,
+                );
+            }
             Ok(PromptDraft {
                 body: response.content.trim().to_string(),
                 final_field_map,
