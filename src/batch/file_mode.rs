@@ -76,6 +76,12 @@ impl FileWriter {
         }
     }
 
+    /// Number of rows currently stored.
+    #[cfg(test)]
+    fn row_count(&self) -> usize {
+        self.all_rows.lock().unwrap().len()
+    }
+
     /// Write all rows to disk in original input order. Called at end of
     /// processing and periodically during processing.
     pub fn flush(&self) -> anyhow::Result<()> {
@@ -98,5 +104,108 @@ impl FileWriter {
         let content = serialize_rows(&rows, &self.output_path)?;
         atomic_write_file(&self.output_path, &content)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use tempfile::tempdir;
+
+    fn make_row(id: i64, front: &str) -> Row {
+        let mut row = Row::new();
+        row.insert("noteId".into(), json!(id));
+        row.insert("Front".into(), json!(front));
+        row
+    }
+
+    #[test]
+    fn flush_writes_rows_in_input_order() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.yaml");
+        let ids = vec!["1".into(), "2".into(), "3".into()];
+
+        let writer = FileWriter::new(path.clone(), ids, IndexMap::new(), 100);
+
+        // Insert out of order
+        writer.on_row_done(&RowOutcome::Success(make_row(3, "third")));
+        writer.on_row_done(&RowOutcome::Success(make_row(1, "first")));
+        writer.on_row_done(&RowOutcome::Success(make_row(2, "second")));
+        writer.flush().unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        let first_pos = content.find("first").unwrap();
+        let second_pos = content.find("second").unwrap();
+        let third_pos = content.find("third").unwrap();
+        assert!(first_pos < second_pos);
+        assert!(second_pos < third_pos);
+    }
+
+    #[test]
+    fn flush_threshold_triggers_write() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.yaml");
+        let ids = vec!["1".into(), "2".into()];
+
+        let writer = FileWriter::new(path.clone(), ids, IndexMap::new(), 2);
+
+        writer.on_row_done(&RowOutcome::Success(make_row(1, "a")));
+        assert!(!path.exists(), "should not flush after 1 row (threshold=2)");
+
+        writer.on_row_done(&RowOutcome::Success(make_row(2, "b")));
+        assert!(path.exists(), "should flush after 2 rows (threshold=2)");
+    }
+
+    #[test]
+    fn rows_without_id_are_skipped() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.yaml");
+
+        let writer = FileWriter::new(path, vec![], IndexMap::new(), 100);
+
+        let mut row = Row::new();
+        row.insert("Front".into(), json!("no id"));
+        writer.on_row_done(&RowOutcome::Success(row));
+
+        assert_eq!(writer.row_count(), 0);
+    }
+
+    #[test]
+    fn existing_rows_are_preserved() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.yaml");
+        let ids = vec!["1".into(), "2".into()];
+
+        let mut existing = IndexMap::new();
+        existing.insert("1".to_string(), make_row(1, "existing"));
+
+        let writer = FileWriter::new(path.clone(), ids, existing, 100);
+        writer.on_row_done(&RowOutcome::Success(make_row(2, "new")));
+        writer.flush().unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("existing"));
+        assert!(content.contains("new"));
+    }
+
+    #[test]
+    fn failure_rows_are_stored() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.yaml");
+        let ids = vec!["1".into()];
+
+        let writer = FileWriter::new(path.clone(), ids, IndexMap::new(), 100);
+
+        let mut row = make_row(1, "failed");
+        row.insert("_error".into(), json!("some error"));
+        writer.on_row_done(&RowOutcome::Failure {
+            row,
+            error: "some error".into(),
+        });
+        writer.flush().unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("_error"));
     }
 }

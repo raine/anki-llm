@@ -18,6 +18,23 @@ impl TokenStats {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn token_stats_add_and_total() {
+        let mut stats = TokenStats::default();
+        assert_eq!(stats.total(), 0);
+        stats.add(100, 50);
+        assert_eq!(stats.input, 100);
+        assert_eq!(stats.output, 50);
+        assert_eq!(stats.total(), 150);
+        stats.add(200, 100);
+        assert_eq!(stats.total(), 450);
+    }
+}
+
 /// Result of processing a single row.
 #[derive(Debug)]
 pub enum RowOutcome {

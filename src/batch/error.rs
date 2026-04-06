@@ -16,3 +16,18 @@ impl BatchError {
         matches!(self, BatchError::Processing(_))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn processing_is_retryable() {
+        assert!(BatchError::Processing("timeout".into()).is_retryable());
+    }
+
+    #[test]
+    fn fatal_is_not_retryable() {
+        assert!(!BatchError::Fatal("bad template".into()).is_retryable());
+    }
+}

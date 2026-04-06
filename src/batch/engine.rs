@@ -173,3 +173,137 @@ fn process_with_retry(
         error: last_error,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::sync::atomic::AtomicU32;
+
+    fn make_row(id: i64) -> Row {
+        let mut row = Row::new();
+        row.insert("noteId".into(), json!(id));
+        row.insert("Front".into(), json!(format!("row-{id}")));
+        row
+    }
+
+    fn config(retries: u32) -> BatchConfig {
+        BatchConfig {
+            batch_size: 1,
+            retries,
+            model: "test-model".into(),
+        }
+    }
+
+    #[test]
+    fn all_rows_succeed() {
+        let rows = vec![make_row(1), make_row(2), make_row(3)];
+        let process: ProcessFn = Box::new(|row| {
+            let mut out = row.clone();
+            out.insert("Back".into(), json!("done"));
+            Ok((out, Some((10, 5))))
+        });
+
+        let (outcomes, tokens, interrupted) = run_batch(rows, process, &config(0), None);
+
+        assert!(!interrupted);
+        assert_eq!(outcomes.len(), 3);
+        assert!(outcomes.iter().all(|o| matches!(o, RowOutcome::Success(_))));
+        assert_eq!(tokens.input, 30);
+        assert_eq!(tokens.output, 15);
+    }
+
+    #[test]
+    fn all_rows_fail() {
+        let rows = vec![make_row(1)];
+        let process: ProcessFn = Box::new(|_| Err(BatchError::Processing("always fails".into())));
+
+        let (outcomes, _, _) = run_batch(rows, process, &config(0), None);
+
+        assert_eq!(outcomes.len(), 1);
+        assert!(
+            matches!(&outcomes[0], RowOutcome::Failure { error, .. } if error == "always fails")
+        );
+    }
+
+    #[test]
+    fn retry_succeeds_on_second_attempt() {
+        let attempts = Arc::new(AtomicU32::new(0));
+        let attempts_clone = Arc::clone(&attempts);
+
+        let rows = vec![make_row(1)];
+        let process: ProcessFn = Box::new(move |row| {
+            let n = attempts_clone.fetch_add(1, Ordering::SeqCst);
+            if n == 0 {
+                Err(BatchError::Processing("transient".into()))
+            } else {
+                Ok((row.clone(), Some((10, 5))))
+            }
+        });
+
+        let (outcomes, tokens, _) = run_batch(rows, process, &config(1), None);
+
+        assert_eq!(outcomes.len(), 1);
+        assert!(matches!(&outcomes[0], RowOutcome::Success(_)));
+        assert_eq!(tokens.input, 10);
+    }
+
+    #[test]
+    fn fatal_error_skips_retries() {
+        let attempts = Arc::new(AtomicU32::new(0));
+        let attempts_clone = Arc::clone(&attempts);
+
+        let rows = vec![make_row(1)];
+        let process: ProcessFn = Box::new(move |_| {
+            attempts_clone.fetch_add(1, Ordering::SeqCst);
+            Err(BatchError::Fatal("bad template".into()))
+        });
+
+        let (outcomes, _, _) = run_batch(rows, process, &config(3), None);
+
+        assert_eq!(outcomes.len(), 1);
+        assert!(matches!(&outcomes[0], RowOutcome::Failure { .. }));
+        // Fatal should not retry — only 1 attempt
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn failure_row_has_error_field() {
+        let rows = vec![make_row(1)];
+        let process: ProcessFn = Box::new(|_| Err(BatchError::Processing("oops".into())));
+
+        let (outcomes, _, _) = run_batch(rows, process, &config(0), None);
+
+        if let RowOutcome::Failure { row, .. } = &outcomes[0] {
+            assert_eq!(row["_error"], json!("oops"));
+        } else {
+            panic!("expected failure");
+        }
+    }
+
+    #[test]
+    fn on_row_done_callback_is_called() {
+        let count = Arc::new(AtomicU32::new(0));
+        let count_clone = Arc::clone(&count);
+
+        let rows = vec![make_row(1), make_row(2)];
+        let process: ProcessFn = Box::new(|row| Ok((row.clone(), None)));
+        let on_done: OnRowDone = Box::new(move |_| {
+            count_clone.fetch_add(1, Ordering::SeqCst);
+        });
+
+        run_batch(rows, process, &config(0), Some(on_done));
+
+        assert_eq!(count.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn no_usage_means_zero_tokens() {
+        let rows = vec![make_row(1)];
+        let process: ProcessFn = Box::new(|row| Ok((row.clone(), None)));
+
+        let (_, tokens, _) = run_batch(rows, process, &config(0), None);
+
+        assert_eq!(tokens.total(), 0);
+    }
+}
