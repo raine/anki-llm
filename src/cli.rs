@@ -73,12 +73,28 @@ pub struct QueryArgs {
 
 #[derive(clap::Args)]
 pub struct ConfigArgs {
-    /// Action to perform (get, set, list, path)
-    pub action: String,
-    /// Config key
-    pub key: Option<String>,
-    /// Config value
-    pub value: Option<String>,
+    #[command(subcommand)]
+    pub action: ConfigAction,
+}
+
+#[derive(clap::Subcommand)]
+pub enum ConfigAction {
+    /// Get a configuration value
+    Get {
+        /// Config key
+        key: String,
+    },
+    /// Set a configuration value
+    Set {
+        /// Config key
+        key: String,
+        /// Config value
+        value: String,
+    },
+    /// List all configuration settings
+    List,
+    /// Show the config file path
+    Path,
 }
 
 #[derive(clap::Args)]

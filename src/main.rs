@@ -10,6 +10,7 @@ mod batch;
 mod config;
 mod data;
 mod generate;
+#[allow(dead_code)]
 mod llm;
 mod template;
 mod terminal;
