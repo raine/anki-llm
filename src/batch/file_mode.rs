@@ -21,6 +21,9 @@ pub struct FileWriter {
     pending: Mutex<usize>,
     /// Flush threshold (typically batch_size).
     flush_threshold: usize,
+    /// Serializes concurrent flush calls so that a slower older snapshot
+    /// cannot overwrite a newer one written by a concurrent flush.
+    flush_lock: Mutex<()>,
 }
 
 impl FileWriter {
@@ -40,6 +43,7 @@ impl FileWriter {
             ordered_ids,
             pending: Mutex::new(0),
             flush_threshold,
+            flush_lock: Mutex::new(()),
         }
     }
 
@@ -85,6 +89,10 @@ impl FileWriter {
     /// Write all rows to disk in original input order. Called at end of
     /// processing and periodically during processing.
     pub fn flush(&self) -> anyhow::Result<()> {
+        // Serialize flushes so that a slower concurrent flush cannot overwrite
+        // a newer snapshot written by a flush that started after it.
+        let _flush_guard = self.flush_lock.lock().unwrap();
+
         // Snapshot rows under the lock, then release before doing I/O so
         // worker threads are not blocked during serialization and disk writes.
         let rows: Vec<Row> = {
