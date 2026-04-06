@@ -395,7 +395,7 @@ fn execute_pipeline_for_term(
 
     let selected_indices = match rx.recv() {
         Ok(WorkerCommand::Selection(indices)) => indices,
-        Ok(WorkerCommand::Quit) | Err(_) => return Ok(()),
+        Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => return Ok(()),
         _ => bail_err!("Unexpected response during selection"),
     };
 

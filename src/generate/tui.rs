@@ -48,6 +48,7 @@ pub enum WorkerCommand {
     Start(String), // term to generate cards for
     Selection(Vec<usize>),
     Review(Vec<bool>), // true = keep, false = discard
+    Cancel,            // abandon current run, go back to input
     Quit,
 }
 
@@ -428,7 +429,12 @@ impl App {
             KeyCode::Char(' ') => state.toggle_current(),
             KeyCode::Char('a') => state.select_all(),
             KeyCode::Char('n') => state.select_none(),
-            KeyCode::Char('q') | KeyCode::Esc => {
+            KeyCode::Esc => {
+                self.worker_tx.send(WorkerCommand::Cancel).ok();
+                self.reset_for_new_run();
+                self.mode = AppMode::Input(String::new());
+            }
+            KeyCode::Char('q') => {
                 self.worker_tx.send(WorkerCommand::Quit).ok();
                 self.should_quit = true;
                 self.user_quit = true;
@@ -667,7 +673,7 @@ fn draw_selecting(frame: &mut Frame, _app: &App, state: &SelectionState) {
 
     let selected_count = state.selected.len();
     let title = format!(
-        " Select cards  [Space] toggle  [a] all  [n] none  [Enter] confirm  [q] quit  ({selected_count} selected) "
+        " Select cards  [Space] toggle  [a] all  [n] none  [Enter] confirm  [Esc] back  [q] quit  ({selected_count} selected) "
     );
 
     let main_block = Block::default().borders(Borders::ALL).title(title);
