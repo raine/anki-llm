@@ -1,0 +1,15 @@
+panes:
+  - command: <agent> # Start the configured agent (e.g., claude)
+    focus: true
+  - split: horizontal
+
+# Commands run after worktree creation (blocks window creation, keep fast)
+files:
+  symlink:
+    - .ignore
+    - history
+    - hooks/pre-commit
+
+pre_merge:
+  - just check-ci
+  - just test
