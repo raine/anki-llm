@@ -86,6 +86,7 @@ pub fn export_cards(cards: &[ValidatedCard], output_path: &Path) -> Result<(), a
         );
     }
 
+    let is_appending = !existing.is_empty();
     let combined: Vec<IndexMap<String, String>> = existing.into_iter().chain(data).collect();
 
     let content = match ext.as_str() {
@@ -101,7 +102,7 @@ pub fn export_cards(cards: &[ValidatedCard], output_path: &Path) -> Result<(), a
 
     eprintln!(
         "\nSuccessfully {} {}",
-        if output_path.exists() {
+        if is_appending {
             "appended to"
         } else {
             "exported cards to"

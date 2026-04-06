@@ -164,7 +164,7 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         model: runtime.model.clone(),
     };
 
-    let (_outcomes, _tokens, _interrupted) = run_batch(
+    let (outcomes, _tokens, _interrupted) = run_batch(
         rows_to_process,
         process_fn,
         &batch_config,
@@ -174,6 +174,15 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     // Final flush
     writer.flush().context("failed to write final output")?;
     eprintln!("\nOutput written to {}", args.output.display());
+
+    let failures = outcomes
+        .iter()
+        .filter(|o| matches!(o, super::report::RowOutcome::Failure { .. }))
+        .count();
+
+    if failures > 0 {
+        anyhow::bail!("{failures} row(s) failed processing. See _error fields in output file.");
+    }
 
     Ok(())
 }

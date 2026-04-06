@@ -26,10 +26,24 @@ fn markdown_to_html(content: &str) -> String {
 
 /// Sanitize HTML, allowing only safe tags and attributes.
 fn clean_html(html: &str) -> String {
+    use std::collections::{HashMap, HashSet};
+
+    let mut tag_attributes: HashMap<&str, HashSet<&str>> = HashMap::new();
+    tag_attributes.insert("a", ["href", "title"].iter().copied().collect());
+    tag_attributes.insert(
+        "img",
+        ["src", "alt", "title", "width", "height"]
+            .iter()
+            .copied()
+            .collect(),
+    );
+
     ammonia::Builder::default()
         .tags(ALLOWED_TAGS.iter().copied().collect())
         .link_rel(None)
         .url_schemes(["http", "https", "data"].iter().copied().collect())
+        .generic_attributes(["class", "style"].iter().copied().collect())
+        .tag_attributes(tag_attributes)
         .clean(html)
         .to_string()
 }

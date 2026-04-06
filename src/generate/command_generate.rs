@@ -24,6 +24,14 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     let parsed = parse_prompt_file(&content)?;
     let frontmatter = parsed.frontmatter;
 
+    // Validate required placeholders in prompt body
+    if !parsed.body.contains("{term}") {
+        anyhow::bail!("Prompt is missing required placeholder: {{term}}");
+    }
+    if !parsed.body.contains("{count}") {
+        anyhow::bail!("Prompt is missing required placeholder: {{count}}");
+    }
+
     eprintln!("Loaded prompt for deck: {}", frontmatter.deck);
     eprintln!("Note type: {}", frontmatter.note_type);
 
