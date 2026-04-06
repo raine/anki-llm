@@ -90,21 +90,6 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
         .output
         .unwrap_or_else(|| PathBuf::from(format!("{}-prompt.md", slugify_deck_name(&deck))));
 
-    if output_path.exists() {
-        let overwrite = Confirm::new(&format!(
-            "File '{}' already exists. Overwrite?",
-            output_path.display()
-        ))
-        .with_default(false)
-        .prompt()
-        .map_err(map_inquire_err)?;
-
-        if !overwrite {
-            eprintln!("Aborted. Existing file not modified.");
-            return Ok(());
-        }
-    }
-
     std::fs::write(&output_path, &content)?;
 
     eprintln!("\nPrompt file created: {}", output_path.display());
