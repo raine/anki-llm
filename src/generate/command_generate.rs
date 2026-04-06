@@ -108,10 +108,7 @@ pub fn run_pipeline(
         return Err(anyhow::anyhow!("{}", msg));
     }
 
-    step_done!(
-        PipelineStep::LoadPrompt,
-        Some(format!("deck: {}", frontmatter.deck))
-    );
+    step_done!(PipelineStep::LoadPrompt, None);
     log!("Loaded prompt for deck: {}", frontmatter.deck);
     log!("Note type: {}", frontmatter.note_type);
 
@@ -268,10 +265,7 @@ fn execute_pipeline_for_term(
     // Generate cards
     step_start!(
         PipelineStep::Generate,
-        Some(format!(
-            "{} card(s) using {}",
-            args.count, session.runtime.model
-        ))
+        Some(format!("{} card(s)", args.count))
     );
     log!(
         "Generating {} card(s) for \"{}\" using {}...",

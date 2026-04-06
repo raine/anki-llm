@@ -550,9 +550,7 @@ fn draw(frame: &mut Frame, app: &App) {
         .constraints([Constraint::Length(30), Constraint::Min(0)])
         .split(rows[0]);
 
-    draw_sidebar(frame, app, cols[0]);
-    draw_footer(frame, app, rows[1]);
-
+    // Render main content first, then sidebar on top so CJK bleed is covered
     let main_area = cols[1];
     match &app.mode {
         AppMode::Input(text) => draw_input(frame, text, main_area),
@@ -562,6 +560,9 @@ fn draw(frame: &mut Frame, app: &App) {
         AppMode::Done(msg) => draw_done(frame, app, msg, main_area),
         AppMode::Error(msg) => draw_error(frame, msg, main_area),
     }
+
+    draw_sidebar(frame, app, cols[0]);
+    draw_footer(frame, app, rows[1]);
 }
 
 fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
@@ -570,7 +571,44 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(block, area);
 
     let info_height: u16 = if app.session_info.is_some() { 4 } else { 0 };
-    let steps_height = app.steps.len() as u16;
+
+    // Build step lines (detail on second indented line)
+    let spinner_frame = format!(
+        "{} ",
+        SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()]
+    );
+
+    let mut step_lines: Vec<Line> = Vec::new();
+    for (step, status) in &app.steps {
+        let is_interactive = matches!(step, PipelineStep::Select | PipelineStep::QualityCheck);
+        let (icon, style): (&str, Style) = match status {
+            StepStatus::Pending => ("  ", Style::default().fg(Color::DarkGray)),
+            StepStatus::Running(_) if is_interactive => ("▸ ", Style::default().fg(Color::Cyan)),
+            StepStatus::Running(_) => (&spinner_frame, Style::default().fg(Color::Cyan)),
+            StepStatus::Done(_) => ("✓ ", Style::default().fg(Color::Green)),
+            StepStatus::Skipped => ("- ", Style::default().fg(Color::DarkGray)),
+            StepStatus::Error(_) => ("✗ ", Style::default().fg(Color::Red)),
+        };
+
+        step_lines.push(Line::from(vec![
+            Span::styled(icon, style),
+            Span::styled(step.label(), style),
+        ]));
+
+        let detail = match status {
+            StepStatus::Running(Some(d)) | StepStatus::Done(Some(d)) => Some(d.as_str()),
+            StepStatus::Error(e) => Some(e.as_str()),
+            _ => None,
+        };
+        if let Some(d) = detail {
+            step_lines.push(Line::from(Span::styled(
+                format!("    {d}"),
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+    }
+
+    let steps_height = step_lines.len() as u16;
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -602,46 +640,7 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     // Pipeline steps
-    let spinner_frame = format!(
-        "{} ",
-        SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()]
-    );
-
-    let step_items: Vec<ListItem> = app
-        .steps
-        .iter()
-        .map(|(step, status)| {
-            let (icon, style): (&str, Style) = match status {
-                StepStatus::Pending => ("  ", Style::default().fg(Color::DarkGray)),
-                StepStatus::Running(_) => (&spinner_frame, Style::default().fg(Color::Cyan)),
-                StepStatus::Done(_) => ("✓ ", Style::default().fg(Color::Green)),
-                StepStatus::Skipped => ("- ", Style::default().fg(Color::DarkGray)),
-                StepStatus::Error(_) => ("✗ ", Style::default().fg(Color::Red)),
-            };
-
-            let detail_text = match status {
-                StepStatus::Running(Some(d)) | StepStatus::Done(Some(d)) => {
-                    format!("  {d}")
-                }
-                StepStatus::Error(e) => format!("  {e}"),
-                _ => String::new(),
-            };
-
-            let label = step.label();
-            let line = if detail_text.is_empty() {
-                Line::from(vec![Span::styled(icon, style), Span::styled(label, style)])
-            } else {
-                Line::from(vec![
-                    Span::styled(icon, style),
-                    Span::styled(label, style),
-                    Span::styled(detail_text, Style::default().fg(Color::DarkGray)),
-                ])
-            };
-            ListItem::new(line)
-        })
-        .collect();
-
-    frame.render_widget(List::new(step_items), chunks[1]);
+    frame.render_widget(Paragraph::new(step_lines), chunks[1]);
 
     // Cost
     let total = app.session_cost + app.run_cost;
