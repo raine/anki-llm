@@ -53,6 +53,24 @@ pub fn markdown_to_ansi(md: &str) -> String {
             Event::Start(Tag::Emphasis) => out.push_str(ITALIC),
             Event::End(TagEnd::Emphasis) => out.push_str(RESET),
             Event::Start(Tag::Item) => out.push_str("• "),
+            Event::InlineHtml(tag) => {
+                let t = tag.trim().to_lowercase();
+                if t == "<b>" || t == "<strong>" {
+                    out.push_str(BOLD);
+                } else if t == "</b>" || t == "</strong>" {
+                    out.push_str(RESET);
+                } else if t == "<i>" || t == "<em>" {
+                    out.push_str(ITALIC);
+                } else if t == "</i>" || t == "</em>" {
+                    out.push_str(RESET);
+                } else if t == "<br>" || t == "<br/>" || t == "<br />" {
+                    out.push('\n');
+                }
+            }
+            Event::Html(block) => {
+                out.push_str(&strip_html_tags(&block));
+                out.push('\n');
+            }
             Event::SoftBreak | Event::HardBreak => out.push('\n'),
             Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Item) => out.push('\n'),
             _ => {}
@@ -63,16 +81,22 @@ pub fn markdown_to_ansi(md: &str) -> String {
 }
 
 /// Render markdown to ratatui `Line`s with inline styling (bold, italic, code).
+///
+/// Handles both markdown formatting and HTML content (which pulldown_cmark
+/// emits as `Event::Html`/`Event::InlineHtml` rather than parsed events).
 pub fn markdown_to_lines(md: &str, indent: &str) -> Vec<Line<'static>> {
     let parser = Parser::new_ext(md, Options::all());
     let mut lines: Vec<Line<'static>> = Vec::new();
     let mut spans: Vec<Span<'static>> = Vec::new();
     let mut style = Style::default();
 
-    // Start each line with indent
-    if !indent.is_empty() {
-        spans.push(Span::raw(indent.to_string()));
-    }
+    let start_line = |spans: &mut Vec<Span<'static>>, indent: &str| {
+        if !indent.is_empty() {
+            spans.push(Span::raw(indent.to_string()));
+        }
+    };
+
+    start_line(&mut spans, indent);
 
     for event in parser {
         match event {
@@ -90,17 +114,39 @@ pub fn markdown_to_lines(md: &str, indent: &str) -> Vec<Line<'static>> {
             Event::Start(Tag::Item) => {
                 spans.push(Span::raw("• ".to_string()));
             }
+            Event::InlineHtml(tag) => {
+                let t = tag.trim().to_lowercase();
+                if t == "<b>" || t == "<strong>" {
+                    style = style.add_modifier(Modifier::BOLD);
+                } else if t == "</b>" || t == "</strong>" {
+                    style = style.remove_modifier(Modifier::BOLD);
+                } else if t == "<i>" || t == "<em>" {
+                    style = style.add_modifier(Modifier::ITALIC);
+                } else if t == "</i>" || t == "</em>" {
+                    style = style.remove_modifier(Modifier::ITALIC);
+                } else if t == "<br>" || t == "<br/>" || t == "<br />" {
+                    lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
+                    start_line(&mut spans, indent);
+                }
+            }
+            Event::Html(block) => {
+                // Block-level HTML: strip tags and render as plain text lines
+                let plain = strip_html_tags(&block);
+                for l in plain.lines() {
+                    if !l.is_empty() {
+                        start_line(&mut spans, indent);
+                        spans.push(Span::styled(l.to_string(), style));
+                        lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
+                    }
+                }
+            }
             Event::SoftBreak | Event::HardBreak => {
                 lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
-                if !indent.is_empty() {
-                    spans.push(Span::raw(indent.to_string()));
-                }
+                start_line(&mut spans, indent);
             }
             Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Item) => {
                 lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
-                if !indent.is_empty() {
-                    spans.push(Span::raw(indent.to_string()));
-                }
+                start_line(&mut spans, indent);
             }
             _ => {}
         }
