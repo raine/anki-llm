@@ -277,4 +277,16 @@ pub struct GenerateArgs {
 pub struct GenerateInitArgs {
     /// Output file path
     pub output: Option<PathBuf>,
+
+    /// Model name
+    #[arg(long, short = 'm')]
+    pub model: Option<String>,
+
+    /// LLM temperature (0-2)
+    #[arg(long, short = 't')]
+    pub temperature: Option<f64>,
+
+    /// Copy prompt to clipboard for manual LLM mode
+    #[arg(long)]
+    pub copy: bool,
 }

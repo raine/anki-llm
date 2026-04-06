@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 use crate::cli::{Cli, Commands};
 
@@ -11,6 +11,6 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::ProcessFile(args) => crate::batch::command_process_file::run(args),
         Commands::ProcessDeck(args) => crate::batch::command_process_deck::run(args),
         Commands::Generate(args) => crate::generate::command_generate::run(args),
-        Commands::GenerateInit(_) => bail!("generate-init not implemented"),
+        Commands::GenerateInit(args) => crate::generate::init::command::run(args),
     }
 }

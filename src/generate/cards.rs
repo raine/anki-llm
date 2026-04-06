@@ -21,7 +21,7 @@ pub struct ValidatedCard {
 /// Map card fields from LLM keys to Anki field names.
 pub fn map_fields_to_anki(
     sanitized: &HashMap<String, String>,
-    field_map: &HashMap<String, String>,
+    field_map: &IndexMap<String, String>,
 ) -> Result<IndexMap<String, String>, anyhow::Error> {
     let mut anki_fields = IndexMap::new();
     for (llm_key, anki_name) in field_map {
@@ -99,7 +99,7 @@ mod tests {
         sanitized.insert("front".into(), "hello".into());
         sanitized.insert("back".into(), "world".into());
 
-        let mut field_map = HashMap::new();
+        let mut field_map = IndexMap::new();
         field_map.insert("front".into(), "Front".into());
         field_map.insert("back".into(), "Back".into());
 

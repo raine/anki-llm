@@ -1,20 +1,19 @@
-use std::collections::HashMap;
-
-use serde::Deserialize;
+use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 
 use super::error::TemplateError;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Frontmatter {
     pub deck: String,
     pub note_type: String,
-    pub field_map: HashMap<String, String>,
+    pub field_map: IndexMap<String, String>,
     #[serde(default)]
     pub quality_check: Option<QualityCheckConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QualityCheckConfig {
     pub field: String,
     pub prompt: String,
