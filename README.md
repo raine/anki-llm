@@ -62,21 +62,21 @@ interactively, and add selected cards to your deck.
 
 ## Installation
 
-**Homebrew (macOS/Linux):**
+### Quick install
 
-```bash
-brew install raine/anki-llm/anki-llm
-```
-
-**Install script:**
-
-```bash
+```sh
 curl -fsSL https://raw.githubusercontent.com/raine/anki-llm/main/scripts/install.sh | bash
 ```
 
-**Cargo:**
+### Homebrew (macOS/Linux)
 
-```bash
+```sh
+brew install raine/anki-llm/anki-llm
+```
+
+### Cargo
+
+```sh
 cargo install anki-llm
 ```
 
