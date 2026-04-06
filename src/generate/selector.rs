@@ -1,3 +1,5 @@
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+
 use super::cards::ValidatedCard;
 
 fn strip_html_tags(html: &str) -> String {
@@ -14,6 +16,38 @@ fn strip_html_tags(html: &str) -> String {
     }
     // Clean up whitespace
     result.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Render markdown to a string with ANSI escape codes for terminal display.
+fn markdown_to_ansi(md: &str) -> String {
+    const BOLD: &str = "\x1b[1m";
+    const ITALIC: &str = "\x1b[3m";
+    const CODE: &str = "\x1b[7m"; // reverse video for inline code
+    const RESET: &str = "\x1b[0m";
+
+    let mut out = String::new();
+    let parser = Parser::new_ext(md, Options::all());
+
+    for event in parser {
+        match event {
+            Event::Text(t) => out.push_str(&t),
+            Event::Code(t) => {
+                out.push_str(CODE);
+                out.push_str(&t);
+                out.push_str(RESET);
+            }
+            Event::Start(Tag::Strong) => out.push_str(BOLD),
+            Event::End(TagEnd::Strong) => out.push_str(RESET),
+            Event::Start(Tag::Emphasis) => out.push_str(ITALIC),
+            Event::End(TagEnd::Emphasis) => out.push_str(RESET),
+            Event::Start(Tag::Item) => out.push_str("• "),
+            Event::SoftBreak | Event::HardBreak => out.push('\n'),
+            Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Item) => out.push('\n'),
+            _ => {}
+        }
+    }
+
+    out.trim_end_matches('\n').to_string()
 }
 
 fn format_card_for_display(card: &ValidatedCard, index: usize) -> String {
@@ -56,9 +90,9 @@ pub fn display_cards(cards: &[ValidatedCard]) {
         };
         eprintln!("{header}");
 
-        for (name, value) in &card.anki_fields {
+        for (name, value) in &card.raw_anki_fields {
             eprintln!("\n{name}:");
-            eprintln!("{value}");
+            eprintln!("{}", markdown_to_ansi(value));
         }
 
         eprintln!("\n{}", "─".repeat(60));

@@ -12,8 +12,10 @@ use super::processor::CardCandidate;
 pub struct ValidatedCard {
     /// Original fields (LLM keys → values as strings after sanitization).
     pub fields: HashMap<String, String>,
-    /// Fields mapped to Anki field names.
+    /// Fields mapped to Anki field names (sanitized HTML, for Anki import).
     pub anki_fields: IndexMap<String, String>,
+    /// Fields mapped to Anki field names (raw markdown, for terminal display).
+    pub raw_anki_fields: IndexMap<String, String>,
     /// Whether this card already exists in Anki.
     pub is_duplicate: bool,
 }
@@ -63,8 +65,22 @@ pub fn validate_cards(
     anki: &AnkiClient,
 ) -> Result<Vec<ValidatedCard>, anyhow::Error> {
     let mut validated = Vec::new();
-    for (_candidate, sanitized) in cards {
+    for (candidate, sanitized) in cards {
         let anki_fields = map_fields_to_anki(&sanitized, &frontmatter.field_map)?;
+
+        // Build raw (pre-sanitization) field strings for terminal display.
+        let raw_strings: HashMap<String, String> = candidate
+            .fields
+            .iter()
+            .map(|(k, v)| {
+                let s = match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                (k.clone(), s)
+            })
+            .collect();
+        let raw_anki_fields = map_fields_to_anki(&raw_strings, &frontmatter.field_map)?;
 
         let is_duplicate = anki_fields
             .get(first_field_name)
@@ -75,6 +91,7 @@ pub fn validate_cards(
         validated.push(ValidatedCard {
             fields: sanitized,
             anki_fields,
+            raw_anki_fields,
             is_duplicate,
         });
     }
