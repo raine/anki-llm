@@ -84,13 +84,6 @@ brew install raine/anki-llm/anki-llm
 cargo install anki-llm
 ```
 
-### npm (legacy)
-
-The previous TypeScript version is available on npm:
-
-```sh
-npm install -g anki-llm
-```
 
 ## Requirements
 
