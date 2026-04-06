@@ -3,21 +3,17 @@ use std::fs;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use serde_json::Value;
 
 use crate::cli::ProcessFileArgs;
 use crate::data::io::{load_existing_output, parse_data_file};
 use crate::data::rows::{Row, get_note_id, require_note_id};
 use crate::llm::client::LlmClient;
-use crate::llm::error::LlmError;
-use crate::llm::extract::extract_result_tag;
-use crate::llm::parse_json::{merge_fields_case_insensitive, try_parse_json_object};
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use crate::template::fill_template;
 
 use super::engine::{BatchConfig, run_batch};
-use super::error::BatchError;
 use super::file_mode::FileWriter;
+use super::process_row::{ProcessRowConfig, build_process_fn};
 use super::report::RowOutcome;
 
 pub fn run(args: ProcessFileArgs) -> Result<()> {
@@ -141,56 +137,14 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     }
 
     // Build processing closure
-    let client = Arc::new(LlmClient::from_config(&runtime));
-    let field = args.field.clone();
-    let require_result_tag = args.require_result_tag;
-    let model = runtime.model.clone();
-    let temperature = runtime.temperature;
-    let max_tokens = runtime.max_tokens;
-    let template = prompt_template.clone();
-
-    let process_fn: super::engine::ProcessFn = Box::new(move |row: &Row| {
-        // Fill template
-        let prompt = fill_template(&template, row).map_err(|e| BatchError::Fatal(e.to_string()))?;
-
-        // Call LLM — Api errors (4xx) are fatal, Http/Decode are retryable
-        let result = client
-            .chat_completion(&model, &prompt, temperature, max_tokens)
-            .map_err(|e| match e {
-                LlmError::Api(_) => BatchError::Fatal(e.to_string()),
-                _ => BatchError::Processing(e.to_string()),
-            })?;
-
-        let response_text = result.content;
-        let usage = result.usage.map(|u| (u.prompt_tokens, u.completion_tokens));
-
-        // Extract from result tags if configured
-        let processed_text = extract_result_tag(&response_text, require_result_tag)
-            .map_err(BatchError::Processing)?;
-
-        // Build output row
-        let mut output_row = row.clone();
-
-        if let Some(ref field_name) = field {
-            // Single field mode
-            output_row.insert(field_name.clone(), Value::String(processed_text));
-        } else {
-            // JSON merge mode
-            let parsed = try_parse_json_object(&processed_text).ok_or_else(|| {
-                let preview = if processed_text.is_empty() {
-                    "(empty response)".to_string()
-                } else {
-                    processed_text.chars().take(200).collect::<String>()
-                };
-                BatchError::Processing(format!("LLM response is not valid JSON: {preview}"))
-            })?;
-            merge_fields_case_insensitive(&mut output_row, &parsed).map_err(BatchError::Fatal)?;
-        }
-
-        // Remove _error field if present (successful retry)
-        output_row.shift_remove("_error");
-
-        Ok((output_row, usage))
+    let process_fn = build_process_fn(ProcessRowConfig {
+        client: Arc::new(LlmClient::from_config(&runtime)),
+        model: runtime.model.clone(),
+        template: prompt_template.clone(),
+        field: args.field.clone(),
+        temperature: runtime.temperature,
+        max_tokens: runtime.max_tokens,
+        require_result_tag: args.require_result_tag,
     });
 
     // Set up file writer

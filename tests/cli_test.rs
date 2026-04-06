@@ -1,6 +1,9 @@
 use assert_cmd::Command;
+use clap::Parser;
 use predicates::prelude::*;
 use tempfile::{self, tempdir};
+
+use anki_llm::cli::{Cli, Commands};
 
 #[test]
 fn prints_help_with_all_subcommands() {
@@ -182,4 +185,54 @@ fn process_file_rejects_missing_id() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("missing"));
+}
+
+#[test]
+fn process_deck_requires_field_or_json() {
+    let result = Cli::try_parse_from(["anki-llm", "process-deck", "MyDeck", "-p", "prompt.txt"]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn process_deck_field_mode() {
+    let cli = Cli::parse_from([
+        "anki-llm",
+        "process-deck",
+        "MyDeck",
+        "-p",
+        "prompt.txt",
+        "--field",
+        "Translation",
+    ]);
+    match cli.command {
+        Commands::ProcessDeck(args) => {
+            assert_eq!(args.deck, "MyDeck");
+            assert_eq!(args.field, Some("Translation".into()));
+            assert!(!args.json);
+            assert_eq!(args.batch_size, 5);
+            assert_eq!(args.retries, 3);
+        }
+        _ => panic!("expected ProcessDeck"),
+    }
+}
+
+#[test]
+fn process_deck_json_mode_with_note_type() {
+    let cli = Cli::parse_from([
+        "anki-llm",
+        "process-deck",
+        "MyDeck",
+        "-p",
+        "prompt.txt",
+        "--json",
+        "--note-type",
+        "Basic",
+    ]);
+    match cli.command {
+        Commands::ProcessDeck(args) => {
+            assert!(args.json);
+            assert_eq!(args.note_type, Some("Basic".into()));
+        }
+        _ => panic!("expected ProcessDeck"),
+    }
 }

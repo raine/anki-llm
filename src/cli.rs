@@ -136,9 +136,63 @@ pub struct ProcessFileArgs {
 }
 
 #[derive(clap::Args)]
+#[command(group(
+    clap::ArgGroup::new("output_mode")
+        .required(true)
+        .args(["field", "json"])
+        .multiple(false)
+))]
 pub struct ProcessDeckArgs {
     /// Deck name to process
     pub deck: String,
+
+    /// Path to prompt template file
+    #[arg(long, short = 'p')]
+    pub prompt: PathBuf,
+
+    /// Field name to update with LLM response (mutually exclusive with --json)
+    #[arg(long)]
+    pub field: Option<String>,
+
+    /// Expect JSON response and merge fields case-insensitively (mutually exclusive with --field)
+    #[arg(long)]
+    pub json: bool,
+
+    /// Filter by note type (required if deck contains multiple note types)
+    #[arg(long, short = 'n')]
+    pub note_type: Option<String>,
+
+    /// Model name
+    #[arg(long, short = 'm')]
+    pub model: Option<String>,
+
+    /// Number of concurrent requests
+    #[arg(long, short = 'b', default_value = "5")]
+    pub batch_size: u32,
+
+    /// Sampling temperature (0-2)
+    #[arg(long, short = 't')]
+    pub temperature: Option<f64>,
+
+    /// Maximum tokens per completion
+    #[arg(long)]
+    pub max_tokens: Option<u64>,
+
+    /// Number of retries on failure
+    #[arg(long, short = 'r', default_value = "3")]
+    pub retries: u32,
+
+    /// Preview without making API calls
+    #[arg(long, short = 'd')]
+    pub dry_run: bool,
+
+    /// Limit the number of notes to process
+    #[arg(long)]
+    pub limit: Option<usize>,
+
+    /// Require <result></result> tags in LLM responses
+    #[arg(long)]
+    pub require_result_tag: bool,
 }
 
 #[derive(clap::Args)]
