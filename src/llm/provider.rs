@@ -1,5 +1,7 @@
 use std::env;
 
+use crate::config::store::read_config;
+
 /// Provider configuration resolved from a model name.
 pub struct ProviderConfig {
     /// Base URL override (None = provider default).
@@ -29,12 +31,17 @@ pub fn api_key_for_model(model: &str) -> Option<String> {
     env::var(config.api_key_env).ok()
 }
 
-/// Resolve which model to use. If `user_model` is provided, use it.
-/// Otherwise auto-detect: prefer Gemini if `GEMINI_API_KEY` is set,
-/// else default to `gpt-5`.
+/// Resolve which model to use.
+/// Priority: CLI flag → config file → env-var auto-detect.
 pub fn resolve_model(user_model: Option<&str>) -> String {
     if let Some(m) = user_model {
         return m.to_string();
+    }
+    if let Ok(config) = read_config()
+        && let Some(serde_json::Value::String(m)) = config.get("model")
+        && !m.is_empty()
+    {
+        return m.clone();
     }
     if env::var("GEMINI_API_KEY").is_ok() {
         "gemini-2.5-flash".to_string()
