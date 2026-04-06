@@ -15,7 +15,7 @@ use crate::template::fill_template;
 use super::engine::{BatchConfig, run_batch};
 use super::file_mode::FileWriter;
 use super::process_row::{ProcessRowConfig, build_process_fn};
-use super::report::RowOutcome;
+use super::report::{ERROR_FIELD, RowOutcome};
 
 pub fn run(args: ProcessFileArgs) -> Result<()> {
     // Read input
@@ -90,7 +90,7 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
                 return true; // unreachable after validation above
             };
             match existing.get(&id) {
-                Some(existing_row) if existing_row.contains_key("_error") => true,
+                Some(existing_row) if existing_row.contains_key(ERROR_FIELD) => true,
                 Some(existing_row) => target_field.is_some_and(|f| !existing_row.contains_key(f)),
                 None => true,
             }

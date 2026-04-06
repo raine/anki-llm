@@ -1,6 +1,9 @@
 use crate::llm::pricing;
 use crate::style::style;
 
+/// Field key used to record processing errors on failed rows.
+pub const ERROR_FIELD: &str = "_error";
+
 /// Accumulated token counts across all processed rows.
 #[derive(Debug, Default, Clone)]
 pub struct TokenStats {

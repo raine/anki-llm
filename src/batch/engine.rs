@@ -197,7 +197,10 @@ fn process_with_retry(
 
     let error = last_error;
     let mut failed_row = row.clone();
-    failed_row.insert("_error".to_string(), serde_json::Value::String(error.clone()));
+    failed_row.insert(
+        super::report::ERROR_FIELD.to_string(),
+        serde_json::Value::String(error.clone()),
+    );
     RowOutcome::Failure { row: failed_row, error }
 }
 
