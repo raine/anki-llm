@@ -1,6 +1,5 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use serde_json::Value;
 
@@ -10,6 +9,7 @@ use crate::llm::error::LlmError;
 use crate::llm::logger::LlmLogger;
 use crate::llm::parse_json::try_parse_json_object;
 use crate::llm::pricing;
+use crate::llm::retry::retry_with_backoff;
 use crate::style::style;
 use crate::template::fill_template;
 use crate::template::frontmatter::QualityCheckConfig;
@@ -206,48 +206,37 @@ fn check_single(
     retries: u32,
     logger: Option<&LlmLogger>,
 ) -> Result<(bool, String, f64), anyhow::Error> {
-    let mut last_error = String::new();
+    retry_with_backoff(
+        retries,
+        |e: &anyhow::Error| matches!(e.downcast_ref::<LlmError>(), Some(LlmError::Api(_))),
+        || {
+            let result = client
+                .chat_completion(model, prompt, temperature, max_tokens)
+                .map_err(anyhow::Error::from)?;
 
-    for attempt in 0..=retries {
-        if attempt > 0 {
-            let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1));
-            std::thread::sleep(backoff.min(Duration::from_secs(30)));
-        }
-
-        match client.chat_completion(model, prompt, temperature, max_tokens) {
-            Ok(result) => {
-                if let Some(logger) = logger {
-                    logger.log(prompt, &result.content);
-                }
-
-                let obj = try_parse_json_object(&result.content)
-                    .ok_or_else(|| anyhow::anyhow!("Quality check response is not valid JSON"))?;
-
-                let is_valid = obj
-                    .get("is_valid")
-                    .and_then(|v| v.as_bool())
-                    .ok_or_else(|| anyhow::anyhow!("Missing is_valid in quality check response"))?;
-                let reason = obj
-                    .get("reason")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("No reason provided")
-                    .to_string();
-
-                let cost = result
-                    .usage
-                    .map(|u| pricing::calculate_cost(model, u.prompt_tokens, u.completion_tokens))
-                    .unwrap_or(0.0);
-
-                return Ok((is_valid, reason, cost));
+            if let Some(logger) = logger {
+                logger.log(prompt, &result.content);
             }
-            Err(e) => {
-                last_error = e.to_string();
-                if let LlmError::Api(_) = e {
-                    break;
-                }
-            }
-        }
-    }
 
-    anyhow::bail!("Quality check failed: {last_error}")
+            let obj = try_parse_json_object(&result.content)
+                .ok_or_else(|| anyhow::anyhow!("Quality check response is not valid JSON"))?;
+
+            let is_valid = obj
+                .get("is_valid")
+                .and_then(|v| v.as_bool())
+                .ok_or_else(|| anyhow::anyhow!("Missing is_valid in quality check response"))?;
+            let reason = obj
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .unwrap_or("No reason provided")
+                .to_string();
+            let cost = result
+                .usage
+                .map(|u| pricing::calculate_cost(model, u.prompt_tokens, u.completion_tokens))
+                .unwrap_or(0.0);
+
+            Ok((is_valid, reason, cost))
+        },
+    )
+    .map_err(|e| anyhow::anyhow!("Quality check failed: {e}"))
 }

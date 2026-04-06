@@ -6,6 +6,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::data::Row;
 use crate::llm::pricing;
+use crate::llm::retry::retry_with_backoff;
 
 use super::error::BatchError;
 use super::report::{RowOutcome, TokenStats};
@@ -169,6 +170,8 @@ fn process_with_retry(
     tokens: &Arc<Mutex<TokenStats>>,
     pb: &ProgressBar,
 ) -> RowOutcome {
+    // Keep the inline loop (rather than retry_with_backoff) so retry messages
+    // go through pb.println and don't tear the live progress bar display.
     let mut last_error = String::new();
 
     for attempt in 0..=max_retries {
@@ -202,10 +205,7 @@ fn process_with_retry(
 
     let error = last_error;
     let mut failed_row = row.clone();
-    failed_row.insert(
-        "_error".to_string(),
-        serde_json::Value::String(error.clone()),
-    );
+    failed_row.insert("_error".to_string(), serde_json::Value::String(error.clone()));
     RowOutcome::Failure { row: failed_row, error }
 }
 

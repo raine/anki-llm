@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::time::Duration;
 
 use serde_json::Value;
 
@@ -9,6 +8,7 @@ use crate::llm::error::LlmError;
 use crate::llm::logger::LlmLogger;
 use crate::llm::parse_json::try_parse_json_array;
 use crate::llm::pricing;
+use crate::llm::retry::retry_with_backoff;
 use crate::template::fill_template;
 
 /// A single generated card candidate.
@@ -54,37 +54,22 @@ pub fn generate_cards(
 
     let filled_prompt = fill_template(prompt_template, &row)?;
 
-    // Retry loop
-    let mut last_error = String::new();
-    for attempt in 0..=retries {
-        if attempt > 0 {
-            let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1));
-            let backoff = backoff.min(Duration::from_secs(30));
-            eprintln!("  Retry {attempt}/{retries}: {last_error}");
-            std::thread::sleep(backoff);
-        }
-
-        match try_generate(
-            &filled_prompt,
-            field_map_keys,
-            client,
-            model,
-            temperature,
-            max_tokens,
-            logger,
-        ) {
-            Ok(result) => return Ok(result),
-            Err(e) => {
-                last_error = e.to_string();
-                // API errors (non-retryable) — break immediately
-                if let Some(LlmError::Api(_)) = e.downcast_ref::<LlmError>() {
-                    break;
-                }
-            }
-        }
-    }
-
-    anyhow::bail!("Generation failed after retries: {last_error}")
+    retry_with_backoff(
+        retries,
+        |e: &anyhow::Error| matches!(e.downcast_ref::<LlmError>(), Some(LlmError::Api(_))),
+        || {
+            try_generate(
+                &filled_prompt,
+                field_map_keys,
+                client,
+                model,
+                temperature,
+                max_tokens,
+                logger,
+            )
+        },
+    )
+    .map_err(|e| anyhow::anyhow!("Generation failed after retries: {e}"))
 }
 
 fn try_generate(
