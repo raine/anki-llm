@@ -590,21 +590,37 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
             StepStatus::Error(_) => ("✗ ", Style::default().fg(Color::Red)),
         };
 
-        step_lines.push(Line::from(vec![
-            Span::styled(icon, style),
-            Span::styled(step.label(), style),
-        ]));
-
         let detail = match status {
             StepStatus::Running(Some(d)) | StepStatus::Done(Some(d)) => Some(d.as_str()),
             StepStatus::Error(e) => Some(e.as_str()),
             _ => None,
         };
+
+        // Show detail inline if it fits, otherwise on a second line
+        let sidebar_inner = 28; // 30 - border - padding
         if let Some(d) = detail {
-            step_lines.push(Line::from(Span::styled(
-                format!("    {d}"),
-                Style::default().fg(Color::DarkGray),
-            )));
+            let inline_len = icon.len() + step.label().len() + 2 + d.len();
+            if inline_len <= sidebar_inner {
+                step_lines.push(Line::from(vec![
+                    Span::styled(icon, style),
+                    Span::styled(step.label(), style),
+                    Span::styled(format!("  {d}"), Style::default().fg(Color::DarkGray)),
+                ]));
+            } else {
+                step_lines.push(Line::from(vec![
+                    Span::styled(icon, style),
+                    Span::styled(step.label(), style),
+                ]));
+                step_lines.push(Line::from(Span::styled(
+                    format!("    {d}"),
+                    Style::default().fg(Color::DarkGray),
+                )));
+            }
+        } else {
+            step_lines.push(Line::from(vec![
+                Span::styled(icon, style),
+                Span::styled(step.label(), style),
+            ]));
         }
     }
 

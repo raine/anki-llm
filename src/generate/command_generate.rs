@@ -357,7 +357,7 @@ fn execute_pipeline_for_term(
         if dup_count > 0 {
             Some(format!("{dup_count} duplicate(s)"))
         } else {
-            Some("no duplicates".to_string())
+            None
         }
     );
     if dup_count > 0 {
