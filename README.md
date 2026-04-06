@@ -62,15 +62,26 @@ interactively, and add selected cards to your deck.
 
 ## Installation
 
-Install globally via npm:
+**Homebrew (macOS/Linux):**
 
 ```bash
-npm install -g anki-llm
+brew install raine/tap/anki-llm
+```
+
+**Install script:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/raine/anki-llm/main/scripts/install.sh | bash
+```
+
+**Cargo:**
+
+```bash
+cargo install anki-llm
 ```
 
 ## Requirements
 
-- Node.js (v18 or higher)
 - Anki Desktop must be running.
 - The [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on must be
   installed in Anki.
