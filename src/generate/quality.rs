@@ -1,5 +1,5 @@
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 
@@ -72,25 +72,18 @@ pub fn perform_quality_check(
     let spinner =
         crate::spinner::llm_spinner(format!("Quality check 0/{total_cards} using {qc_model}..."));
 
+    // Shared state — scoped threads borrow directly without Arc.
     // Each entry: (original_index, Ok((is_valid, reason, cost)) | Err(message))
     type CardResult = Result<(bool, String, f64), String>;
-    let results: Arc<Mutex<Vec<(usize, CardResult)>>> =
-        Arc::new(Mutex::new(Vec::with_capacity(total_cards)));
-
-    let next_index = Arc::new(AtomicUsize::new(0));
-    let done_count = Arc::new(AtomicUsize::new(0));
+    let results: Mutex<Vec<(usize, CardResult)>> = Mutex::new(Vec::with_capacity(total_cards));
+    let next_index = AtomicUsize::new(0);
+    let done_count = AtomicUsize::new(0);
 
     let concurrency = DEFAULT_CONCURRENCY.min(total_cards);
 
     std::thread::scope(|s| {
         for _ in 0..concurrency {
-            let next_index = Arc::clone(&next_index);
-            let done_count = Arc::clone(&done_count);
-            let results = Arc::clone(&results);
-            let spinner = &spinner;
-            let prompts = &prompts;
-
-            s.spawn(move || {
+            s.spawn(|| {
                 loop {
                     let idx = next_index.fetch_add(1, Ordering::SeqCst);
                     if idx >= total_cards {
@@ -122,7 +115,7 @@ pub fn perform_quality_check(
     spinner.finish_and_clear();
 
     // Sort by original card index so flagged review is in input order.
-    let mut results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
+    let mut results = results.into_inner().unwrap();
     results.sort_by_key(|(idx, _)| *idx);
 
     let mut total_cost = 0.0;

@@ -76,11 +76,13 @@ pub fn run_batch(
         .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
     );
 
-    // Shared state
-    let tokens = Arc::new(Mutex::new(TokenStats::default()));
-    let completed: Arc<Mutex<Vec<RowOutcome>>> = Arc::new(Mutex::new(Vec::new()));
-    let next_index = Arc::new(AtomicUsize::new(0));
-    let on_row_done = on_row_done.map(Arc::new);
+    // Shared state — plain values behind Mutex/Atomic; scoped threads borrow
+    // them directly without Arc since the scope guarantees they don't outlive
+    // this stack frame. Only `interrupted` needs Arc because it's also held by
+    // the static ctrlc handler installed above.
+    let tokens = Mutex::new(TokenStats::default());
+    let completed: Mutex<Vec<RowOutcome>> = Mutex::new(Vec::new());
+    let next_index = AtomicUsize::new(0);
 
     // Register the current progress bar so the static ctrlc handler can print
     // through it (avoids tearing the progress bar display on interrupt).
@@ -90,17 +92,7 @@ pub fn run_batch(
 
     std::thread::scope(|s| {
         for _ in 0..config.batch_size {
-            let rows = &rows;
-            let process = &process;
-            let tokens = Arc::clone(&tokens);
-            let completed = Arc::clone(&completed);
-            let next_index = Arc::clone(&next_index);
-            let pb = &pb;
-            let config = &config;
-            let on_row_done = on_row_done.clone();
-            let interrupted = Arc::clone(&interrupted);
-
-            s.spawn(move || {
+            s.spawn(|| {
                 loop {
                     if interrupted.load(Ordering::SeqCst) {
                         break;
@@ -112,7 +104,7 @@ pub fn run_batch(
                     }
 
                     let row = &rows[idx];
-                    let outcome = process_with_retry(row, process, config.retries, &tokens, pb);
+                    let outcome = process_with_retry(row, &process, config.retries, &tokens, &pb);
 
                     // Notify callback — abort if it returns true
                     if let Some(ref cb) = on_row_done
@@ -140,8 +132,8 @@ pub fn run_batch(
 
     let elapsed = start.elapsed();
     let was_interrupted = interrupted.load(Ordering::SeqCst);
-    let outcomes = Arc::try_unwrap(completed).unwrap().into_inner().unwrap();
-    let tokens = Arc::try_unwrap(tokens).unwrap().into_inner().unwrap();
+    let outcomes = completed.into_inner().unwrap();
+    let tokens = tokens.into_inner().unwrap();
 
     let succeeded = outcomes
         .iter()
@@ -167,7 +159,7 @@ fn process_with_retry(
     row: &Row,
     process: &ProcessFn,
     max_retries: u32,
-    tokens: &Arc<Mutex<TokenStats>>,
+    tokens: &Mutex<TokenStats>,
     pb: &ProgressBar,
 ) -> RowOutcome {
     // Keep the inline loop (rather than retry_with_backoff) so retry messages
