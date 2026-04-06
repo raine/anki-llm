@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressStyle};
@@ -9,6 +9,28 @@ use crate::llm::pricing;
 
 use super::error::BatchError;
 use super::report::{RowOutcome, TokenStats};
+
+/// The progress bar for the currently running batch, used by the ctrlc handler
+/// to print the interrupt message without tearing the progress bar.
+static CURRENT_PB: LazyLock<Mutex<Option<ProgressBar>>> =
+    LazyLock::new(|| Mutex::new(None));
+
+/// Global interrupted flag shared across all run_batch calls. The ctrlc
+/// handler is installed once on first use; subsequent calls to run_batch
+/// reuse the same flag and handler.
+static INTERRUPTED: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| {
+    let flag = Arc::new(AtomicBool::new(false));
+    let flag_clone = Arc::clone(&flag);
+    let _ = ctrlc::set_handler(move || {
+        flag_clone.store(true, Ordering::SeqCst);
+        let pb_guard = CURRENT_PB.lock().unwrap();
+        match pb_guard.as_ref() {
+            Some(pb) => pb.println("Interrupting... waiting for active requests to finish."),
+            None => eprintln!("Interrupting... waiting for active requests to finish."),
+        }
+    });
+    flag
+});
 
 /// Configuration for the batch engine.
 pub struct BatchConfig {
@@ -37,7 +59,10 @@ pub fn run_batch(
     on_row_done: Option<OnRowDone>,
 ) -> (Vec<RowOutcome>, TokenStats, bool) {
     let total = rows.len();
-    let interrupted = Arc::new(AtomicBool::new(false));
+    // Reset the global flag at the start of each batch (previous batch may
+    // have been interrupted and left it set).
+    let interrupted = Arc::clone(&*INTERRUPTED);
+    interrupted.store(false, Ordering::SeqCst);
 
     // Set up progress bar
     let pb = ProgressBar::new(total as u64);
@@ -56,13 +81,9 @@ pub fn run_batch(
     let next_index = Arc::new(AtomicUsize::new(0));
     let on_row_done = on_row_done.map(Arc::new);
 
-    // Install SIGINT handler
-    let interrupted_clone = interrupted.clone();
-    let pb_ctrlc = pb.clone();
-    let _ = ctrlc::set_handler(move || {
-        pb_ctrlc.println("Interrupting... waiting for active requests to finish.");
-        interrupted_clone.store(true, Ordering::SeqCst);
-    });
+    // Register the current progress bar so the static ctrlc handler can print
+    // through it (avoids tearing the progress bar display on interrupt).
+    *CURRENT_PB.lock().unwrap() = Some(pb.clone());
 
     let start = Instant::now();
 
@@ -114,6 +135,7 @@ pub fn run_batch(
     });
 
     pb.finish_and_clear();
+    *CURRENT_PB.lock().unwrap() = None;
 
     let elapsed = start.elapsed();
     let was_interrupted = interrupted.load(Ordering::SeqCst);
@@ -151,8 +173,8 @@ fn process_with_retry(
 
     for attempt in 0..=max_retries {
         if attempt > 0 {
-            let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1));
-            let backoff = backoff.min(Duration::from_secs(30));
+            let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1))
+                .min(Duration::from_secs(30));
             let s = crate::style::style();
             pb.println(format!(
                 "  {} {}",
@@ -178,16 +200,13 @@ fn process_with_retry(
         }
     }
 
-    // All retries exhausted — return failure with _error field
+    let error = last_error;
     let mut failed_row = row.clone();
     failed_row.insert(
         "_error".to_string(),
-        serde_json::Value::String(last_error.clone()),
+        serde_json::Value::String(error.clone()),
     );
-    RowOutcome::Failure {
-        row: failed_row,
-        error: last_error,
-    }
+    RowOutcome::Failure { row: failed_row, error }
 }
 
 #[cfg(test)]
