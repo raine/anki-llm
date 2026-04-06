@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -11,6 +13,9 @@ use crate::template::fill_template;
 use crate::template::frontmatter::QualityCheckConfig;
 
 use super::cards::ValidatedCard;
+
+/// How many QC LLM calls to run in parallel.
+const DEFAULT_CONCURRENCY: usize = 10;
 
 pub struct QualityCheckResult {
     pub final_cards: Vec<ValidatedCard>,
@@ -39,54 +44,102 @@ pub fn perform_quality_check(
     };
 
     let qc_model = config.model.as_deref().unwrap_or(model);
-
     let total_cards = cards.len();
-    let spinner =
-        crate::spinner::llm_spinner(format!("Quality check 1/{total_cards} using {qc_model}..."));
 
-    let mut total_cost = 0.0;
-    let mut valid_cards = Vec::new();
-    let mut flagged: Vec<(ValidatedCard, String)> = Vec::new();
+    // Pre-compute prompts; fail early if a field is missing or template is invalid.
+    let mut cards_opt: Vec<Option<ValidatedCard>> = Vec::with_capacity(total_cards);
+    let mut prompts: Vec<String> = Vec::with_capacity(total_cards);
 
-    for (card_idx, card) in cards.into_iter().enumerate() {
-        spinner.set_message(format!(
-            "Quality check {}/{total_cards} using {qc_model}...",
-            card_idx + 1
-        ));
+    for card in cards {
         let text = card
             .fields
             .get(&config.field)
             .ok_or_else(|| anyhow::anyhow!("Field \"{}\" not found on card", config.field))?;
 
-        // Use fill_template for consistent template engine
         let mut row = Row::new();
         row.insert("text".into(), Value::String(text.clone()));
         let filled_prompt = fill_template(&config.prompt, &row)
             .map_err(|e| anyhow::anyhow!("Invalid quality check prompt template: {e}"))?;
 
-        match check_single(
-            client,
-            qc_model,
-            &filled_prompt,
-            temperature,
-            max_tokens,
-            retries,
-        ) {
-            Ok((is_valid, reason, cost)) => {
-                total_cost += cost;
-                if is_valid {
-                    valid_cards.push(card);
-                } else {
-                    flagged.push((card, reason));
+        cards_opt.push(Some(card));
+        prompts.push(filled_prompt);
+    }
+
+    let spinner =
+        crate::spinner::llm_spinner(format!("Quality check 0/{total_cards} using {qc_model}..."));
+
+    // Each entry: (original_index, Ok((is_valid, reason, cost)) | Err(message))
+    type CardResult = Result<(bool, String, f64), String>;
+    let results: Arc<Mutex<Vec<(usize, CardResult)>>> =
+        Arc::new(Mutex::new(Vec::with_capacity(total_cards)));
+
+    let next_index = Arc::new(AtomicUsize::new(0));
+    let done_count = Arc::new(AtomicUsize::new(0));
+
+    let concurrency = DEFAULT_CONCURRENCY.min(total_cards);
+
+    std::thread::scope(|s| {
+        for _ in 0..concurrency {
+            let next_index = Arc::clone(&next_index);
+            let done_count = Arc::clone(&done_count);
+            let results = Arc::clone(&results);
+            let spinner = &spinner;
+            let prompts = &prompts;
+
+            s.spawn(move || {
+                loop {
+                    let idx = next_index.fetch_add(1, Ordering::SeqCst);
+                    if idx >= total_cards {
+                        break;
+                    }
+
+                    let outcome = check_single(
+                        client,
+                        qc_model,
+                        &prompts[idx],
+                        temperature,
+                        max_tokens,
+                        retries,
+                    )
+                    .map_err(|e| e.to_string());
+
+                    let done = done_count.fetch_add(1, Ordering::SeqCst) + 1;
+                    spinner.set_message(format!(
+                        "Quality check {done}/{total_cards} using {qc_model}..."
+                    ));
+
+                    results.lock().unwrap().push((idx, outcome));
                 }
+            });
+        }
+    });
+
+    spinner.finish_and_clear();
+
+    // Sort by original card index so flagged review is in input order.
+    let mut results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
+    results.sort_by_key(|(idx, _)| *idx);
+
+    let mut total_cost = 0.0;
+    let mut valid_cards: Vec<ValidatedCard> = Vec::new();
+    let mut flagged: Vec<(ValidatedCard, String)> = Vec::new();
+
+    for (idx, result) in results {
+        let card = cards_opt[idx].take().unwrap();
+        match result {
+            Ok((true, _, cost)) => {
+                total_cost += cost;
+                valid_cards.push(card);
+            }
+            Ok((false, reason, cost)) => {
+                total_cost += cost;
+                flagged.push((card, reason));
             }
             Err(e) => {
-                spinner.println(format!("  Quality check failed: {e}. Discarding card."));
-                // Don't keep cards when quality check fails — surface the error
+                eprintln!("  Quality check failed: {e}. Discarding card.");
             }
         }
     }
-    spinner.finish_and_clear();
 
     if total_cost > 0.0 {
         eprintln!("  Quality check cost: {}", pricing::format_cost(total_cost));
