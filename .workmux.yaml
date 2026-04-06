@@ -8,7 +8,6 @@ files:
   symlink:
     - .ignore
     - history
-    - hooks/pre-commit
 
 pre_merge:
   - just check-ci
