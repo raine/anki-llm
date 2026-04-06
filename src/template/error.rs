@@ -7,4 +7,7 @@ pub enum TemplateError {
 
     #[error("missing data for template placeholders: {0}")]
     MissingPlaceholders(String),
+
+    #[error("invalid frontmatter: {0}")]
+    InvalidFrontmatter(String),
 }

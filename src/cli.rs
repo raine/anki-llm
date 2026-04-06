@@ -235,6 +235,42 @@ pub enum ConfigAction {
 pub struct GenerateArgs {
     /// Term to generate cards for
     pub term: String,
+
+    /// Path to prompt template file with frontmatter
+    #[arg(long, short = 'p')]
+    pub prompt: PathBuf,
+
+    /// Number of card examples to generate
+    #[arg(long, short = 'c', default_value = "3")]
+    pub count: u32,
+
+    /// Model name
+    #[arg(long, short = 'm')]
+    pub model: Option<String>,
+
+    /// Preview without importing to Anki
+    #[arg(long, short = 'd')]
+    pub dry_run: bool,
+
+    /// Number of retries for failed requests
+    #[arg(long, short = 'r', default_value = "3")]
+    pub retries: u32,
+
+    /// Maximum tokens per response
+    #[arg(long)]
+    pub max_tokens: Option<u64>,
+
+    /// LLM temperature (0-2)
+    #[arg(long, short = 't')]
+    pub temperature: Option<f64>,
+
+    /// Export cards to a file instead of importing to Anki
+    #[arg(long, short = 'o')]
+    pub output: Option<PathBuf>,
+
+    /// Copy prompt to clipboard for manual LLM mode
+    #[arg(long)]
+    pub copy: bool,
 }
 
 #[derive(clap::Args)]

@@ -38,6 +38,41 @@ fn try_parse_object(text: &str) -> Option<serde_json::Map<String, Value>> {
     }
 }
 
+/// Try to parse text as a JSON array of objects. Also tries extracting from
+/// markdown fenced code blocks. Returns None if the text is not a JSON array.
+pub fn try_parse_json_array(text: &str) -> Option<Vec<serde_json::Map<String, Value>>> {
+    // Try direct parse first
+    if let Some(arr) = try_parse_array(text.trim()) {
+        return Some(arr);
+    }
+
+    // Try fenced code blocks
+    for caps in FENCED_JSON_RE.captures_iter(text) {
+        if let Some(arr) = try_parse_array(caps[1].trim()) {
+            return Some(arr);
+        }
+    }
+
+    None
+}
+
+fn try_parse_array(text: &str) -> Option<Vec<serde_json::Map<String, Value>>> {
+    let value: Value = serde_json::from_str(text).ok()?;
+    match value {
+        Value::Array(arr) => {
+            let mut result = Vec::new();
+            for item in arr {
+                match item {
+                    Value::Object(map) => result.push(map),
+                    _ => return None, // All items must be objects
+                }
+            }
+            Some(result)
+        }
+        _ => None,
+    }
+}
+
 /// Merge fields from `source` into `target` using case-insensitive key matching.
 ///
 /// - If a source key matches a target key (case-insensitive), the target value
@@ -158,5 +193,28 @@ mod tests {
 
         let source = serde_json::Map::new();
         assert!(merge_fields_case_insensitive(&mut target, &source).is_err());
+    }
+
+    #[test]
+    fn parse_json_array() {
+        let arr = try_parse_json_array(r#"[{"a": "1"}, {"a": "2"}]"#).unwrap();
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn parse_json_array_from_fenced() {
+        let text = "Here:\n```json\n[{\"a\": \"1\"}]\n```";
+        let arr = try_parse_json_array(text).unwrap();
+        assert_eq!(arr.len(), 1);
+    }
+
+    #[test]
+    fn parse_json_array_non_array_returns_none() {
+        assert!(try_parse_json_array(r#"{"a": "1"}"#).is_none());
+    }
+
+    #[test]
+    fn parse_json_array_non_objects_returns_none() {
+        assert!(try_parse_json_array("[1, 2, 3]").is_none());
     }
 }

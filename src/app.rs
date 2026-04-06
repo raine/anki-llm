@@ -10,7 +10,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::Import(args) => crate::data::command_import::run(args),
         Commands::ProcessFile(args) => crate::batch::command_process_file::run(args),
         Commands::ProcessDeck(args) => crate::batch::command_process_deck::run(args),
-        Commands::Generate(_) => bail!("generate not implemented"),
+        Commands::Generate(args) => crate::generate::command_generate::run(args),
         Commands::GenerateInit(_) => bail!("generate-init not implemented"),
     }
 }
