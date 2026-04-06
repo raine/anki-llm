@@ -120,6 +120,8 @@ struct SelectionState {
     selected: BTreeSet<usize>,
     list_state: ListState,
     detail_scroll: u16,
+    /// Tick when card was last copied to clipboard (for flash feedback).
+    copied_at: Option<u64>,
 }
 
 impl SelectionState {
@@ -133,6 +135,7 @@ impl SelectionState {
             selected,
             list_state,
             detail_scroll: 0,
+            copied_at: None,
         }
     }
 
@@ -477,6 +480,22 @@ impl App {
                 let indices: Vec<usize> = state.selected.into_iter().collect();
                 self.worker_tx.send(WorkerCommand::Selection(indices)).ok();
             }
+            KeyCode::Char('c') => {
+                let card = &state.cards[state.cursor];
+                let text = card
+                    .raw_anki_fields
+                    .iter()
+                    .map(|(name, value)| {
+                        let plain = super::selector::strip_html_tags(value);
+                        format!("{name}\n{plain}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+                if let Ok(mut cb) = arboard::Clipboard::new() {
+                    cb.set_text(text).ok();
+                }
+                state.copied_at = Some(self.tick);
+            }
             KeyCode::PageUp => {
                 if let AppMode::Selecting(ref mut s) = self.mode {
                     s.detail_scroll = s.detail_scroll.saturating_sub(5);
@@ -677,8 +696,12 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         AppMode::Running => " [Esc] cancel  [q] quit".to_string(),
         AppMode::Selecting(state) => {
             let n = state.selected.len();
+            let copied = state
+                .copied_at
+                .is_some_and(|t| app.tick.wrapping_sub(t) < 20);
+            let flash = if copied { "  Copied!" } else { "" };
             format!(
-                " [Space] toggle  [a] all  [n] none  [Enter] confirm  [Esc] back  [q] quit  ({n} selected)"
+                " [Space] toggle  [a] all  [n] none  [c] copy  [Enter] confirm  [Esc] back  [q] quit  ({n} selected){flash}"
             )
         }
         AppMode::Reviewing(state) => {
