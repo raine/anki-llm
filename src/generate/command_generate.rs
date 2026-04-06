@@ -246,14 +246,49 @@ pub fn run(args: GenerateArgs) -> Result<()> {
 
     // 7. Quality check
     let quality_result = if let (Some(client), Some(rt)) = (client.as_ref(), runtime.as_ref()) {
+        // If the QC config specifies a different model, build a dedicated client
+        // for it so the correct provider base URL and API key are used.
+        let qc_runtime;
+        let (qc_client_storage, qc_model, qc_temp, qc_max_tokens, qc_retries) = if let Some(m) =
+            frontmatter
+                .quality_check
+                .as_ref()
+                .and_then(|qc| qc.model.as_deref())
+        {
+            qc_runtime = build_runtime_config(RuntimeConfigArgs {
+                model: Some(m),
+                batch_size: None,
+                max_tokens: rt.max_tokens,
+                temperature: rt.temperature,
+                retries: rt.retries,
+                dry_run: false,
+            })?;
+            (
+                Some(LlmClient::from_config(&qc_runtime)),
+                qc_runtime.model.as_str(),
+                qc_runtime.temperature,
+                qc_runtime.max_tokens,
+                qc_runtime.retries,
+            )
+        } else {
+            (
+                None,
+                rt.model.as_str(),
+                rt.temperature,
+                rt.max_tokens,
+                rt.retries,
+            )
+        };
+        let effective_client = qc_client_storage.as_ref().unwrap_or(client);
+
         perform_quality_check(
             selected,
             frontmatter.quality_check.as_ref(),
-            client,
-            &rt.model,
-            rt.temperature,
-            rt.max_tokens,
-            rt.retries,
+            effective_client,
+            qc_model,
+            qc_temp,
+            qc_max_tokens,
+            qc_retries,
             Some(&logger),
         )?
     } else {
