@@ -6,15 +6,13 @@ use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::data::Row;
 use crate::llm::pricing;
-use crate::llm::retry::retry_with_backoff;
 
 use super::error::BatchError;
 use super::report::{RowOutcome, TokenStats};
 
 /// The progress bar for the currently running batch, used by the ctrlc handler
 /// to print the interrupt message without tearing the progress bar.
-static CURRENT_PB: LazyLock<Mutex<Option<ProgressBar>>> =
-    LazyLock::new(|| Mutex::new(None));
+static CURRENT_PB: LazyLock<Mutex<Option<ProgressBar>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Global interrupted flag shared across all run_batch calls. The ctrlc
 /// handler is installed once on first use; subsequent calls to run_batch
@@ -168,8 +166,8 @@ fn process_with_retry(
 
     for attempt in 0..=max_retries {
         if attempt > 0 {
-            let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1))
-                .min(Duration::from_secs(30));
+            let backoff =
+                Duration::from_millis(1000 * 2u64.pow(attempt - 1)).min(Duration::from_secs(30));
             let s = crate::style::style();
             pb.println(format!(
                 "  {} {}",
@@ -201,7 +199,10 @@ fn process_with_retry(
         super::report::ERROR_FIELD.to_string(),
         serde_json::Value::String(error.clone()),
     );
-    RowOutcome::Failure { row: failed_row, error }
+    RowOutcome::Failure {
+        row: failed_row,
+        error,
+    }
 }
 
 #[cfg(test)]
