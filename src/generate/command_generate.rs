@@ -55,29 +55,29 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     // 3. Build logger
     let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
 
-    // 4. Resolve LLM config
-    // dry_run: false here because generate always calls the LLM (dry-run only
-    // skips the Anki import step, not the generation). Passing dry_run: true
+    // 4. Resolve LLM config (skipped in --copy mode — no API key needed)
+    // dry_run: false because generate always calls the LLM when not in --copy
+    // mode (dry-run only skips the Anki import step). Passing dry_run: true
     // would replace the API key with "dry-run" and cause HTTP 400.
-    let runtime = build_runtime_config(RuntimeConfigArgs {
-        model: args.model.as_deref(),
-        batch_size: None,
-        max_tokens: args.max_tokens,
-        temperature: args.temperature,
-        retries: args.retries,
-        dry_run: false,
-    })?;
+    let runtime = if !args.copy {
+        Some(build_runtime_config(RuntimeConfigArgs {
+            model: args.model.as_deref(),
+            batch_size: None,
+            max_tokens: args.max_tokens,
+            temperature: args.temperature,
+            retries: args.retries,
+            dry_run: false,
+        })?)
+    } else {
+        None
+    };
 
     // 5. Generate cards
     let field_map_keys: Vec<String> = frontmatter.field_map.keys().cloned().collect();
     let mut generation_cost = 0.0;
     let candidates: Vec<CardCandidate>;
 
-    let client = if args.copy {
-        None
-    } else {
-        Some(LlmClient::from_config(&runtime))
-    };
+    let client = runtime.as_ref().map(LlmClient::from_config);
 
     if args.copy {
         // Manual copy-paste mode
@@ -134,9 +134,10 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     } else {
         let client = client.as_ref().unwrap();
 
+        let rt = runtime.as_ref().unwrap();
         let spinner = crate::spinner::llm_spinner(format!(
             "Generating {} card(s) for \"{}\" using {}...",
-            args.count, args.term, runtime.model
+            args.count, args.term, rt.model
         ));
 
         let result = generate_cards(
@@ -145,10 +146,10 @@ pub fn run(args: GenerateArgs) -> Result<()> {
             args.count,
             &field_map_keys,
             client,
-            &runtime.model,
-            runtime.temperature,
-            runtime.max_tokens,
-            runtime.retries,
+            &rt.model,
+            rt.temperature,
+            rt.max_tokens,
+            rt.retries,
             Some(&logger),
         )?;
         spinner.finish_and_clear();
@@ -244,15 +245,15 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     }
 
     // 7. Quality check
-    let quality_result = if let Some(ref client) = client {
+    let quality_result = if let (Some(client), Some(rt)) = (client.as_ref(), runtime.as_ref()) {
         perform_quality_check(
             selected,
             frontmatter.quality_check.as_ref(),
             client,
-            &runtime.model,
-            runtime.temperature,
-            runtime.max_tokens,
-            runtime.retries,
+            &rt.model,
+            rt.temperature,
+            rt.max_tokens,
+            rt.retries,
             Some(&logger),
         )?
     } else {
