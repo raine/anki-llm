@@ -62,7 +62,13 @@ fn format_card_for_display(card: &ValidatedCard, index: usize) -> String {
     for (name, value) in &card.anki_fields {
         let plain = strip_html_tags(value);
         let truncated = if plain.len() > 80 {
-            format!("{}...", &plain[..77])
+            let boundary = plain
+                .char_indices()
+                .map(|(i, _)| i)
+                .take_while(|&i| i <= 77)
+                .last()
+                .unwrap_or(0);
+            format!("{}...", &plain[..boundary])
         } else {
             plain
         };

@@ -1,8 +1,19 @@
 use std::path::Path;
 
 use indexmap::IndexMap;
+use serde_json::Value;
+
+use crate::data::csv_io::{parse_csv, serialize_csv};
+use crate::data::rows::Row;
 
 use super::cards::ValidatedCard;
+
+fn card_fields_to_row(fields: &IndexMap<String, String>) -> Row {
+    fields
+        .iter()
+        .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+        .collect()
+}
 
 /// Export cards to a file. Appends if the file already exists (with schema
 /// validation). Supports .yaml, .yml, and .csv extensions.
@@ -28,12 +39,20 @@ pub fn export_cards(cards: &[ValidatedCard], output_path: &Path) -> Result<(), a
         existing = match ext.as_str() {
             "yaml" | "yml" => serde_yaml::from_str(&content)?,
             "csv" => {
-                let mut reader = csv::Reader::from_reader(content.as_bytes());
-                let mut rows = Vec::new();
-                for result in reader.deserialize() {
-                    rows.push(result?);
-                }
-                rows
+                let rows = parse_csv(&content).map_err(|e| anyhow::anyhow!("{e}"))?;
+                rows.into_iter()
+                    .map(|row| {
+                        row.into_iter()
+                            .map(|(k, v)| {
+                                let s = match v {
+                                    Value::String(s) => s,
+                                    other => other.to_string(),
+                                };
+                                (k, s)
+                            })
+                            .collect()
+                    })
+                    .collect()
             }
             _ => anyhow::bail!("Unsupported format: .{ext}. Use .csv, .yaml, or .yml"),
         };
@@ -72,11 +91,8 @@ pub fn export_cards(cards: &[ValidatedCard], output_path: &Path) -> Result<(), a
     let content = match ext.as_str() {
         "yaml" | "yml" => serde_yaml::to_string(&combined)?,
         "csv" => {
-            let mut wtr = csv::Writer::from_writer(Vec::new());
-            for row in &combined {
-                wtr.serialize(row)?;
-            }
-            String::from_utf8(wtr.into_inner()?)?
+            let rows: Vec<Row> = combined.iter().map(card_fields_to_row).collect();
+            serialize_csv(&rows).map_err(|e| anyhow::anyhow!("{e}"))?
         }
         _ => anyhow::bail!("Unsupported format: .{ext}. Use .csv, .yaml, or .yml"),
     };
