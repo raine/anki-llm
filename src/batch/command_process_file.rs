@@ -9,6 +9,7 @@ use crate::cli::ProcessFileArgs;
 use crate::data::io::{load_existing_output, parse_data_file};
 use crate::data::rows::{Row, get_note_id, require_note_id};
 use crate::llm::client::LlmClient;
+use crate::llm::error::LlmError;
 use crate::llm::extract::extract_result_tag;
 use crate::llm::parse_json::{merge_fields_case_insensitive, try_parse_json_object};
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
@@ -28,6 +29,10 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         return Ok(());
     }
     eprintln!("Loaded {} rows from {}", rows.len(), args.input.display());
+
+    if args.batch_size == 0 {
+        bail!("--batch-size must be at least 1");
+    }
 
     // Validate all rows have IDs and check for duplicates
     let mut all_ids = Vec::with_capacity(rows.len());
@@ -73,14 +78,18 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     let existing = if args.force {
         indexmap::IndexMap::new()
     } else {
-        let existing = load_existing_output(&args.output);
+        let existing = load_existing_output(&args.output).with_context(|| {
+            format!("failed to read existing output: {}", args.output.display())
+        })?;
         if !existing.is_empty() {
             eprintln!("\nFound {} existing rows in output file", existing.len());
         }
         existing
     };
 
-    // Filter rows to process
+    // Filter rows to process: skip rows already completed successfully.
+    // In --field mode, also re-process rows that are missing the target field.
+    let target_field = args.field.as_deref();
     let rows_to_process: Vec<Row> = rows
         .into_iter()
         .filter(|row| {
@@ -88,7 +97,8 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
                 return true; // unreachable after validation above
             };
             match existing.get(&id) {
-                Some(existing_row) => existing_row.contains_key("_error"),
+                Some(existing_row) if existing_row.contains_key("_error") => true,
+                Some(existing_row) => target_field.is_some_and(|f| !existing_row.contains_key(f)),
                 None => true,
             }
         })
@@ -143,10 +153,13 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         // Fill template
         let prompt = fill_template(&template, row).map_err(|e| BatchError::Fatal(e.to_string()))?;
 
-        // Call LLM
+        // Call LLM — Api errors (4xx) are fatal, Http/Decode are retryable
         let result = client
             .chat_completion(&model, &prompt, temperature, max_tokens)
-            .map_err(|e| BatchError::Processing(e.to_string()))?;
+            .map_err(|e| match e {
+                LlmError::Api(_) => BatchError::Fatal(e.to_string()),
+                _ => BatchError::Processing(e.to_string()),
+            })?;
 
         let response_text = result.content;
         let usage = result.usage.map(|u| (u.prompt_tokens, u.completion_tokens));
@@ -167,7 +180,7 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
                 let preview = if processed_text.is_empty() {
                     "(empty response)".to_string()
                 } else {
-                    processed_text[..processed_text.len().min(200)].to_string()
+                    processed_text.chars().take(200).collect::<String>()
                 };
                 BatchError::Processing(format!("LLM response is not valid JSON: {preview}"))
             })?;

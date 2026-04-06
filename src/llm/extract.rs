@@ -9,7 +9,9 @@ static RESULT_TAG_RE: LazyLock<Regex> =
 /// If `require` is true and tags are not found, returns an error.
 /// If `require` is false and tags are not found, returns the original text.
 pub fn extract_result_tag(text: &str, require: bool) -> Result<String, String> {
-    if let Some(caps) = RESULT_TAG_RE.captures(text) {
+    // Use the last match — LLMs doing chain-of-thought may emit intermediate
+    // <result> tags before the final answer.
+    if let Some(caps) = RESULT_TAG_RE.captures_iter(text).last() {
         Ok(caps[1].trim().to_string())
     } else if require {
         Err("response missing required <result></result> tags".to_string())

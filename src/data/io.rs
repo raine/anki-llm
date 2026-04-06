@@ -1,4 +1,5 @@
 use std::fs;
+use std::io;
 use std::path::Path;
 
 use indexmap::IndexMap;
@@ -58,15 +59,17 @@ pub fn atomic_write_file(path: &Path, content: &str) -> Result<(), DataError> {
 }
 
 /// Load an existing output file as a map keyed by note ID.
-/// Returns an empty map if the file doesn't exist or can't be parsed.
-#[allow(dead_code)]
-pub fn load_existing_output(path: &Path) -> IndexMap<String, Row> {
+///
+/// Returns an empty map if the file does not exist. Returns an error for any
+/// other failure (permission denied, parse error, etc.) so the caller can bail
+/// rather than silently overwriting prior progress.
+pub fn load_existing_output(path: &Path) -> anyhow::Result<IndexMap<String, Row>> {
     let rows = match parse_data_file(path) {
         Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("failed to parse existing output file, starting fresh: {e}");
-            return IndexMap::new();
+        Err(DataError::Io(e)) if e.kind() == io::ErrorKind::NotFound => {
+            return Ok(IndexMap::new());
         }
+        Err(e) => return Err(anyhow::anyhow!(e)),
     };
 
     let mut map = IndexMap::new();
@@ -75,7 +78,7 @@ pub fn load_existing_output(path: &Path) -> IndexMap<String, Row> {
             map.insert(id, row);
         }
     }
-    map
+    Ok(map)
 }
 
 #[cfg(test)]
@@ -137,7 +140,7 @@ mod tests {
 
     #[test]
     fn load_existing_output_nonexistent() {
-        let map = load_existing_output(&PathBuf::from("/nonexistent/path/file.yaml"));
+        let map = load_existing_output(&PathBuf::from("/nonexistent/path/file.yaml")).unwrap();
         assert!(map.is_empty());
     }
 
@@ -147,9 +150,17 @@ mod tests {
         let path = dir.path().join("data.yaml");
         let content = "- noteId: 123\n  front: hello\n- noteId: 456\n  front: world\n";
         fs::write(&path, content).unwrap();
-        let map = load_existing_output(&path);
+        let map = load_existing_output(&path).unwrap();
         assert_eq!(map.len(), 2);
         assert!(map.contains_key("123"));
         assert!(map.contains_key("456"));
+    }
+
+    #[test]
+    fn load_existing_output_corrupt_file_errors() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("data.yaml");
+        fs::write(&path, "not: valid: yaml: [\n").unwrap();
+        assert!(load_existing_output(&path).is_err());
     }
 }

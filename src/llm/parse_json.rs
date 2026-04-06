@@ -19,11 +19,12 @@ pub fn try_parse_json_object(text: &str) -> Option<serde_json::Map<String, Value
         return Some(map);
     }
 
-    // Try extracting from fenced code block
-    if let Some(caps) = FENCED_JSON_RE.captures(text)
-        && let Some(map) = try_parse_object(caps[1].trim())
-    {
-        return Some(map);
+    // Try all fenced code blocks in order — some LLMs emit a non-JSON block
+    // (e.g. markdown explanation) before the JSON block.
+    for caps in FENCED_JSON_RE.captures_iter(text) {
+        if let Some(map) = try_parse_object(caps[1].trim()) {
+            return Some(map);
+        }
     }
 
     None
@@ -67,7 +68,15 @@ pub fn merge_fields_case_insensitive(
             let original_key = original_key.clone();
             target.insert(original_key, source_value.clone());
         } else {
-            // Add new field
+            // Add new field; register in key_map to catch ambiguous source keys
+            // (e.g. source has both "NewKey" and "newkey").
+            if key_map.contains_key(&lower) {
+                return Err(format!(
+                    "ambiguous keys in source: '{}' and '{}' match when lowercased",
+                    key_map[&lower], source_key
+                ));
+            }
+            key_map.insert(lower, source_key.clone());
             target.insert(source_key.clone(), source_value.clone());
         }
     }

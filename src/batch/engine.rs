@@ -28,8 +28,8 @@ pub type ProcessFn =
 
 /// Run batch processing over a set of rows with bounded concurrency and retries.
 ///
-/// Returns (completed outcomes, token stats, whether interrupted).
-/// Only rows that were actually started are included in outcomes.
+/// Returns (outcomes, token stats, interrupted). Outcomes are in completion
+/// order, not input order. When interrupted, only started rows are present.
 pub fn run_batch(
     rows: Vec<Row>,
     process: ProcessFn,
@@ -56,6 +56,7 @@ pub fn run_batch(
     // Install SIGINT handler
     let interrupted_clone = interrupted.clone();
     let _ = ctrlc::set_handler(move || {
+        eprintln!("\nInterrupting... waiting for active requests to finish.");
         interrupted_clone.store(true, Ordering::SeqCst);
     });
 

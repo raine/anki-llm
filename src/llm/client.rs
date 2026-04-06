@@ -105,7 +105,20 @@ impl LlmClient {
             .header("Authorization", &format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .send_json(&body)
-            .map_err(|e| LlmError::Http(e.to_string()))?;
+            .map_err(|e| match e {
+                // 429 and 5xx are transient; other 4xx are permanent (bad key,
+                // invalid model, malformed request) and should not be retried.
+                ureq::Error::StatusCode(429) => {
+                    LlmError::Http("HTTP 429: rate limited".to_string())
+                }
+                ureq::Error::StatusCode(code) if code >= 500 => {
+                    LlmError::Http(format!("HTTP {code}: server error"))
+                }
+                ureq::Error::StatusCode(code) => {
+                    LlmError::Api(format!("HTTP {code}: non-retryable error"))
+                }
+                other => LlmError::Http(other.to_string()),
+            })?;
 
         let resp: ChatResponse = response
             .body_mut()

@@ -34,15 +34,9 @@ impl FileWriter {
         existing: IndexMap<String, Row>,
         flush_threshold: usize,
     ) -> Self {
-        // Seed with existing rows (from previous resume)
-        let mut all_rows = IndexMap::new();
-        for (id, row) in existing {
-            all_rows.insert(id, row);
-        }
-
         Self {
             output_path,
-            all_rows: Mutex::new(all_rows),
+            all_rows: Mutex::new(existing),
             ordered_ids,
             pending: Mutex::new(0),
             flush_threshold,
@@ -85,17 +79,18 @@ impl FileWriter {
     /// Write all rows to disk in original input order. Called at end of
     /// processing and periodically during processing.
     pub fn flush(&self) -> anyhow::Result<()> {
-        let all = self.all_rows.lock().unwrap();
-        if all.is_empty() {
-            return Ok(());
-        }
-
-        // Emit rows in original input order, skipping IDs not yet processed
-        let rows: Vec<Row> = self
-            .ordered_ids
-            .iter()
-            .filter_map(|id| all.get(id).cloned())
-            .collect();
+        // Snapshot rows under the lock, then release before doing I/O so
+        // worker threads are not blocked during serialization and disk writes.
+        let rows: Vec<Row> = {
+            let all = self.all_rows.lock().unwrap();
+            if all.is_empty() {
+                return Ok(());
+            }
+            self.ordered_ids
+                .iter()
+                .filter_map(|id| all.get(id).cloned())
+                .collect()
+        };
 
         if rows.is_empty() {
             return Ok(());
