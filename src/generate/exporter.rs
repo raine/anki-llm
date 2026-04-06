@@ -17,7 +17,11 @@ fn card_fields_to_row(fields: &IndexMap<String, String>) -> Row {
 
 /// Export cards to a file. Appends if the file already exists (with schema
 /// validation). Supports .yaml, .yml, and .csv extensions.
-pub fn export_cards(cards: &[ValidatedCard], output_path: &Path) -> Result<(), anyhow::Error> {
+pub fn export_cards(
+    cards: &[ValidatedCard],
+    output_path: &Path,
+    on_log: &dyn Fn(&str),
+) -> Result<(), anyhow::Error> {
     let ext = output_path
         .extension()
         .and_then(|e| e.to_str())
@@ -72,18 +76,18 @@ pub fn export_cards(cards: &[ValidatedCard], output_path: &Path) -> Result<(), a
             }
         }
 
-        eprintln!(
-            "\nAppending {} card(s) to existing {} ({} existing)...",
+        on_log(&format!(
+            "Appending {} card(s) to existing {} ({} existing)...",
             cards.len(),
             output_path.display(),
             existing.len()
-        );
+        ));
     } else {
-        eprintln!(
-            "\nExporting {} card(s) to {}...",
+        on_log(&format!(
+            "Exporting {} card(s) to {}...",
             cards.len(),
             output_path.display()
-        );
+        ));
     }
 
     let is_appending = !existing.is_empty();
@@ -100,20 +104,19 @@ pub fn export_cards(cards: &[ValidatedCard], output_path: &Path) -> Result<(), a
 
     std::fs::write(output_path, content)?;
 
-    eprintln!(
-        "\nSuccessfully {} {}",
+    on_log(&format!(
+        "Successfully {} {}",
         if is_appending {
             "appended to"
         } else {
             "exported cards to"
         },
         output_path.display()
-    );
-    eprintln!("\nTo import into Anki, run:");
-    eprintln!(
-        "  anki-llm import \"{}\" --deck \"Your Deck Name\"",
+    ));
+    on_log(&format!(
+        "To import into Anki, run: anki-llm import \"{}\" --deck \"Your Deck Name\"",
         output_path.display()
-    );
+    ));
 
     Ok(())
 }

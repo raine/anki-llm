@@ -8,4 +8,5 @@ pub mod processor;
 pub mod quality;
 pub mod sanitize;
 pub mod selector;
+pub mod tui;
 pub mod validate;

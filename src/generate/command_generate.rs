@@ -1,3 +1,5 @@
+use std::sync::mpsc;
+
 use anyhow::Result;
 
 use crate::anki::client::AnkiClient;
@@ -14,18 +16,445 @@ use super::cards::{ValidatedCard, validate_cards};
 use super::exporter::export_cards;
 use super::manual::get_llm_response_manually;
 use super::processor::{CardCandidate, generate_cards};
-use super::quality::perform_quality_check;
+use super::quality::run_quality_checks;
 use super::sanitize::sanitize_fields;
-use super::selector::{display_cards, select_cards};
+use super::selector::{display_cards, select_cards_legacy};
+use super::tui::{BackendEvent, PipelineStep, StepStatus, WorkerResponse};
 use super::validate::validate_anki_assets;
 
+/// Entry point: dispatch to TUI or legacy mode.
 pub fn run(args: GenerateArgs) -> Result<()> {
+    use std::io::IsTerminal;
+
+    if args.copy || !std::io::stdout().is_terminal() {
+        run_legacy(args)
+    } else {
+        super::tui::run_tui(args)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TUI worker — runs in a background thread
+// ---------------------------------------------------------------------------
+
+/// Pipeline logic for TUI mode.
+pub fn run_pipeline(
+    args: GenerateArgs,
+    tx: mpsc::Sender<BackendEvent>,
+    rx: mpsc::Receiver<WorkerResponse>,
+) -> Result<()> {
+    macro_rules! log {
+        ($($arg:tt)*) => {
+            tx.send(BackendEvent::Log(format!($($arg)*))).ok();
+        };
+    }
+
+    macro_rules! step_start {
+        ($step:expr, $detail:expr) => {
+            tx.send(BackendEvent::StepUpdate {
+                step: $step,
+                status: StepStatus::Running($detail),
+            })
+            .ok();
+        };
+    }
+
+    macro_rules! step_done {
+        ($step:expr, $detail:expr) => {
+            tx.send(BackendEvent::StepUpdate {
+                step: $step,
+                status: StepStatus::Done($detail),
+            })
+            .ok();
+        };
+    }
+
+    macro_rules! step_skip {
+        ($step:expr) => {
+            tx.send(BackendEvent::StepUpdate {
+                step: $step,
+                status: StepStatus::Skipped,
+            })
+            .ok();
+        };
+    }
+
+    macro_rules! bail_err {
+        ($($arg:tt)*) => {{
+            let msg = format!($($arg)*);
+            tx.send(BackendEvent::Error(msg.clone())).ok();
+            return Err(anyhow::anyhow!("{}", msg));
+        }};
+    }
+
+    let tx_log = tx.clone();
+    let on_log: &(dyn Fn(&str) + Send + Sync) = &move |msg: &str| {
+        tx_log.send(BackendEvent::Log(msg.to_string())).ok();
+    };
+
+    // 1. Load and parse prompt file
+    step_start!(PipelineStep::LoadPrompt, None);
+    let content = std::fs::read_to_string(&args.prompt).map_err(|e| {
+        tx.send(BackendEvent::Error(format!("{e}"))).ok();
+        e
+    })?;
+    let parsed = parse_prompt_file(&content).map_err(|e| {
+        tx.send(BackendEvent::Error(format!("{e}"))).ok();
+        e
+    })?;
+    let frontmatter = parsed.frontmatter;
+
+    if !parsed.body.contains("{term}") {
+        bail_err!("Prompt is missing required placeholder: {{term}}");
+    }
+    if !parsed.body.contains("{count}") {
+        bail_err!("Prompt is missing required placeholder: {{count}}");
+    }
+
+    step_done!(
+        PipelineStep::LoadPrompt,
+        Some(format!("deck: {}", frontmatter.deck))
+    );
+    log!("Loaded prompt for deck: {}", frontmatter.deck);
+    log!("Note type: {}", frontmatter.note_type);
+
+    // 2. Validate Anki assets
+    step_start!(PipelineStep::ValidateAnki, None);
+    let anki = AnkiClient::new();
+    let validation = validate_anki_assets(&anki, &frontmatter).map_err(|e| {
+        tx.send(BackendEvent::Error(format!("{e}"))).ok();
+        e
+    })?;
+    step_done!(
+        PipelineStep::ValidateAnki,
+        Some(validation.note_type_fields.join(", "))
+    );
+    log!(
+        "Note type fields: {}",
+        validation.note_type_fields.join(", ")
+    );
+
+    // 3. Build runtime config and LLM client
+    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose).map_err(|e| {
+        tx.send(BackendEvent::Error(format!("{e}"))).ok();
+        e
+    })?;
+    let runtime = build_runtime_config(RuntimeConfigArgs {
+        model: args.model.as_deref(),
+        batch_size: None,
+        max_tokens: args.max_tokens,
+        temperature: args.temperature,
+        retries: args.retries,
+        dry_run: false,
+    })
+    .map_err(|e| {
+        tx.send(BackendEvent::Error(format!("{e}"))).ok();
+        e
+    })?;
+
+    let field_map_keys: Vec<String> = frontmatter.field_map.keys().cloned().collect();
+    let mut generation_cost = 0.0;
+
+    // 4. Generate cards
+    step_start!(
+        PipelineStep::Generate,
+        Some(format!("{} card(s) using {}", args.count, runtime.model))
+    );
+    log!(
+        "Generating {} card(s) for \"{}\" using {}...",
+        args.count,
+        args.term,
+        runtime.model
+    );
+
+    let client = LlmClient::from_config(&runtime);
+    let gen_result = generate_cards(
+        &args.term,
+        &parsed.body,
+        args.count,
+        &field_map_keys,
+        &client,
+        &runtime.model,
+        runtime.temperature,
+        runtime.max_tokens,
+        runtime.retries,
+        Some(&logger),
+        on_log,
+    )
+    .map_err(|e| {
+        tx.send(BackendEvent::Error(format!("{e}"))).ok();
+        e
+    })?;
+
+    if let Some(ref cost) = gen_result.cost {
+        generation_cost = cost.total_cost;
+        tx.send(BackendEvent::CostUpdate {
+            input_tokens: cost.input_tokens,
+            output_tokens: cost.output_tokens,
+            cost: cost.total_cost,
+        })
+        .ok();
+        log!(
+            "Tokens: {} in / {} out | Cost: {}",
+            cost.input_tokens,
+            cost.output_tokens,
+            pricing::format_cost(cost.total_cost)
+        );
+    }
+
+    let candidates = gen_result.cards;
+
+    if candidates.is_empty() {
+        bail_err!("No cards were generated");
+    }
+
+    step_done!(
+        PipelineStep::Generate,
+        Some(format!("{} card(s)", candidates.len()))
+    );
+    log!("Generated {} card(s)", candidates.len());
+    if candidates.len() != args.count as usize {
+        log!(
+            "Warning: requested {} cards, received {}",
+            args.count,
+            candidates.len()
+        );
+    }
+
+    // 5. Sanitize and validate
+    step_start!(PipelineStep::Validate, None);
+    log!("Checking for duplicates...");
+
+    let sanitized_pairs: Vec<_> = candidates
+        .into_iter()
+        .map(|c| {
+            let s = sanitize_fields(&c.fields);
+            (c, s)
+        })
+        .collect();
+
+    let first_field_name = &validation.note_type_fields[0];
+    let validated = validate_cards(sanitized_pairs, &frontmatter, first_field_name, &anki)
+        .map_err(|e| {
+            tx.send(BackendEvent::Error(format!("{e}"))).ok();
+            e
+        })?;
+
+    let dup_count = validated.iter().filter(|c| c.is_duplicate).count();
+    step_done!(
+        PipelineStep::Validate,
+        if dup_count > 0 {
+            Some(format!("{dup_count} duplicate(s)"))
+        } else {
+            Some("no duplicates".to_string())
+        }
+    );
+    if dup_count > 0 {
+        log!("Found {dup_count} duplicate(s) (already in Anki)");
+    }
+
+    // 6. Select cards (or dry-run display)
+    if args.dry_run {
+        step_skip!(PipelineStep::Select);
+        step_skip!(PipelineStep::QualityCheck);
+        step_skip!(PipelineStep::Finish);
+        for (i, card) in validated.iter().enumerate() {
+            let dup = if card.is_duplicate {
+                " (Duplicate)"
+            } else {
+                ""
+            };
+            log!("Card {}{dup}", i + 1);
+            for (name, value) in &card.raw_anki_fields {
+                log!("  {name}: {value}");
+            }
+        }
+        tx.send(BackendEvent::Done(
+            "Dry run complete. No cards were imported.".to_string(),
+        ))
+        .ok();
+        return Ok(());
+    }
+
+    if validated.is_empty() {
+        tx.send(BackendEvent::Done("No cards to select from.".to_string()))
+            .ok();
+        return Ok(());
+    }
+
+    step_start!(PipelineStep::Select, None);
+    // Clone so we can use validated after the TUI shows the cards
+    tx.send(BackendEvent::RequestSelection(validated.clone()))
+        .ok();
+
+    let selected_indices = match rx.recv() {
+        Ok(WorkerResponse::Selection(indices)) => indices,
+        Ok(WorkerResponse::Quit) | Err(_) => return Ok(()),
+        Ok(WorkerResponse::Review(_)) => bail_err!("Unexpected review response during selection"),
+    };
+
+    if selected_indices.is_empty() {
+        tx.send(BackendEvent::Done("No cards selected.".to_string()))
+            .ok();
+        return Ok(());
+    }
+
+    let mut selected: Vec<ValidatedCard> = selected_indices
+        .iter()
+        .filter_map(|&i| validated.get(i).cloned())
+        .collect();
+
+    step_done!(
+        PipelineStep::Select,
+        Some(format!("{} card(s) selected", selected.len()))
+    );
+
+    // Filter out duplicates
+    let dup_selected = selected.iter().filter(|c| c.is_duplicate).count();
+    if dup_selected > 0 {
+        log!("Skipping {dup_selected} duplicate(s) — already exist in Anki.");
+        selected.retain(|c| !c.is_duplicate);
+    }
+
+    if selected.is_empty() {
+        tx.send(BackendEvent::Done(
+            "No non-duplicate cards selected.".to_string(),
+        ))
+        .ok();
+        return Ok(());
+    }
+
+    // 7. Quality check
+    step_start!(PipelineStep::QualityCheck, None);
+    let qc_result = run_quality_checks(
+        selected,
+        frontmatter.quality_check.as_ref(),
+        &client,
+        &runtime.model,
+        runtime.temperature,
+        runtime.max_tokens,
+        runtime.retries,
+        Some(&logger),
+        on_log,
+    )
+    .map_err(|e| {
+        tx.send(BackendEvent::Error(format!("{e}"))).ok();
+        e
+    })?;
+
+    if qc_result.cost > 0.0 {
+        tx.send(BackendEvent::CostUpdate {
+            input_tokens: 0,
+            output_tokens: 0,
+            cost: qc_result.cost,
+        })
+        .ok();
+    }
+
+    // If there are flagged cards, ask the TUI to review them
+    let mut final_cards = qc_result.passed;
+
+    if !qc_result.flagged.is_empty() {
+        let flagged_count = qc_result.flagged.len();
+        log!("{flagged_count} card(s) flagged by quality check. Please review.");
+
+        let flagged_clone = qc_result.flagged.clone();
+        tx.send(BackendEvent::RequestReview(flagged_clone)).ok();
+
+        let decisions = match rx.recv() {
+            Ok(WorkerResponse::Review(d)) => d,
+            Ok(WorkerResponse::Quit) | Err(_) => return Ok(()),
+            Ok(WorkerResponse::Selection(_)) => {
+                bail_err!("Unexpected selection response during review")
+            }
+        };
+
+        for (flagged, keep) in qc_result.flagged.into_iter().zip(decisions.iter()) {
+            if *keep {
+                final_cards.push(flagged.card);
+            }
+        }
+    }
+
+    if final_cards.is_empty() {
+        tx.send(BackendEvent::Done(
+            "No cards remaining after quality check.".to_string(),
+        ))
+        .ok();
+        return Ok(());
+    }
+
+    let total_cost = generation_cost + qc_result.cost;
+    if total_cost > 0.0 {
+        log!("Total cost: {}", pricing::format_cost(total_cost));
+    }
+
+    step_done!(PipelineStep::QualityCheck, Some("done".to_string()));
+
+    // 8. Export or import
+    step_start!(PipelineStep::Finish, None);
+
+    if let Some(ref output_path) = args.output {
+        export_cards(&final_cards, output_path, on_log).map_err(|e| {
+            tx.send(BackendEvent::Error(format!("{e}"))).ok();
+            e
+        })?;
+        step_done!(
+            PipelineStep::Finish,
+            Some(format!("exported to {}", output_path.display()))
+        );
+        tx.send(BackendEvent::Done(format!(
+            "Exported {} card(s) to {}",
+            final_cards.len(),
+            output_path.display()
+        )))
+        .ok();
+    } else {
+        let result =
+            import_cards_to_anki(&final_cards, &frontmatter, &anki, on_log).map_err(|e| {
+                tx.send(BackendEvent::Error(format!("{e}"))).ok();
+                e
+            })?;
+
+        if result.failures > 0 {
+            step_done!(
+                PipelineStep::Finish,
+                Some(format!(
+                    "{} added, {} failed",
+                    result.successes, result.failures
+                ))
+            );
+            let msg = format!(
+                "Import completed with errors: {} added, {} failed.",
+                result.successes, result.failures
+            );
+            tx.send(BackendEvent::Done(msg)).ok();
+        } else {
+            step_done!(
+                PipelineStep::Finish,
+                Some(format!("{} card(s) added", result.successes))
+            );
+            tx.send(BackendEvent::Done(format!(
+                "Successfully added {} new note(s) to \"{}\"",
+                result.successes, frontmatter.deck
+            )))
+            .ok();
+        }
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Legacy mode (--copy or non-TTY)
+// ---------------------------------------------------------------------------
+
+pub fn run_legacy(args: GenerateArgs) -> Result<()> {
     // 1. Load and parse prompt file
     let content = std::fs::read_to_string(&args.prompt)?;
     let parsed = parse_prompt_file(&content)?;
     let frontmatter = parsed.frontmatter;
 
-    // Validate required placeholders in prompt body
     if !parsed.body.contains("{term}") {
         anyhow::bail!("Prompt is missing required placeholder: {{term}}");
     }
@@ -49,9 +478,6 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
 
     // 4. Resolve LLM config
-    // dry_run: false here because generate always calls the LLM (dry-run only
-    // skips the Anki import step, not the generation). Passing dry_run: true
-    // would replace the API key with "dry-run" and cause HTTP 400.
     let runtime = build_runtime_config(RuntimeConfigArgs {
         model: args.model.as_deref(),
         batch_size: None,
@@ -71,6 +497,8 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     } else {
         Some(LlmClient::from_config(&runtime))
     };
+
+    let on_log: &(dyn Fn(&str) + Send + Sync) = &|msg| eprintln!("{msg}");
 
     if args.copy {
         // Manual copy-paste mode
@@ -137,6 +565,7 @@ pub fn run(args: GenerateArgs) -> Result<()> {
             runtime.max_tokens,
             runtime.retries,
             Some(&logger),
+            on_log,
         )?;
         spinner.finish_and_clear();
 
@@ -197,7 +626,7 @@ pub fn run(args: GenerateArgs) -> Result<()> {
         return Ok(());
     }
 
-    let selected_indices = select_cards(&validated)?;
+    let selected_indices = select_cards_legacy(&validated)?;
     let mut selected: Vec<ValidatedCard> = selected_indices
         .iter()
         .filter_map(|&i| validated.get(i).cloned())
@@ -208,8 +637,6 @@ pub fn run(args: GenerateArgs) -> Result<()> {
         return Ok(());
     }
 
-    // Filter out duplicates — they are shown in the selector as a heads-up,
-    // but adding them to Anki would create duplicate notes.
     let dup_selected = selected.iter().filter(|c| c.is_duplicate).count();
     if dup_selected > 0 {
         eprintln!("\nSkipping {dup_selected} duplicate(s) — already exist in Anki.");
@@ -222,8 +649,11 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     }
 
     // 7. Quality check
-    let quality_result = if let Some(ref client) = client {
-        perform_quality_check(
+    let qc_result = if let Some(ref client) = client {
+        let spinner =
+            crate::spinner::llm_spinner(format!("Quality check using {}...", runtime.model));
+
+        let result = run_quality_checks(
             selected,
             frontmatter.quality_check.as_ref(),
             client,
@@ -232,21 +662,50 @@ pub fn run(args: GenerateArgs) -> Result<()> {
             runtime.max_tokens,
             runtime.retries,
             Some(&logger),
-        )?
+            on_log,
+        )?;
+
+        spinner.finish_and_clear();
+        result
     } else {
-        super::quality::QualityCheckResult {
-            final_cards: selected,
+        super::quality::QualityRunResult {
+            passed: selected,
+            flagged: vec![],
             cost: 0.0,
         }
     };
 
-    if quality_result.final_cards.is_empty() {
+    // Interactive review of flagged cards (legacy mode)
+    let mut final_cards = qc_result.passed;
+
+    if !qc_result.flagged.is_empty() {
+        let flagged_count = qc_result.flagged.len();
+        eprintln!("\n{flagged_count} card(s) were flagged. Please review:");
+
+        for (i, flagged) in qc_result.flagged.into_iter().enumerate() {
+            eprintln!("\n--- Flagged Card {}/{} ---", i + 1, flagged_count);
+            for (key, value) in &flagged.card.fields {
+                eprintln!("{key}: {value}");
+            }
+            eprintln!("\nReason: {}", flagged.reason);
+
+            let keep = inquire::Confirm::new("Keep this card anyway?")
+                .with_default(false)
+                .prompt()
+                .unwrap_or(false);
+
+            if keep {
+                final_cards.push(flagged.card);
+            }
+        }
+    }
+
+    if final_cards.is_empty() {
         eprintln!("\nNo cards remaining after quality check. Exiting.");
         return Ok(());
     }
 
-    // Report total cost
-    let total_cost = generation_cost + quality_result.cost;
+    let total_cost = generation_cost + qc_result.cost;
     if total_cost > 0.0 {
         eprintln!(
             "\nTotal estimated cost: {}",
@@ -256,10 +715,10 @@ pub fn run(args: GenerateArgs) -> Result<()> {
 
     // 8. Export or import
     if let Some(ref output_path) = args.output {
-        export_cards(&quality_result.final_cards, output_path)?;
+        export_cards(&final_cards, output_path, on_log)?;
     } else {
-        let result = import_cards_to_anki(&quality_result.final_cards, &frontmatter, &anki)?;
-        report_import_result(&result, &frontmatter.deck);
+        let result = import_cards_to_anki(&final_cards, &frontmatter, &anki, on_log)?;
+        report_import_result(&result, &frontmatter.deck, on_log);
 
         if result.failures > 0 {
             anyhow::bail!(

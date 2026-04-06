@@ -18,15 +18,23 @@ use super::cards::ValidatedCard;
 /// How many QC LLM calls to run in parallel.
 const DEFAULT_CONCURRENCY: usize = 10;
 
-pub struct QualityCheckResult {
-    pub final_cards: Vec<ValidatedCard>,
+#[derive(Clone)]
+pub struct FlaggedCard {
+    pub card: ValidatedCard,
+    pub reason: String,
+}
+
+pub struct QualityRunResult {
+    pub passed: Vec<ValidatedCard>,
+    pub flagged: Vec<FlaggedCard>,
     pub cost: f64,
 }
 
-/// Perform quality check on selected cards. Returns filtered cards and cost.
-/// If check_config is None, returns all cards unchanged with zero cost.
+/// Run quality checks on cards. Returns passed cards, flagged cards (for review),
+/// failed count, and cost. Does NOT do interactive review.
+/// If check_config is None, all cards are passed through unchanged.
 #[allow(clippy::too_many_arguments)]
-pub fn perform_quality_check(
+pub fn run_quality_checks(
     cards: Vec<ValidatedCard>,
     check_config: Option<&QualityCheckConfig>,
     client: &LlmClient,
@@ -35,12 +43,14 @@ pub fn perform_quality_check(
     max_tokens: Option<u64>,
     retries: u32,
     logger: Option<&LlmLogger>,
-) -> Result<QualityCheckResult, anyhow::Error> {
+    on_progress: &(dyn Fn(&str) + Send + Sync),
+) -> Result<QualityRunResult, anyhow::Error> {
     let config = match check_config {
         Some(c) => c,
         None => {
-            return Ok(QualityCheckResult {
-                final_cards: cards,
+            return Ok(QualityRunResult {
+                passed: cards,
+                flagged: vec![],
                 cost: 0.0,
             });
         }
@@ -68,8 +78,9 @@ pub fn perform_quality_check(
         prompts.push(filled_prompt);
     }
 
-    let spinner =
-        crate::spinner::llm_spinner(format!("Quality check 0/{total_cards} using {qc_model}..."));
+    on_progress(&format!(
+        "Quality check 0/{total_cards} using {qc_model}..."
+    ));
 
     // Each entry: (original_index, Ok((is_valid, reason, cost)) | Err(message))
     type CardResult = Result<(bool, String, f64), String>;
@@ -86,7 +97,6 @@ pub fn perform_quality_check(
             let next_index = Arc::clone(&next_index);
             let done_count = Arc::clone(&done_count);
             let results = Arc::clone(&results);
-            let spinner = &spinner;
             let prompts = &prompts;
 
             s.spawn(move || {
@@ -107,10 +117,7 @@ pub fn perform_quality_check(
                     )
                     .map_err(|e| e.to_string());
 
-                    let done = done_count.fetch_add(1, Ordering::SeqCst) + 1;
-                    spinner.set_message(format!(
-                        "Quality check {done}/{total_cards} using {qc_model}..."
-                    ));
+                    done_count.fetch_add(1, Ordering::SeqCst);
 
                     results.lock().unwrap().push((idx, outcome));
                 }
@@ -118,67 +125,41 @@ pub fn perform_quality_check(
         }
     });
 
-    spinner.finish_and_clear();
-
     // Sort by original card index so flagged review is in input order.
     let mut results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
     results.sort_by_key(|(idx, _)| *idx);
 
     let mut total_cost = 0.0;
-    let mut valid_cards: Vec<ValidatedCard> = Vec::new();
-    let mut flagged: Vec<(ValidatedCard, String)> = Vec::new();
+    let mut passed: Vec<ValidatedCard> = Vec::new();
+    let mut flagged: Vec<FlaggedCard> = Vec::new();
 
     for (idx, result) in results {
         let card = cards_opt[idx].take().unwrap();
         match result {
             Ok((true, _, cost)) => {
                 total_cost += cost;
-                valid_cards.push(card);
+                passed.push(card);
             }
             Ok((false, reason, cost)) => {
                 total_cost += cost;
-                flagged.push((card, reason));
+                flagged.push(FlaggedCard { card, reason });
             }
             Err(e) => {
-                eprintln!("  Quality check failed: {e}. Discarding card.");
+                on_progress(&format!("  Quality check failed: {e}. Discarding card."));
             }
         }
     }
 
     if total_cost > 0.0 {
-        eprintln!("  Quality check cost: {}", pricing::format_cost(total_cost));
+        on_progress(&format!(
+            "  Quality check cost: {}",
+            pricing::format_cost(total_cost)
+        ));
     }
 
-    if flagged.is_empty() {
-        eprintln!("\nAll cards passed the quality check.");
-        return Ok(QualityCheckResult {
-            final_cards: valid_cards,
-            cost: total_cost,
-        });
-    }
-
-    let flagged_count = flagged.len();
-    eprintln!("\n{flagged_count} card(s) were flagged. Please review:");
-
-    for (i, (card, reason)) in flagged.into_iter().enumerate() {
-        eprintln!("\n--- Flagged Card {}/{} ---", i + 1, flagged_count);
-        for (key, value) in &card.fields {
-            eprintln!("{key}: {value}");
-        }
-        eprintln!("\nReason: {reason}");
-
-        let keep = inquire::Confirm::new("Keep this card anyway?")
-            .with_default(false)
-            .prompt()
-            .unwrap_or(false);
-
-        if keep {
-            valid_cards.push(card);
-        }
-    }
-
-    Ok(QualityCheckResult {
-        final_cards: valid_cards,
+    Ok(QualityRunResult {
+        passed,
+        flagged,
         cost: total_cost,
     })
 }

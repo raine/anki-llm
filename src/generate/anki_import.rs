@@ -14,6 +14,7 @@ pub fn import_cards_to_anki(
     cards: &[ValidatedCard],
     frontmatter: &Frontmatter,
     anki: &AnkiClient,
+    on_log: &dyn Fn(&str),
 ) -> Result<ImportResult, anyhow::Error> {
     if cards.is_empty() {
         return Ok(ImportResult {
@@ -22,7 +23,7 @@ pub fn import_cards_to_anki(
         });
     }
 
-    eprintln!("\nAdding {} card(s) to Anki...", cards.len());
+    on_log(&format!("Adding {} card(s) to Anki...", cards.len()));
 
     let notes: Vec<AddNoteParams> = cards
         .iter()
@@ -44,20 +45,20 @@ pub fn import_cards_to_anki(
     })
 }
 
-/// Print import results to stderr.
-pub fn report_import_result(result: &ImportResult, deck_name: &str) {
+/// Report import results via a log callback.
+pub fn report_import_result(result: &ImportResult, deck_name: &str, on_log: &dyn Fn(&str)) {
     if result.failures > 0 {
-        eprintln!(
-            "\nAdded {} card(s), {} failed.",
+        on_log(&format!(
+            "Added {} card(s), {} failed.",
             result.successes, result.failures
-        );
-        eprintln!("Some cards may have been duplicates or had invalid field values.");
+        ));
+        on_log("Some cards may have been duplicates or had invalid field values.");
     } else if result.successes > 0 {
-        eprintln!(
-            "\nSuccessfully added {} new note(s) to \"{}\"",
+        on_log(&format!(
+            "Successfully added {} new note(s) to \"{}\"",
             result.successes, deck_name
-        );
+        ));
     } else {
-        eprintln!("\nNo cards were added to Anki.");
+        on_log("No cards were added to Anki.");
     }
 }

@@ -46,6 +46,7 @@ pub fn generate_cards(
     max_tokens: Option<u64>,
     retries: u32,
     logger: Option<&LlmLogger>,
+    on_log: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<GenerationResult, anyhow::Error> {
     // Build row for template filling
     let mut row = Row::new();
@@ -60,7 +61,7 @@ pub fn generate_cards(
         if attempt > 0 {
             let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1));
             let backoff = backoff.min(Duration::from_secs(30));
-            eprintln!("  Retry {attempt}/{retries}: {last_error}");
+            on_log(&format!("  Retry {attempt}/{retries}: {last_error}"));
             std::thread::sleep(backoff);
         }
 
@@ -113,15 +114,12 @@ fn try_generate(
 
     // Validate and convert each card, skipping malformed ones
     let mut cards = Vec::new();
-    for (i, obj) in parsed.into_iter().enumerate() {
+    for obj in parsed {
         let mut fields = HashMap::new();
         let mut malformed = false;
         for key in field_map_keys {
             let Some(value) = obj.get(key) else {
-                eprintln!(
-                    "  Warning: Card {} is missing field \"{key}\". Skipping.",
-                    i + 1
-                );
+                // Warning logged at caller level
                 malformed = true;
                 break;
             };
@@ -139,10 +137,6 @@ fn try_generate(
                 Value::Bool(b) => Value::String(b.to_string()),
                 Value::Null => Value::String(String::new()),
                 _ => {
-                    eprintln!(
-                        "  Warning: Card {} has unsupported field type for \"{key}\". Skipping.",
-                        i + 1
-                    );
                     malformed = true;
                     break;
                 }

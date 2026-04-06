@@ -57,6 +57,10 @@ ammonia = "4"
 # JSON repair
 jsonrepair = "0.1"
 
+# Terminal UI
+ratatui = "0.30"
+crossterm = "0.29"
+
 [features]
 integration = []
 

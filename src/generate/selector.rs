@@ -2,7 +2,7 @@ use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 use super::cards::ValidatedCard;
 
-fn strip_html_tags(html: &str) -> String {
+pub fn strip_html_tags(html: &str) -> String {
     // Simple regex-free HTML stripping
     let mut result = String::new();
     let mut in_tag = false;
@@ -19,7 +19,7 @@ fn strip_html_tags(html: &str) -> String {
 }
 
 /// Render markdown to a string with ANSI escape codes for terminal display.
-fn markdown_to_ansi(md: &str) -> String {
+pub fn markdown_to_ansi(md: &str) -> String {
     const BOLD: &str = "\x1b[1m";
     const ITALIC: &str = "\x1b[3m";
     const CODE: &str = "\x1b[7m"; // reverse video for inline code
@@ -50,32 +50,33 @@ fn markdown_to_ansi(md: &str) -> String {
     out.trim_end_matches('\n').to_string()
 }
 
-fn format_card_for_display(card: &ValidatedCard, index: usize) -> String {
-    let mut lines = Vec::new();
+/// One-line summary of a card for list display.
+pub fn format_card_summary(card: &ValidatedCard, index: usize) -> String {
     let header = if card.is_duplicate {
         format!("Card {} (Duplicate)", index + 1)
     } else {
         format!("Card {}", index + 1)
     };
-    lines.push(header);
 
-    for (name, value) in &card.anki_fields {
-        let plain = strip_html_tags(value);
-        let truncated = if plain.len() > 80 {
+    let first_field = card.anki_fields.values().next().map(|v| {
+        let plain = strip_html_tags(v);
+        if plain.len() > 50 {
             let boundary = plain
                 .char_indices()
                 .map(|(i, _)| i)
-                .take_while(|&i| i <= 77)
+                .take_while(|&i| i <= 47)
                 .last()
                 .unwrap_or(0);
             format!("{}...", &plain[..boundary])
         } else {
             plain
-        };
-        lines.push(format!("  {name}: {truncated}"));
-    }
+        }
+    });
 
-    lines.join("\n")
+    match first_field {
+        Some(f) if !f.is_empty() => format!("{header}: {f}"),
+        _ => header,
+    }
 }
 
 /// Display cards for dry-run mode (no interaction).
@@ -113,8 +114,8 @@ pub fn display_cards(cards: &[ValidatedCard]) {
     eprintln!("Run without --dry-run to add cards interactively.");
 }
 
-/// Interactive card selection. Returns indices of selected cards.
-pub fn select_cards(cards: &[ValidatedCard]) -> Result<Vec<usize>, anyhow::Error> {
+/// Interactive card selection using inquire (legacy/non-TTY path).
+pub fn select_cards_legacy(cards: &[ValidatedCard]) -> Result<Vec<usize>, anyhow::Error> {
     if cards.is_empty() {
         anyhow::bail!("No cards to select from");
     }
@@ -122,12 +123,12 @@ pub fn select_cards(cards: &[ValidatedCard]) -> Result<Vec<usize>, anyhow::Error
     let options: Vec<String> = cards
         .iter()
         .enumerate()
-        .map(|(i, card)| format_card_for_display(card, i))
+        .map(|(i, card)| format_card_summary(card, i))
         .collect();
 
     eprintln!("\nSelect cards to add to Anki:\n");
 
-    let selected = inquire::MultiSelect::new("Choose cards to import:", options)
+    let selected = inquire::MultiSelect::new("Choose cards to import:", options.clone())
         .with_page_size(15)
         .prompt()?;
 
@@ -135,16 +136,9 @@ pub fn select_cards(cards: &[ValidatedCard]) -> Result<Vec<usize>, anyhow::Error
         anyhow::bail!("No cards selected");
     }
 
-    // Map selected display strings back to indices
-    let all_options: Vec<String> = cards
-        .iter()
-        .enumerate()
-        .map(|(i, card)| format_card_for_display(card, i))
-        .collect();
-
     let indices: Vec<usize> = selected
         .iter()
-        .filter_map(|s| all_options.iter().position(|o| o == s))
+        .filter_map(|s| options.iter().position(|o| o == s))
         .collect();
 
     Ok(indices)
