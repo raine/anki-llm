@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+use jsonrepair::{Options, repair_json};
 use regex::Regex;
 use serde_json::Value;
 
@@ -11,18 +12,27 @@ use crate::data::Row;
 static FENCED_JSON_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?s)```(?:json)?\s*(.*?)\s*```").unwrap());
 
+/// Attempt to repair malformed JSON text before parsing. Returns the repaired
+/// string on success, or the original text if repair fails.
+fn repair(text: &str) -> String {
+    repair_json(text, &Options::default()).unwrap_or_else(|_| text.to_string())
+}
+
 /// Try to parse text as a JSON object. Also tries extracting from markdown
 /// fenced code blocks. Returns None if the text is not a JSON object.
 pub fn try_parse_json_object(text: &str) -> Option<serde_json::Map<String, Value>> {
+    let repaired = repair(text.trim());
+
     // Try direct parse first
-    if let Some(map) = try_parse_object(text.trim()) {
+    if let Some(map) = try_parse_object(&repaired) {
         return Some(map);
     }
 
     // Try all fenced code blocks in order — some LLMs emit a non-JSON block
     // (e.g. markdown explanation) before the JSON block.
     for caps in FENCED_JSON_RE.captures_iter(text) {
-        if let Some(map) = try_parse_object(caps[1].trim()) {
+        let repaired_cap = repair(caps[1].trim());
+        if let Some(map) = try_parse_object(&repaired_cap) {
             return Some(map);
         }
     }
@@ -41,14 +51,17 @@ fn try_parse_object(text: &str) -> Option<serde_json::Map<String, Value>> {
 /// Try to parse text as a JSON array of objects. Also tries extracting from
 /// markdown fenced code blocks. Returns None if the text is not a JSON array.
 pub fn try_parse_json_array(text: &str) -> Option<Vec<serde_json::Map<String, Value>>> {
+    let repaired = repair(text.trim());
+
     // Try direct parse first
-    if let Some(arr) = try_parse_array(text.trim()) {
+    if let Some(arr) = try_parse_array(&repaired) {
         return Some(arr);
     }
 
     // Try fenced code blocks
     for caps in FENCED_JSON_RE.captures_iter(text) {
-        if let Some(arr) = try_parse_array(caps[1].trim()) {
+        let repaired_cap = repair(caps[1].trim());
+        if let Some(arr) = try_parse_array(&repaired_cap) {
             return Some(arr);
         }
     }

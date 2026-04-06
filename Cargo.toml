@@ -54,6 +54,9 @@ arboard = "3"
 pulldown-cmark = "0.12"
 ammonia = "4"
 
+# JSON repair
+jsonrepair = "0.1"
+
 [features]
 integration = []
 

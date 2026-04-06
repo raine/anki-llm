@@ -45,6 +45,7 @@ dependencies = [
  "indexmap",
  "indicatif",
  "inquire",
+ "jsonrepair",
  "predicates",
  "pulldown-cmark",
  "regex",
@@ -961,6 +962,18 @@ checksum = "2e04e2ef80ce82e13552136fabeef8a5ed1f985a96805761cbb9a2c34e7664d9"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "jsonrepair"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbd084aab201d699b6da54bc10fbedf1ab92c984eeb306d40546fa675184ec06"
+dependencies = [
+ "memchr",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
