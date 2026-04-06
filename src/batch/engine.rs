@@ -18,8 +18,8 @@ pub struct BatchConfig {
 }
 
 /// Callback invoked after each row completes (success or failure).
-/// Used by file_mode to do incremental writes.
-pub type OnRowDone = Box<dyn Fn(&RowOutcome) + Send + Sync>;
+/// Returns true to abort the batch (e.g. when an Anki flush fails).
+pub type OnRowDone = Box<dyn Fn(&RowOutcome) -> bool + Send + Sync>;
 
 /// The function that processes a single row. Returns the updated row and
 /// optional token usage. Errors are retried unless they are `BatchError::Fatal`.
@@ -88,9 +88,11 @@ pub fn run_batch(
                     let row = &rows[idx];
                     let outcome = process_with_retry(row, process, config.retries, &tokens);
 
-                    // Notify callback
-                    if let Some(ref cb) = on_row_done {
-                        cb(&outcome);
+                    // Notify callback — abort if it returns true
+                    if let Some(ref cb) = on_row_done
+                        && cb(&outcome)
+                    {
+                        interrupted.store(true, Ordering::SeqCst);
                     }
 
                     // Update progress
@@ -290,6 +292,7 @@ mod tests {
         let process: ProcessFn = Box::new(|row| Ok((row.clone(), None)));
         let on_done: OnRowDone = Box::new(move |_| {
             count_clone.fetch_add(1, Ordering::SeqCst);
+            false
         });
 
         run_batch(rows, process, &config(0), Some(on_done));

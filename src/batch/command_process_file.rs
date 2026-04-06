@@ -26,10 +26,6 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     }
     eprintln!("Loaded {} rows from {}", rows.len(), args.input.display());
 
-    if args.batch_size == 0 {
-        bail!("--batch-size must be at least 1");
-    }
-
     // Validate all rows have IDs and check for duplicates
     let mut all_ids = Vec::with_capacity(rows.len());
     let mut seen_ids = HashSet::new();
@@ -158,6 +154,7 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     let writer_cb = Arc::clone(&writer);
     let on_row_done: super::engine::OnRowDone = Box::new(move |outcome: &RowOutcome| {
         writer_cb.on_row_done(outcome);
+        false
     });
 
     // Run batch

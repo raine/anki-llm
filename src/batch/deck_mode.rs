@@ -4,12 +4,17 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use anyhow::Context;
 use serde_json::{Value, json};
 
 use crate::anki::client::AnkiClient;
-use crate::data::rows::{Row, require_note_id};
+use crate::data::rows::Row;
 
 use super::report::RowOutcome;
+
+/// Internal key used to store the Anki note ID in a row.
+/// Starts with `_` so it is automatically excluded from field updates.
+pub const ANKI_NOTE_ID_KEY: &str = "__note_id";
 
 /// Queues Anki updateNoteFields actions and flushes them in batches via `multi`.
 /// Tracks flush errors so the command can report accurate success/failure.
@@ -28,18 +33,23 @@ pub struct DeckWriter {
 }
 
 impl DeckWriter {
-    pub fn new(anki: AnkiClient, flush_threshold: usize, error_log_path: PathBuf) -> Self {
-        // Truncate error log from prior runs
-        let _ = File::create(&error_log_path);
+    pub fn new(
+        anki: AnkiClient,
+        flush_threshold: usize,
+        error_log_path: PathBuf,
+    ) -> anyhow::Result<Self> {
+        // Truncate error log from prior runs. Fail early if the path is unwritable.
+        File::create(&error_log_path)
+            .with_context(|| format!("failed to create error log: {}", error_log_path.display()))?;
 
-        Self {
+        Ok(Self {
             anki,
             queue: Mutex::new(Vec::new()),
             flush_threshold,
             error_log_path,
             success_count: Mutex::new(0),
             has_flush_error: AtomicBool::new(false),
-        }
+        })
     }
 
     /// Record a completed row outcome. Queues Anki updates for successes,
@@ -123,15 +133,18 @@ impl DeckWriter {
 }
 
 /// Build an `updateNoteFields` action for the `multi` endpoint.
-/// Returns None if the row has no note ID.
+/// Returns None if the row has no internal note ID key.
 fn build_update_action(row: &Row) -> Option<Value> {
-    let note_id = require_note_id(row).ok()?;
-    let id: i64 = note_id.parse().ok()?;
+    let id: i64 = row.get(ANKI_NOTE_ID_KEY).and_then(|v| match v {
+        Value::Number(n) => n.as_i64(),
+        Value::String(s) => s.parse().ok(),
+        _ => None,
+    })?;
 
     let mut fields = serde_json::Map::new();
     for (key, value) in row {
-        // Skip ID fields and internal fields
-        if key == "noteId" || key == "id" || key == "Id" || key.starts_with('_') {
+        // Skip internal fields (prefixed with _); ANKI_NOTE_ID_KEY starts with _
+        if key.starts_with('_') {
             continue;
         }
         // Convert value to string for Anki
@@ -162,7 +175,7 @@ mod tests {
     #[test]
     fn build_update_action_basic() {
         let mut row: Row = IndexMap::new();
-        row.insert("noteId".into(), Value::from(12345));
+        row.insert(ANKI_NOTE_ID_KEY.into(), Value::from(12345_i64));
         row.insert("Front".into(), Value::from("hello"));
         row.insert("Back".into(), Value::from("world"));
 
@@ -171,17 +184,28 @@ mod tests {
         assert_eq!(params["id"], 12345);
         assert_eq!(params["fields"]["Front"], "hello");
         assert_eq!(params["fields"]["Back"], "world");
-        assert!(params["fields"].get("noteId").is_none());
+        assert!(params["fields"].get(ANKI_NOTE_ID_KEY).is_none());
     }
 
     #[test]
     fn build_update_action_skips_internal_fields() {
         let mut row: Row = IndexMap::new();
-        row.insert("noteId".into(), Value::from(1));
+        row.insert(ANKI_NOTE_ID_KEY.into(), Value::from(1_i64));
         row.insert("_error".into(), Value::from("oops"));
         row.insert("Front".into(), Value::from("x"));
 
         let action = build_update_action(&row).unwrap();
         assert!(action["params"]["note"]["fields"].get("_error").is_none());
+    }
+
+    #[test]
+    fn build_update_action_allows_real_id_field() {
+        // A real Anki field named "id" should be updated, not silently dropped
+        let mut row: Row = IndexMap::new();
+        row.insert(ANKI_NOTE_ID_KEY.into(), Value::from(42_i64));
+        row.insert("id".into(), Value::from("some-value"));
+
+        let action = build_update_action(&row).unwrap();
+        assert_eq!(action["params"]["note"]["fields"]["id"], "some-value");
     }
 }

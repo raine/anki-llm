@@ -8,13 +8,12 @@ use serde_json::Value;
 
 use crate::anki::client::{AnkiClient, anki_quote};
 use crate::cli::ProcessDeckArgs;
-use crate::data::rows::{Row, require_note_id};
 use crate::data::slug::slugify_deck_name;
 use crate::llm::client::LlmClient;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use crate::template::fill_template;
 
-use super::deck_mode::DeckWriter;
+use super::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
 use super::engine::{BatchConfig, run_batch};
 use super::process_row::{ProcessRowConfig, build_process_fn};
 use super::report::RowOutcome;
@@ -84,13 +83,17 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         }
     }
 
-    // Convert to Row format
-    let rows: Vec<Row> = notes_info
+    // Convert to Row format. The note ID is stored under ANKI_NOTE_ID_KEY (a
+    // private _-prefixed key) so it cannot collide with real Anki field names
+    // or be overwritten by a case-insensitive JSON merge.
+    let rows: Vec<_> = notes_info
         .into_iter()
         .map(|note| {
-            let mut row = Row::new();
-            row.insert("noteId".into(), Value::from(note.note_id));
+            let mut row = indexmap::IndexMap::new();
+            row.insert(ANKI_NOTE_ID_KEY.to_string(), Value::from(note.note_id));
             for (field_name, field_data) in note.fields {
+                // Anki stores field content with \r\n line endings on Windows;
+                // strip \r so templates and comparisons work consistently.
                 let value = field_data.value.replace('\r', "");
                 row.insert(field_name, Value::String(value));
             }
@@ -98,17 +101,20 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         })
         .collect();
 
-    // Validate no duplicate noteIds
+    // Validate no duplicate note IDs
     let mut seen_ids = HashSet::new();
     for (i, row) in rows.iter().enumerate() {
-        let id = require_note_id(row).with_context(|| format!("row {} missing note ID", i + 1))?;
+        let id = row
+            .get(ANKI_NOTE_ID_KEY)
+            .and_then(|v| match v {
+                Value::Number(n) => Some(n.to_string()),
+                Value::String(s) => Some(s.clone()),
+                _ => None,
+            })
+            .with_context(|| format!("row {} missing note ID", i + 1))?;
         if !seen_ids.insert(id.clone()) {
             bail!("duplicate noteId '{}' at row {}", id, i + 1);
         }
-    }
-
-    if args.batch_size == 0 {
-        bail!("--batch-size must be at least 1");
     }
 
     // Read prompt template
@@ -175,18 +181,21 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         require_result_tag: args.require_result_tag,
     });
 
-    // Set up deck writer
+    // Set up deck writer. Pass the existing AnkiClient (no need for a second one).
     let slug = slugify_deck_name(deck_name);
     let error_log_path = format!("{slug}-errors.jsonl").into();
     let writer = Arc::new(DeckWriter::new(
-        AnkiClient::new(),
+        anki,
         runtime.batch_size as usize,
         error_log_path,
-    ));
+    )?);
 
     let writer_cb = Arc::clone(&writer);
     let on_row_done: super::engine::OnRowDone = Box::new(move |outcome| {
         writer_cb.on_row_done(outcome);
+        // Signal the engine to abort if an Anki flush has failed — no point
+        // burning more LLM tokens when results cannot be saved.
+        writer_cb.has_flush_error.load(Ordering::Relaxed)
     });
 
     // Run batch

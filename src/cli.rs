@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+
+pub const DEFAULT_BATCH_SIZE: u32 = 5;
 use clap::builder::styling::{AnsiColor, Effects, Styles};
 
 const STYLES: Styles = Styles::styled()
@@ -103,7 +105,7 @@ pub struct ProcessFileArgs {
     pub model: Option<String>,
 
     /// Number of concurrent requests
-    #[arg(long, short = 'b', default_value = "5")]
+    #[arg(long, short = 'b', default_value_t = DEFAULT_BATCH_SIZE, value_parser = clap::value_parser!(u32).range(1..))]
     pub batch_size: u32,
 
     /// Sampling temperature (0-2)
@@ -167,7 +169,7 @@ pub struct ProcessDeckArgs {
     pub model: Option<String>,
 
     /// Number of concurrent requests
-    #[arg(long, short = 'b', default_value = "5")]
+    #[arg(long, short = 'b', default_value_t = DEFAULT_BATCH_SIZE, value_parser = clap::value_parser!(u32).range(1..))]
     pub batch_size: u32,
 
     /// Sampling temperature (0-2)
