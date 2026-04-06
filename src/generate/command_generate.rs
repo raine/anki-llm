@@ -182,9 +182,19 @@ pub fn run_pipeline(
                     .ok();
                 }
 
-                if let Err(e) = execute_pipeline_for_term(&term, &args, &session, &tx, &rx) {
-                    // RunError already sent inside execute_pipeline_for_term
-                    log!("Pipeline error: {e}");
+                match execute_pipeline_for_term(&term, &args, &session, &tx, &rx) {
+                    Ok(sent_done) => {
+                        // If the pipeline returned early (e.g. Cancel) without
+                        // sending RunDone, send one so the TUI can clear its
+                        // pending_cancels counter.
+                        if !sent_done {
+                            tx.send(BackendEvent::RunDone(String::new())).ok();
+                        }
+                    }
+                    Err(e) => {
+                        // RunError already sent inside execute_pipeline_for_term
+                        log!("Pipeline error: {e}");
+                    }
                 }
             }
             Ok(WorkerCommand::Quit) | Err(_) => break,
@@ -195,13 +205,15 @@ pub fn run_pipeline(
     Ok(())
 }
 
+/// Returns `Ok(true)` if RunDone was sent, `Ok(false)` if the run ended early
+/// (e.g. cancelled) without sending a completion event.
 fn execute_pipeline_for_term(
     term: &str,
     args: &GenerateArgs,
     session: &PreparedSession,
     tx: &mpsc::Sender<BackendEvent>,
     rx: &mpsc::Receiver<WorkerCommand>,
-) -> Result<()> {
+) -> Result<bool> {
     macro_rules! log {
         ($($arg:tt)*) => {
             tx.send(BackendEvent::Log(format!($($arg)*))).ok();
@@ -378,7 +390,7 @@ fn execute_pipeline_for_term(
             "Dry run complete. No cards were imported.".to_string(),
         ))
         .ok();
-        return Ok(());
+        return Ok(true);
     }
 
     if validated.is_empty() {
@@ -386,7 +398,7 @@ fn execute_pipeline_for_term(
             "No cards to select from.".to_string(),
         ))
         .ok();
-        return Ok(());
+        return Ok(true);
     }
 
     step_start!(PipelineStep::Select, None);
@@ -395,14 +407,14 @@ fn execute_pipeline_for_term(
 
     let selected_indices = match rx.recv() {
         Ok(WorkerCommand::Selection(indices)) => indices,
-        Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => return Ok(()),
+        Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => return Ok(false),
         _ => bail_err!("Unexpected response during selection"),
     };
 
     if selected_indices.is_empty() {
         tx.send(BackendEvent::RunDone("No cards selected.".to_string()))
             .ok();
-        return Ok(());
+        return Ok(true);
     }
 
     let mut selected: Vec<ValidatedCard> = selected_indices
@@ -427,7 +439,7 @@ fn execute_pipeline_for_term(
             "No non-duplicate cards selected.".to_string(),
         ))
         .ok();
-        return Ok(());
+        return Ok(true);
     }
 
     // Quality check
@@ -469,7 +481,7 @@ fn execute_pipeline_for_term(
 
         let decisions = match rx.recv() {
             Ok(WorkerCommand::Review(d)) => d,
-            Ok(WorkerCommand::Quit) | Err(_) => return Ok(()),
+            Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => return Ok(false),
             _ => bail_err!("Unexpected response during review"),
         };
 
@@ -485,7 +497,7 @@ fn execute_pipeline_for_term(
             "No cards remaining after quality check.".to_string(),
         ))
         .ok();
-        return Ok(());
+        return Ok(true);
     }
 
     let total_cost = generation_cost + qc_result.cost;
@@ -547,7 +559,7 @@ fn execute_pipeline_for_term(
         }
     }
 
-    Ok(())
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------

@@ -256,6 +256,9 @@ struct App {
     session_cost: f64,
     log_scroll: u16,
     tick: u64,
+    /// Counts how many runs have been cancelled. While > 0, backend events are
+    /// discarded. Decremented when RunDone/RunError arrives from a cancelled run.
+    pending_cancels: u32,
     should_quit: bool,
     /// True when the user explicitly pressed q/Ctrl-C (as opposed to natural Done/Error exit).
     user_quit: bool,
@@ -290,6 +293,7 @@ impl App {
             session_cost: 0.0,
             log_scroll: 0,
             tick: 0,
+            pending_cancels: 0,
             should_quit: false,
             user_quit: false,
             backend_rx,
@@ -317,10 +321,23 @@ impl App {
     }
 
     fn handle_backend_event(&mut self, event: BackendEvent) {
-        match event {
-            BackendEvent::SessionReady(info) => {
-                self.session_info = Some(info);
+        // SessionReady is always relevant
+        if let BackendEvent::SessionReady(info) = event {
+            self.session_info = Some(info);
+            return;
+        }
+
+        // Discard events from abandoned runs. Each cancelled run will eventually
+        // produce a RunDone or RunError; decrement the counter when that arrives.
+        if self.pending_cancels > 0 {
+            if matches!(event, BackendEvent::RunDone(_) | BackendEvent::RunError(_)) {
+                self.pending_cancels -= 1;
             }
+            return;
+        }
+
+        match event {
+            BackendEvent::SessionReady(_) => unreachable!(),
             BackendEvent::Log(msg) => {
                 self.logs.push(msg);
                 // Auto-scroll to bottom
@@ -362,16 +379,29 @@ impl App {
     fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
         match &mut self.mode {
             AppMode::Input(_) => self.handle_key_input(key),
-            AppMode::Running => {
-                if key.code == KeyCode::Char('q')
-                    || (key.code == KeyCode::Char('c')
-                        && key.modifiers.contains(KeyModifiers::CONTROL))
-                {
+            AppMode::Running => match key.code {
+                KeyCode::Esc => {
+                    // Cancel current run and go back to term input.
+                    // Send Cancel so if the worker reaches a recv() (e.g.
+                    // RequestSelection) it unblocks. Events from the
+                    // abandoned run are discarded until RunDone/RunError.
+                    self.worker_tx.send(WorkerCommand::Cancel).ok();
+                    self.pending_cancels += 1;
+                    self.reset_for_new_run();
+                    self.mode = AppMode::Input(String::new());
+                }
+                KeyCode::Char('q') => {
                     self.worker_tx.send(WorkerCommand::Quit).ok();
                     self.should_quit = true;
                     self.user_quit = true;
                 }
-            }
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.worker_tx.send(WorkerCommand::Quit).ok();
+                    self.should_quit = true;
+                    self.user_quit = true;
+                }
+                _ => {}
+            },
             AppMode::Selecting(_) => self.handle_key_selection(key),
             AppMode::Reviewing(_) => self.handle_key_review(key),
             AppMode::Done(_) | AppMode::Error(_) => match key.code {
@@ -642,7 +672,10 @@ fn draw_running(frame: &mut Frame, app: &App) {
         " Steps ".to_string()
     };
 
-    let steps_block = Block::default().borders(Borders::ALL).title(cost_title);
+    let steps_block = Block::default()
+        .borders(Borders::ALL)
+        .title(cost_title)
+        .title_bottom(Line::from(" [Esc] back  [q] quit ").right_aligned());
     let steps_list = List::new(step_items).block(steps_block);
     frame.render_widget(steps_list, chunks[0]);
 
