@@ -115,13 +115,7 @@ impl SelectionState {
     fn new(cards: Vec<ValidatedCard>) -> Self {
         let mut list_state = ListState::default();
         list_state.select(Some(0));
-        // Pre-select all non-duplicate cards
-        let selected = cards
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| !c.is_duplicate)
-            .map(|(i, _)| i)
-            .collect();
+        let selected = BTreeSet::new();
         Self {
             cards,
             cursor: 0,
@@ -236,6 +230,8 @@ impl ReviewState {
     }
 }
 
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
 struct App {
     mode: AppMode,
     logs: Vec<String>,
@@ -244,6 +240,7 @@ struct App {
     input_tokens: u64,
     output_tokens: u64,
     log_scroll: u16,
+    tick: u64,
     should_quit: bool,
     /// True when the user explicitly pressed q/Ctrl-C (as opposed to natural Done/Error exit).
     user_quit: bool,
@@ -268,6 +265,7 @@ impl App {
             input_tokens: 0,
             output_tokens: 0,
             log_scroll: 0,
+            tick: 0,
             should_quit: false,
             user_quit: false,
             backend_rx,
@@ -442,14 +440,19 @@ fn draw_running(frame: &mut Frame, app: &App) {
         .constraints([Constraint::Min(10), Constraint::Percentage(55)])
         .split(area);
 
+    let spinner_frame = format!(
+        "{} ",
+        SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()]
+    );
+
     // Steps panel
     let step_items: Vec<ListItem> = app
         .steps
         .iter()
         .map(|(step, status)| {
-            let (icon, style) = match status {
+            let (icon, style): (&str, Style) = match status {
                 StepStatus::Pending => ("  ", Style::default().fg(Color::DarkGray)),
-                StepStatus::Running(_) => ("⟳ ", Style::default().fg(Color::Yellow)),
+                StepStatus::Running(_) => (&spinner_frame, Style::default().fg(Color::Cyan)),
                 StepStatus::Done(_) => ("✓ ", Style::default().fg(Color::Green)),
                 StepStatus::Skipped => ("- ", Style::default().fg(Color::DarkGray)),
                 StepStatus::Error(_) => ("✗ ", Style::default().fg(Color::Red)),
@@ -743,6 +746,7 @@ fn run_app(
     let mut app = App::new(backend_rx, worker_tx);
 
     loop {
+        app.tick = app.tick.wrapping_add(1);
         terminal.draw(|f| draw(f, &app))?;
 
         // Drain all pending backend events
