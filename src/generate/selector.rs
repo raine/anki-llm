@@ -128,7 +128,7 @@ pub fn markdown_to_lines(md: &str, indent: &str) -> Vec<Line<'static>> {
                 } else if t == "</i>" || t == "</em>" {
                     style = style.remove_modifier(Modifier::ITALIC);
                 } else if t == "<br>" || t == "<br/>" || t == "<br />" {
-                    lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
+                    lines.push(Line::from(std::mem::take(&mut spans)));
                     start_line(&mut spans, indent);
                 }
             }
@@ -139,16 +139,16 @@ pub fn markdown_to_lines(md: &str, indent: &str) -> Vec<Line<'static>> {
                     if !l.is_empty() {
                         start_line(&mut spans, indent);
                         spans.push(Span::styled(l.to_string(), style));
-                        lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
+                        lines.push(Line::from(std::mem::take(&mut spans)));
                     }
                 }
             }
             Event::SoftBreak | Event::HardBreak => {
-                lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
+                lines.push(Line::from(std::mem::take(&mut spans)));
                 start_line(&mut spans, indent);
             }
             Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Item) => {
-                lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
+                lines.push(Line::from(std::mem::take(&mut spans)));
                 start_line(&mut spans, indent);
             }
             _ => {}
