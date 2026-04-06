@@ -6,11 +6,21 @@ pub fn strip_html_tags(html: &str) -> String {
     // Simple regex-free HTML stripping
     let mut result = String::new();
     let mut in_tag = false;
+    let mut need_space = false;
     for ch in html.chars() {
         match ch {
             '<' => in_tag = true,
-            '>' => in_tag = false,
-            _ if !in_tag => result.push(ch),
+            '>' => {
+                in_tag = false;
+                need_space = true;
+            }
+            _ if !in_tag => {
+                if need_space && !ch.is_ascii_punctuation() && !result.is_empty() {
+                    result.push(' ');
+                }
+                need_space = false;
+                result.push(ch);
+            }
             _ => {}
         }
     }
