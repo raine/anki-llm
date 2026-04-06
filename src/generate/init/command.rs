@@ -123,14 +123,7 @@ fn configure_quality_check(field_map: &FieldMap) -> Result<Option<QualityCheckCo
         .map(|(k, _)| k.clone())
         .unwrap_or(selected_anki_name);
 
-    let prompt = inquire::Text::new("Quality check prompt (use {text} for the field value):")
-        .with_default(
-            r#"Review this flashcard content for accuracy and quality.
-Content: {text}
-Respond with JSON only: {"is_valid": true, "reason": "brief explanation"}"#,
-        )
-        .prompt()
-        .map_err(map_inquire_err)?;
+    let prompt = "Review this flashcard field for accuracy and quality.\nContent: {text}\nRespond with JSON only: {\"is_valid\": true, \"reason\": \"brief explanation\"}".to_string();
 
     Ok(Some(QualityCheckConfig {
         field,
