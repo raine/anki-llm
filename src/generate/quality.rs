@@ -28,6 +28,8 @@ pub struct QualityRunResult {
     pub passed: Vec<ValidatedCard>,
     pub flagged: Vec<FlaggedCard>,
     pub cost: f64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
 }
 
 /// Run quality checks on cards. Returns passed cards, flagged cards (for review),
@@ -52,6 +54,8 @@ pub fn run_quality_checks(
                 passed: cards,
                 flagged: vec![],
                 cost: 0.0,
+                input_tokens: 0,
+                output_tokens: 0,
             });
         }
     };
@@ -82,8 +86,8 @@ pub fn run_quality_checks(
         "Quality check 0/{total_cards} using {qc_model}..."
     ));
 
-    // Each entry: (original_index, Ok((is_valid, reason, cost)) | Err(message))
-    type CardResult = Result<(bool, String, f64), String>;
+    // Each entry: (original_index, Ok((is_valid, reason, input_tokens, output_tokens, cost)) | Err(message))
+    type CardResult = Result<(bool, String, u64, u64, f64), String>;
     let results: Arc<Mutex<Vec<(usize, CardResult)>>> =
         Arc::new(Mutex::new(Vec::with_capacity(total_cards)));
 
@@ -130,18 +134,24 @@ pub fn run_quality_checks(
     results.sort_by_key(|(idx, _)| *idx);
 
     let mut total_cost = 0.0;
+    let mut total_input_tokens = 0u64;
+    let mut total_output_tokens = 0u64;
     let mut passed: Vec<ValidatedCard> = Vec::new();
     let mut flagged: Vec<FlaggedCard> = Vec::new();
 
     for (idx, result) in results {
         let card = cards_opt[idx].take().unwrap();
         match result {
-            Ok((true, _, cost)) => {
+            Ok((true, _, in_tok, out_tok, cost)) => {
                 total_cost += cost;
+                total_input_tokens += in_tok;
+                total_output_tokens += out_tok;
                 passed.push(card);
             }
-            Ok((false, reason, cost)) => {
+            Ok((false, reason, in_tok, out_tok, cost)) => {
                 total_cost += cost;
+                total_input_tokens += in_tok;
+                total_output_tokens += out_tok;
                 flagged.push(FlaggedCard { card, reason });
             }
             Err(e) => {
@@ -161,9 +171,12 @@ pub fn run_quality_checks(
         passed,
         flagged,
         cost: total_cost,
+        input_tokens: total_input_tokens,
+        output_tokens: total_output_tokens,
     })
 }
 
+// Returns (is_valid, reason, input_tokens, output_tokens, cost)
 fn check_single(
     client: &LlmClient,
     model: &str,
@@ -172,7 +185,7 @@ fn check_single(
     max_tokens: Option<u64>,
     retries: u32,
     logger: Option<&LlmLogger>,
-) -> Result<(bool, String, f64), anyhow::Error> {
+) -> Result<(bool, String, u64, u64, f64), anyhow::Error> {
     let mut last_error = String::new();
 
     for attempt in 0..=retries {
@@ -200,12 +213,18 @@ fn check_single(
                     .unwrap_or("No reason provided")
                     .to_string();
 
-                let cost = result
+                let (in_tok, out_tok, cost) = result
                     .usage
-                    .map(|u| pricing::calculate_cost(model, u.prompt_tokens, u.completion_tokens))
-                    .unwrap_or(0.0);
+                    .map(|u| {
+                        (
+                            u.prompt_tokens,
+                            u.completion_tokens,
+                            pricing::calculate_cost(model, u.prompt_tokens, u.completion_tokens),
+                        )
+                    })
+                    .unwrap_or((0, 0, 0.0));
 
-                return Ok((is_valid, reason, cost));
+                return Ok((is_valid, reason, in_tok, out_tok, cost));
             }
             Err(e) => {
                 last_error = e.to_string();

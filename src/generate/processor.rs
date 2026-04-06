@@ -73,6 +73,7 @@ pub fn generate_cards(
             temperature,
             max_tokens,
             logger,
+            on_log,
         ) {
             Ok(result) => return Ok(result),
             Err(e) => {
@@ -88,6 +89,7 @@ pub fn generate_cards(
     anyhow::bail!("Generation failed after retries: {last_error}")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn try_generate(
     prompt: &str,
     field_map_keys: &[String],
@@ -96,6 +98,7 @@ fn try_generate(
     temperature: Option<f64>,
     max_tokens: Option<u64>,
     logger: Option<&LlmLogger>,
+    on_log: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<GenerationResult, anyhow::Error> {
     let result = client.chat_completion(model, prompt, temperature, max_tokens)?;
 
@@ -119,7 +122,9 @@ fn try_generate(
         let mut malformed = false;
         for key in field_map_keys {
             let Some(value) = obj.get(key) else {
-                // Warning logged at caller level
+                on_log(&format!(
+                    "  Warning: card is missing field \"{key}\". Skipping."
+                ));
                 malformed = true;
                 break;
             };

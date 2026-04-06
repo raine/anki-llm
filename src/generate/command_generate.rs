@@ -135,7 +135,8 @@ pub fn run_pipeline(
     );
 
     // 3. Build runtime config and LLM client
-    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose).map_err(|e| {
+    // Disable very_verbose in TUI mode — raw stderr output would corrupt the display.
+    let logger = LlmLogger::new(args.log.as_deref(), false).map_err(|e| {
         tx.send(BackendEvent::Error(format!("{e}"))).ok();
         e
     })?;
@@ -344,8 +345,8 @@ pub fn run_pipeline(
 
     if qc_result.cost > 0.0 {
         tx.send(BackendEvent::CostUpdate {
-            input_tokens: 0,
-            output_tokens: 0,
+            input_tokens: qc_result.input_tokens,
+            output_tokens: qc_result.output_tokens,
             cost: qc_result.cost,
         })
         .ok();
@@ -672,6 +673,8 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
             passed: selected,
             flagged: vec![],
             cost: 0.0,
+            input_tokens: 0,
+            output_tokens: 0,
         }
     };
 

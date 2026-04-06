@@ -245,6 +245,8 @@ struct App {
     output_tokens: u64,
     log_scroll: u16,
     should_quit: bool,
+    /// True when the user explicitly pressed q/Ctrl-C (as opposed to natural Done/Error exit).
+    user_quit: bool,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerResponse>,
 }
@@ -267,6 +269,7 @@ impl App {
             output_tokens: 0,
             log_scroll: 0,
             should_quit: false,
+            user_quit: false,
             backend_rx,
             worker_tx,
         }
@@ -325,6 +328,7 @@ impl App {
                     // Signal worker to stop
                     self.worker_tx.send(WorkerResponse::Quit).ok();
                     self.should_quit = true;
+                    self.user_quit = true;
                 }
             }
             AppMode::Selecting(_) => self.handle_key_selection(key),
@@ -350,6 +354,7 @@ impl App {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.worker_tx.send(WorkerResponse::Quit).ok();
                 self.should_quit = true;
+                self.user_quit = true;
             }
             KeyCode::Enter => {
                 let AppMode::Selecting(state) = std::mem::replace(&mut self.mode, AppMode::Running)
@@ -379,7 +384,7 @@ impl App {
         };
 
         match key.code {
-            KeyCode::Char('k') | KeyCode::Char('y') => {
+            KeyCode::Char('k') | KeyCode::Char('y') | KeyCode::Enter => {
                 state.keep_current();
             }
             KeyCode::Char('d') | KeyCode::Char('n') => {
@@ -394,6 +399,7 @@ impl App {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.worker_tx.send(WorkerResponse::Quit).ok();
                 self.should_quit = true;
+                self.user_quit = true;
                 return;
             }
             _ => {}
@@ -728,11 +734,12 @@ fn draw_error(frame: &mut Frame, msg: &str) {
 // Main event loop
 // ---------------------------------------------------------------------------
 
+/// Returns `true` if the user explicitly quit (q / Ctrl-C), `false` for natural Done/Error exit.
 fn run_app(
     mut terminal: DefaultTerminal,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerResponse>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let mut app = App::new(backend_rx, worker_tx);
 
     loop {
@@ -768,7 +775,8 @@ fn run_app(
         }
     }
 
-    Ok(())
+    let user_quit = app.user_quit;
+    Ok(user_quit)
 }
 
 // ---------------------------------------------------------------------------
@@ -777,8 +785,9 @@ fn run_app(
 
 pub fn run_tui(args: GenerateArgs) -> anyhow::Result<()> {
     let (tx_events, rx_events) = mpsc::channel::<BackendEvent>();
-    // SyncSender with capacity 0 so the worker blocks until the TUI reads
-    let (tx_response, rx_response) = mpsc::sync_channel::<WorkerResponse>(0);
+    // Capacity 1 so the TUI can send Quit without blocking even when the
+    // worker isn't currently waiting on the response channel.
+    let (tx_response, rx_response) = mpsc::sync_channel::<WorkerResponse>(1);
 
     // Spawn worker thread
     let worker_handle = std::thread::spawn(move || {
@@ -787,13 +796,16 @@ pub fn run_tui(args: GenerateArgs) -> anyhow::Result<()> {
 
     // Run TUI on main thread
     let terminal = ratatui::init();
-    let result = run_app(terminal, rx_events, tx_response);
+    let user_quit = run_app(terminal, rx_events, tx_response).unwrap_or(true);
     ratatui::restore();
 
-    // Wait for worker; surface any worker error if TUI loop was clean
-    let worker_result = worker_handle
-        .join()
-        .unwrap_or_else(|_| Err(anyhow::anyhow!("Worker thread panicked")));
+    if user_quit {
+        // Worker may be blocked on an LLM call — don't hang waiting for it.
+        std::process::exit(0);
+    }
 
-    result.and(worker_result)
+    // Natural finish: propagate any worker error to the process exit code.
+    worker_handle
+        .join()
+        .unwrap_or_else(|_| Err(anyhow::anyhow!("Worker thread panicked")))
 }
