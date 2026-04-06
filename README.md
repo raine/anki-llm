@@ -103,6 +103,9 @@ for the model provider you want to use.
 
 The tool supports two API providers:
 
+<details>
+<summary>Pricing table</summary>
+
 | Model                    | Input   | Output   |                                                                           |
 | ------------------------ | ------- | -------- | ------------------------------------------------------------------------- |
 | **OpenAI models**        |
@@ -116,6 +119,11 @@ The tool supports two API providers:
 | `gpt-5-nano`             | $0.05/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-nano)                  |
 | `gpt-5.1`                | $1.25/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.1)                     |
 | `gpt-5.2`                | $1.75/M | $14.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.2)                     |
+| `gpt-5.3`                | $1.75/M | $14.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.3)                     |
+| `gpt-5.4`                | $2.50/M | $15.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.4)                     |
+| `gpt-5.4-pro`            | $30.00/M | $180.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.4-pro)               |
+| `gpt-5.4-mini`           | $0.75/M | $4.50/M  | [🔗](https://platform.openai.com/docs/models/gpt-5.4-mini)                |
+| `gpt-5.4-nano`           | $0.20/M | $1.25/M  | [🔗](https://platform.openai.com/docs/models/gpt-5.4-nano)                |
 | **Google Gemini models** |
 | `gemini-2.0-flash`       | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)       |
 | `gemini-2.5-flash`       | $0.30/M | $2.50/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)       |
@@ -126,6 +134,8 @@ The tool supports two API providers:
 
 Pricing is per million tokens (M). Check the latest prices on the provider's
 website to be sure.
+
+</details>
 
 ### Setting up API Keys
 
