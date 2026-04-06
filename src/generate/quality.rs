@@ -40,16 +40,19 @@ pub fn perform_quality_check(
 
     let qc_model = config.model.as_deref().unwrap_or(model);
 
-    eprintln!(
-        "\nRunning quality check on {} card(s) using {qc_model}...",
-        cards.len()
-    );
+    let total_cards = cards.len();
+    let spinner =
+        crate::spinner::llm_spinner(format!("Quality check 1/{total_cards} using {qc_model}..."));
 
     let mut total_cost = 0.0;
     let mut valid_cards = Vec::new();
     let mut flagged: Vec<(ValidatedCard, String)> = Vec::new();
 
-    for card in cards {
+    for (card_idx, card) in cards.into_iter().enumerate() {
+        spinner.set_message(format!(
+            "Quality check {}/{total_cards} using {qc_model}...",
+            card_idx + 1
+        ));
         let text = card
             .fields
             .get(&config.field)
@@ -78,11 +81,12 @@ pub fn perform_quality_check(
                 }
             }
             Err(e) => {
-                eprintln!("  Quality check failed: {e}. Discarding card.");
+                spinner.println(format!("  Quality check failed: {e}. Discarding card."));
                 // Don't keep cards when quality check fails — surface the error
             }
         }
     }
+    spinner.finish_and_clear();
 
     if total_cost > 0.0 {
         eprintln!("  Quality check cost: {}", pricing::format_cost(total_cost));

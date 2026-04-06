@@ -109,10 +109,10 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     } else {
         let client = client.as_ref().unwrap();
 
-        eprintln!(
-            "\nGenerating {} card(s) for \"{}\" using {}...",
+        let spinner = crate::spinner::llm_spinner(format!(
+            "Generating {} card(s) for \"{}\" using {}...",
             args.count, args.term, runtime.model
-        );
+        ));
 
         let result = generate_cards(
             &args.term,
@@ -125,6 +125,7 @@ pub fn run(args: GenerateArgs) -> Result<()> {
             runtime.max_tokens,
             runtime.retries,
         )?;
+        spinner.finish_and_clear();
 
         if let Some(ref cost) = result.cost {
             generation_cost = cost.total_cost;

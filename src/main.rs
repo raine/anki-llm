@@ -16,6 +16,7 @@ mod terminal;
 use anki_llm::anki;
 use anki_llm::cli;
 use anki_llm::data;
+use anki_llm::spinner;
 
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();

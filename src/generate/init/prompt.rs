@@ -239,16 +239,19 @@ pub fn create_prompt_content(
     }
 
     // Call LLM
+    let spinner = crate::spinner::llm_spinner(format!("Generating smart prompt using {model}..."));
     match llm_client.chat_completion(model, &meta_prompt, temperature, None) {
         Ok(response) => {
-            eprintln!("\nSmart prompt generated successfully!");
+            spinner.finish_and_clear();
+            eprintln!("Smart prompt generated successfully!");
             Ok(PromptDraft {
                 body: response.content.trim().to_string(),
                 final_field_map,
             })
         }
         Err(e) => {
-            eprintln!("\nCould not generate smart prompt. Falling back to generic template.");
+            spinner.finish_and_clear();
+            eprintln!("Could not generate smart prompt. Falling back to generic template.");
             eprintln!("  Reason: {}\n", e);
             Ok(PromptDraft {
                 body: generate_generic_prompt_body(
