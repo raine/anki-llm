@@ -747,10 +747,11 @@ fn draw_log_panel(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
-    // Split: left list, right detail
+    // Split: card list on top, detail below
+    let list_height = (state.cards.len() as u16 + 2).min(area.height / 2); // +2 for border
     let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(list_height), Constraint::Min(0)])
         .split(area);
 
     // Card list
@@ -796,7 +797,7 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
         .collect();
 
     let mut list_state = state.list_state;
-    let list = List::new(list_items).block(Block::default().borders(Borders::RIGHT));
+    let list = List::new(list_items).block(Block::default().borders(Borders::BOTTOM));
     frame.render_stateful_widget(list, chunks[0], &mut list_state);
 
     // Detail pane for focused card
