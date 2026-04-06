@@ -544,22 +544,12 @@ fn draw_selecting(frame: &mut Frame, _app: &App, state: &SelectionState) {
                 "☐ "
             };
 
-            let first_field = card.anki_fields.values().next().map(|v| {
-                let plain = super::selector::strip_html_tags(v);
-                if plain.len() > 35 {
-                    let boundary = plain
-                        .char_indices()
-                        .map(|(idx, _)| idx)
-                        .take_while(|&idx| idx <= 32)
-                        .last()
-                        .unwrap_or(0);
-                    format!("{}...", &plain[..boundary])
-                } else {
-                    plain
-                }
-            });
-
-            let label = first_field.unwrap_or_default();
+            let label = card
+                .anki_fields
+                .values()
+                .next()
+                .map(|v| super::selector::strip_html_tags(v))
+                .unwrap_or_default();
             let dup_note = if card.is_duplicate { " [dup]" } else { "" };
 
             let style = if i == state.cursor {
