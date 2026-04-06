@@ -1,6 +1,16 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+/// Parameters for adding a note via AnkiConnect.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddNoteParams {
+    pub deck_name: String,
+    pub model_name: String,
+    pub fields: IndexMap<String, String>,
+    pub tags: Vec<String>,
+}
+
 /// AnkiConnect request envelope.
 #[derive(Debug, Serialize)]
 pub struct AnkiRequest<P: Serialize> {

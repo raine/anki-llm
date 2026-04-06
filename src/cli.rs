@@ -47,8 +47,20 @@ pub struct ExportArgs {
 
 #[derive(clap::Args)]
 pub struct ImportArgs {
-    /// Input file path
+    /// Input file path (CSV or YAML)
     pub input: PathBuf,
+
+    /// Target Anki deck name
+    #[arg(long, short = 'd')]
+    pub deck: String,
+
+    /// Anki note type name (inferred from deck if not specified)
+    #[arg(long, short = 'n')]
+    pub note_type: Option<String>,
+
+    /// Field name to use for identifying existing notes (auto-detected if not specified)
+    #[arg(long, short = 'k')]
+    pub key_field: Option<String>,
 }
 
 #[derive(clap::Args)]
