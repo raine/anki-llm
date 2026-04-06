@@ -1,5 +1,6 @@
 use crate::anki::client::AnkiClient;
 use crate::anki::schema::AddNoteParams;
+use crate::style::style;
 use crate::template::frontmatter::Frontmatter;
 
 use super::cards::ValidatedCard;
@@ -22,7 +23,7 @@ pub fn import_cards_to_anki(
         });
     }
 
-    eprintln!("\nAdding {} card(s) to Anki...", cards.len());
+    eprintln!("\n  Adding {} card(s) to Anki...", cards.len());
 
     let notes: Vec<AddNoteParams> = cards
         .iter()
@@ -46,18 +47,25 @@ pub fn import_cards_to_anki(
 
 /// Print import results to stderr.
 pub fn report_import_result(result: &ImportResult, deck_name: &str) {
+    let s = style();
     if result.failures > 0 {
         eprintln!(
-            "\nAdded {} card(s), {} failed.",
-            result.successes, result.failures
+            "\n  {} card(s) added, {} failed",
+            result.successes,
+            s.error_text(result.failures)
         );
-        eprintln!("Some cards may have been duplicates or had invalid field values.");
+        eprintln!(
+            "  {}",
+            s.muted("Some cards may have been duplicates or had invalid field values.")
+        );
     } else if result.successes > 0 {
         eprintln!(
-            "\nSuccessfully added {} new note(s) to \"{}\"",
-            result.successes, deck_name
+            "\n  {} {} note(s) to {}",
+            s.success("Added"),
+            result.successes,
+            s.cyan(format!("\"{deck_name}\""))
         );
     } else {
-        eprintln!("\nNo cards were added to Anki.");
+        eprintln!("\n  No cards were added to Anki.");
     }
 }

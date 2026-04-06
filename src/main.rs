@@ -17,6 +17,7 @@ use anki_llm::anki;
 use anki_llm::cli;
 use anki_llm::data;
 use anki_llm::spinner;
+use anki_llm::style;
 
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();

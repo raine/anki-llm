@@ -10,6 +10,7 @@ use crate::llm::error::LlmError;
 use crate::llm::logger::LlmLogger;
 use crate::llm::parse_json::try_parse_json_object;
 use crate::llm::pricing;
+use crate::style::style;
 use crate::template::fill_template;
 use crate::template::frontmatter::QualityCheckConfig;
 
@@ -140,17 +141,27 @@ pub fn perform_quality_check(
                 flagged.push((card, reason));
             }
             Err(e) => {
-                eprintln!("  Quality check failed: {e}. Discarding card.");
+                let s = style();
+                eprintln!(
+                    "  {}",
+                    s.warning(format!("Quality check failed: {e}. Discarding card."))
+                );
             }
         }
     }
 
+    let s = style();
+
     if total_cost > 0.0 {
-        eprintln!("  Quality check cost: {}", pricing::format_cost(total_cost));
+        eprintln!(
+            "  {}  {}",
+            s.muted("Quality check cost"),
+            s.muted(pricing::format_cost(total_cost))
+        );
     }
 
     if flagged.is_empty() {
-        eprintln!("\nAll cards passed the quality check.");
+        eprintln!("  {}", s.success("All cards passed the quality check."));
         return Ok(QualityCheckResult {
             final_cards: valid_cards,
             cost: total_cost,
@@ -158,14 +169,17 @@ pub fn perform_quality_check(
     }
 
     let flagged_count = flagged.len();
-    eprintln!("\n{flagged_count} card(s) were flagged. Please review:");
+    eprintln!(
+        "\n  {} card(s) flagged — please review:",
+        s.yellow(flagged_count)
+    );
 
     for (i, (card, reason)) in flagged.into_iter().enumerate() {
-        eprintln!("\n--- Flagged Card {}/{} ---", i + 1, flagged_count);
+        eprintln!("\n  {} {}/{}", s.bold("Flagged Card"), i + 1, flagged_count);
         for (key, value) in &card.fields {
-            eprintln!("{key}: {value}");
+            eprintln!("  {}: {}", s.muted(key), value);
         }
-        eprintln!("\nReason: {reason}");
+        eprintln!("\n  {}: {}", s.muted("Reason"), reason);
 
         let keep = inquire::Confirm::new("Keep this card anyway?")
             .with_default(false)

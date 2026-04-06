@@ -5,4 +5,5 @@ pub mod data;
 pub mod generate;
 pub mod llm;
 pub mod spinner;
+pub mod style;
 pub mod template;

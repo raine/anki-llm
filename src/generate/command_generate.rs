@@ -9,6 +9,8 @@ use crate::llm::pricing;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use crate::template::frontmatter::parse_prompt_file;
 
+use crate::style::style;
+
 use super::anki_import::{import_cards_to_anki, report_import_result};
 use super::cards::{ValidatedCard, validate_cards};
 use super::exporter::export_cards;
@@ -33,16 +35,21 @@ pub fn run(args: GenerateArgs) -> Result<()> {
         anyhow::bail!("Prompt is missing required placeholder: {{count}}");
     }
 
-    eprintln!("Loaded prompt for deck: {}", frontmatter.deck);
-    eprintln!("Note type: {}", frontmatter.note_type);
+    let s = style();
+    eprintln!("  {}  {}", s.muted("Deck     "), s.cyan(&frontmatter.deck));
+    eprintln!(
+        "  {}  {}",
+        s.muted("Note type"),
+        s.cyan(&frontmatter.note_type)
+    );
 
     // 2. Validate Anki assets
     let anki = AnkiClient::new();
-    eprintln!("\nValidating Anki configuration...");
     let validation = validate_anki_assets(&anki, &frontmatter)?;
     eprintln!(
-        "Note type fields: {}",
-        validation.note_type_fields.join(", ")
+        "  {}  {}",
+        s.muted("Fields   "),
+        s.muted(validation.note_type_fields.join(", "))
     );
 
     // 3. Build logger
@@ -99,7 +106,10 @@ pub fn run(args: GenerateArgs) -> Result<()> {
                         }
                         None => {
                             eprintln!(
-                                "  Warning: Response is missing field \"{key}\". Skipping card."
+                                "  {}",
+                                s.warning(format!(
+                                    "Response is missing field \"{key}\". Skipping card."
+                                ))
                             );
                             missing = true;
                         }
@@ -115,9 +125,12 @@ pub fn run(args: GenerateArgs) -> Result<()> {
             .collect();
 
         if skipped > 0 {
-            eprintln!("Skipped {} card(s) due to missing fields.", skipped);
+            eprintln!(
+                "  {}",
+                s.warning(format!("Skipped {skipped} card(s) due to missing fields."))
+            );
         }
-        eprintln!("Parsed {} card(s) from response", candidates.len());
+        eprintln!("  Parsed {} card(s) from response", candidates.len());
     } else {
         let client = client.as_ref().unwrap();
 
@@ -143,10 +156,11 @@ pub fn run(args: GenerateArgs) -> Result<()> {
         if let Some(ref cost) = result.cost {
             generation_cost = cost.total_cost;
             eprintln!(
-                "  Tokens: {} in / {} out | Cost: {}",
+                "  {}  {} in / {} out   {}",
+                s.muted("Tokens"),
                 cost.input_tokens,
                 cost.output_tokens,
-                pricing::format_cost(cost.total_cost)
+                s.muted(pricing::format_cost(cost.total_cost))
             );
         }
 
@@ -156,19 +170,21 @@ pub fn run(args: GenerateArgs) -> Result<()> {
             anyhow::bail!("No cards were generated");
         }
 
-        eprintln!("Generated {} card(s)", candidates.len());
+        eprintln!("  {} card(s) generated", s.green(candidates.len()));
 
         if candidates.len() != args.count as usize {
             eprintln!(
-                "  Warning: Requested {} cards, received {}",
-                args.count,
-                candidates.len()
+                "  {}",
+                s.warning(format!(
+                    "Requested {} cards, received {}",
+                    args.count,
+                    candidates.len()
+                ))
             );
         }
     }
 
     // 5. Sanitize and validate
-    eprintln!("\nChecking for duplicates...");
 
     let sanitized_pairs: Vec<_> = candidates
         .into_iter()
@@ -183,7 +199,10 @@ pub fn run(args: GenerateArgs) -> Result<()> {
 
     let dup_count = validated.iter().filter(|c| c.is_duplicate).count();
     if dup_count > 0 {
-        eprintln!("Found {dup_count} duplicate(s) (already in Anki)");
+        eprintln!(
+            "  {}",
+            s.muted(format!("{dup_count} duplicate(s) already in Anki"))
+        );
     }
 
     // 6. Select cards
@@ -212,7 +231,10 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     // but adding them to Anki would create duplicate notes.
     let dup_selected = selected.iter().filter(|c| c.is_duplicate).count();
     if dup_selected > 0 {
-        eprintln!("\nSkipping {dup_selected} duplicate(s) — already exist in Anki.");
+        eprintln!(
+            "  {}",
+            s.muted(format!("Skipping {dup_selected} duplicate(s)"))
+        );
         selected.retain(|c| !c.is_duplicate);
     }
 
@@ -249,8 +271,9 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     let total_cost = generation_cost + quality_result.cost;
     if total_cost > 0.0 {
         eprintln!(
-            "\nTotal estimated cost: {}",
-            pricing::format_cost(total_cost)
+            "\n  {}  {}",
+            s.muted("Total cost"),
+            s.accent(pricing::format_cost(total_cost))
         );
     }
 

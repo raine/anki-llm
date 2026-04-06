@@ -42,9 +42,12 @@ pub fn run_batch(
     // Set up progress bar
     let pb = ProgressBar::new(total as u64);
     pb.set_style(
-        ProgressStyle::with_template("Processing |{bar:40.cyan/blue}| {pos}/{len} | Cost: {msg}")
-            .unwrap()
-            .progress_chars("##-"),
+        ProgressStyle::with_template(
+            "{spinner:.cyan} [{elapsed_precise}] {bar:28.cyan/dim} {pos}/{len}  {msg}",
+        )
+        .unwrap()
+        .progress_chars("━━─")
+        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
     );
 
     // Shared state
@@ -55,8 +58,9 @@ pub fn run_batch(
 
     // Install SIGINT handler
     let interrupted_clone = interrupted.clone();
+    let pb_ctrlc = pb.clone();
     let _ = ctrlc::set_handler(move || {
-        eprintln!("\nInterrupting... waiting for active requests to finish.");
+        pb_ctrlc.println("Interrupting... waiting for active requests to finish.");
         interrupted_clone.store(true, Ordering::SeqCst);
     });
 
@@ -86,7 +90,7 @@ pub fn run_batch(
                     }
 
                     let row = &rows[idx];
-                    let outcome = process_with_retry(row, process, config.retries, &tokens);
+                    let outcome = process_with_retry(row, process, config.retries, &tokens, pb);
 
                     // Notify callback — abort if it returns true
                     if let Some(ref cb) = on_row_done
@@ -124,7 +128,11 @@ pub fn run_batch(
     super::report::print_summary(&config.model, &tokens, succeeded, failed, elapsed);
 
     if was_interrupted {
-        eprintln!("\nInterrupted by user. Partial results saved.");
+        let s = crate::style::style();
+        eprintln!(
+            "{}",
+            s.yellow("Interrupted by user. Partial results saved.")
+        );
     }
 
     (outcomes, tokens, was_interrupted)
@@ -137,6 +145,7 @@ fn process_with_retry(
     process: &ProcessFn,
     max_retries: u32,
     tokens: &Arc<Mutex<TokenStats>>,
+    pb: &ProgressBar,
 ) -> RowOutcome {
     let mut last_error = String::new();
 
@@ -144,7 +153,12 @@ fn process_with_retry(
         if attempt > 0 {
             let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1));
             let backoff = backoff.min(Duration::from_secs(30));
-            eprintln!("  Retry {attempt}/{max_retries}: {last_error}",);
+            let s = crate::style::style();
+            pb.println(format!(
+                "  {} {}",
+                s.yellow(format!("Retry {attempt}/{max_retries}:")),
+                s.muted(&last_error)
+            ));
             std::thread::sleep(backoff);
         }
 
