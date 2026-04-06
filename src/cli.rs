@@ -1,8 +1,13 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use clap::builder::styling::{AnsiColor, Effects, Styles};
 
-use crate::STYLES;
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .usage(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .literal(AnsiColor::Cyan.on_default().effects(Effects::BOLD))
+    .placeholder(AnsiColor::Cyan.on_default());
 
 #[derive(Parser)]
 #[command(name = "anki-llm")]

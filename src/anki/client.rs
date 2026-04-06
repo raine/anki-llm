@@ -19,6 +19,12 @@ pub struct AnkiClient {
     url: String,
 }
 
+impl Default for AnkiClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AnkiClient {
     pub fn new() -> Self {
         Self {
@@ -73,6 +79,41 @@ impl AnkiClient {
         action: &str,
     ) -> Result<R, AnkiConnectError> {
         self.request(action, serde_json::json!({}))
+    }
+
+    /// Send a request for an action that returns null on success (e.g. deleteNotes).
+    /// Only checks for API errors; ignores the result value.
+    pub fn request_void<P: Serialize>(
+        &self,
+        action: &str,
+        params: P,
+    ) -> Result<(), AnkiConnectError> {
+        #[derive(serde::Deserialize)]
+        struct ErrorOnly {
+            error: Option<String>,
+        }
+
+        let req = AnkiRequest {
+            action: action.to_string(),
+            version: API_VERSION,
+            params,
+        };
+        let body = serde_json::to_string(&req).expect("request serialization should not fail");
+        let mut http_response = ureq::post(&self.url)
+            .header("Content-Type", "application/json")
+            .send(body.as_bytes())
+            .map_err(|e| AnkiConnectError::Connection {
+                url: self.url.clone(),
+                source: e,
+            })?;
+        let response: ErrorOnly = http_response
+            .body_mut()
+            .read_json()
+            .map_err(AnkiConnectError::Decode)?;
+        if let Some(err) = response.error {
+            return Err(AnkiConnectError::Api(err));
+        }
+        Ok(())
     }
 
     /// Send a raw request, returning the result as an untyped `serde_json::Value`.
@@ -152,5 +193,53 @@ impl AnkiClient {
         actions: &[serde_json::Value],
     ) -> Result<Vec<serde_json::Value>, AnkiConnectError> {
         self.request("multi", serde_json::json!({ "actions": actions }))
+    }
+
+    /// Delete notes by their IDs.
+    pub fn delete_notes(&self, notes: &[i64]) -> Result<(), AnkiConnectError> {
+        self.request_void("deleteNotes", serde_json::json!({ "notes": notes }))
+    }
+
+    /// Delete decks by name. If `cards_too` is true, also deletes all cards in those decks.
+    pub fn delete_decks(&self, decks: &[&str], cards_too: bool) -> Result<(), AnkiConnectError> {
+        self.request_void(
+            "deleteDecks",
+            serde_json::json!({ "decks": decks, "cardsToo": cards_too }),
+        )
+    }
+
+    /// Create a new empty deck. Returns the deck ID.
+    pub fn create_deck(&self, deck_name: &str) -> Result<i64, AnkiConnectError> {
+        self.request("createDeck", serde_json::json!({ "deck": deck_name }))
+    }
+
+    /// Get the list of Anki profile names.
+    pub fn get_profiles(&self) -> Result<Vec<String>, AnkiConnectError> {
+        self.request_no_params("getProfiles")
+    }
+
+    /// Switch to a different Anki profile.
+    pub fn load_profile(&self, name: &str) -> Result<bool, AnkiConnectError> {
+        self.request("loadProfile", serde_json::json!({ "name": name }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn anki_quote_simple() {
+        assert_eq!(anki_quote("My Deck"), "\"My Deck\"");
+    }
+
+    #[test]
+    fn anki_quote_with_double_quotes() {
+        assert_eq!(anki_quote(r#"Foo "Bar""#), r#""Foo \"Bar\"""#);
+    }
+
+    #[test]
+    fn anki_quote_with_backslash() {
+        assert_eq!(anki_quote(r"path\to"), r#""path\\to""#);
     }
 }
