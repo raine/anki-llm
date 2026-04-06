@@ -26,6 +26,7 @@ pub enum RowOutcome {
     /// Row failed after all retries. Contains original row + error message.
     Failure {
         row: crate::data::Row,
+        #[allow(dead_code)]
         error: String,
     },
 }
