@@ -1177,6 +1177,10 @@ The selected cards are immediately added to your Anki deck.
 That's it! You have successfully generated, reviewed, and imported multiple
 high-quality, contextual Anki cards from a single command.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
 ## Development
 
 ### Running locally
