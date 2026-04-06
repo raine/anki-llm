@@ -6,6 +6,13 @@ use crate::anki::error::AnkiConnectError;
 use crate::anki::schema::{AddNoteParams, AnkiRequest, AnkiResponse, NoteInfo};
 
 pub const DEFAULT_URL: &str = "http://127.0.0.1:8765";
+
+/// Escape a term for use inside a quoted Anki search token (e.g. `deck:"..."`, `note:"..."`).
+/// Backslashes and double-quotes must be escaped so the query parser handles them correctly.
+pub fn anki_quote(s: &str) -> String {
+    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
+}
 const API_VERSION: u8 = 6;
 
 pub struct AnkiClient {

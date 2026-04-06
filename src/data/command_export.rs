@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
-use crate::anki::client::AnkiClient;
+use crate::anki::client::{AnkiClient, anki_quote};
 use crate::cli::ExportArgs;
 use crate::data::io::{atomic_write_file, serialize_rows};
 use crate::data::rows::Row;
@@ -18,7 +18,12 @@ pub fn run(args: ExportArgs) -> Result<()> {
 
     let client = AnkiClient::new();
 
-    let query = format!("deck:\"{}\"", args.deck);
+    // Build query — optionally filter by note type
+    let mut query = format!("deck:{}", anki_quote(&args.deck));
+    if let Some(ref nt) = args.note_type {
+        query.push_str(&format!(" note:{}", anki_quote(nt)));
+    }
+
     let note_ids = client.find_notes(&query).context("failed to query deck")?;
     eprintln!("\n✓ Found {} notes in '{}'.", note_ids.len(), args.deck);
 
@@ -27,27 +32,35 @@ pub fn run(args: ExportArgs) -> Result<()> {
         return Ok(());
     }
 
+    // Fetch all note details in one call, then derive the model name from results
+    eprintln!("\nFetching note details...");
+    let notes = client.notes_info(&note_ids)?;
+    eprintln!("✓ Retrieved information for {} notes.", notes.len());
+
     eprintln!("\nDiscovering model type and fields...");
-    let model_names = client.find_model_names_for_deck(&args.deck)?;
-    let model_name = match model_names.as_slice() {
-        [only] => only.clone(),
-        [] => bail!("deck '{}' is empty", args.deck),
-        many => bail!(
-            "deck '{}' contains multiple note types: {}. \
-             Filter by note type or export a more specific deck.",
-            args.deck,
-            many.join(", ")
-        ),
+    let model_name = if let Some(ref nt) = args.note_type {
+        nt.clone()
+    } else {
+        let mut model_names: Vec<String> = notes.iter().map(|n| n.model_name.clone()).collect();
+        model_names.sort();
+        model_names.dedup();
+        match model_names.as_slice() {
+            [only] => only.clone(),
+            [] => bail!("deck '{}' is empty", args.deck),
+            many => bail!(
+                "deck '{}' contains multiple note types: {}. \
+                 Use --note-type to filter.",
+                args.deck,
+                many.join(", ")
+            ),
+        }
     };
     eprintln!("✓ Model type: {model_name}");
 
     let field_names = client.model_field_names(&model_name)?;
     eprintln!("✓ Fields: {}", field_names.join(", "));
 
-    eprintln!("\nFetching note details...");
-    let notes = client.notes_info(&note_ids)?;
-    eprintln!("✓ Retrieved information for {} notes.", notes.len());
-
+    // Convert to rows
     let rows: Vec<Row> = notes
         .iter()
         .map(|note| {

@@ -43,6 +43,9 @@ pub struct ExportArgs {
     pub deck: String,
     /// Output file path
     pub output: Option<PathBuf>,
+    /// Filter by note type (required if deck contains multiple note types)
+    #[arg(long, short = 'n')]
+    pub note_type: Option<String>,
 }
 
 #[derive(clap::Args)]

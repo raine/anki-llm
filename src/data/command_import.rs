@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
-use crate::anki::client::AnkiClient;
+use crate::anki::client::{AnkiClient, anki_quote};
 use crate::anki::schema::AddNoteParams;
 use crate::cli::ImportArgs;
 use crate::data::io::parse_data_file;
@@ -49,12 +49,14 @@ pub fn run(args: ImportArgs) -> Result<()> {
     let model_fields = client.model_field_names(&model_name)?;
     eprintln!("✓ Note type fields: {}", model_fields.join(", "));
 
-    let input_fields: Vec<String> = rows[0].keys().cloned().collect();
+    // Union keys across all rows so sparse YAML files don't silently drop fields
+    let input_fields: IndexSet<String> = rows.iter().flat_map(|row| row.keys().cloned()).collect();
+
     let key_field = match args.key_field {
         Some(ref k) => k.clone(),
         None => {
             eprintln!("\nAuto-detecting key field...");
-            if input_fields.iter().any(|f| f == "noteId") {
+            if input_fields.contains("noteId") {
                 eprintln!("✓ Found 'noteId' column. Using as key field.");
                 "noteId".to_string()
             } else if let Some(first) = model_fields.first() {
@@ -81,14 +83,28 @@ pub fn run(args: ImportArgs) -> Result<()> {
     eprintln!("Key field: {key_field}");
     eprintln!("{}", "=".repeat(60));
 
-    if !rows[0].contains_key(&key_field) {
+    // Validate key field exists in input
+    if !input_fields.contains(&key_field) {
+        let available: Vec<&str> = input_fields.iter().map(|s| s.as_str()).collect();
         bail!(
             "key field \"{}\" not found in input file. Available fields: {}",
             key_field,
-            input_fields.join(", ")
+            available.join(", ")
         );
     }
 
+    // Validate key field is noteId or a real model field
+    if key_field != "noteId" && !model_fields.contains(&key_field) {
+        bail!(
+            "key field '{}' is not a field on note type '{}'. \
+             Use 'noteId' or one of: {}",
+            key_field,
+            model_name,
+            model_fields.join(", ")
+        );
+    }
+
+    // Validate every row's key: reject blanks, non-scalars, and input duplicates
     let mut seen_keys = std::collections::HashSet::new();
     for (i, row) in rows.iter().enumerate() {
         let key_value = row.get(&key_field).and_then(|v| match v {
@@ -142,8 +158,15 @@ pub fn run(args: ImportArgs) -> Result<()> {
             .join(", ")
     );
 
+    // Fetch existing notes (filtered to the selected model) and build key → note_id map.
+    // Bail on duplicate existing keys to avoid nondeterministic updates.
     eprintln!("\nFetching existing notes from deck '{}'...", args.deck);
-    let existing_ids = client.find_notes(&format!("deck:\"{}\"", args.deck))?;
+    let query = format!(
+        "deck:{} note:{}",
+        anki_quote(&args.deck),
+        anki_quote(&model_name)
+    );
+    let existing_ids = client.find_notes(&query)?;
     let mut key_to_note_id: IndexMap<String, i64> = IndexMap::new();
 
     if !existing_ids.is_empty() {
@@ -157,8 +180,17 @@ pub fn run(args: ImportArgs) -> Result<()> {
                     .map(|f| f.value.clone())
                     .unwrap_or_default()
             };
-            if !key_value.is_empty() {
-                key_to_note_id.insert(key_value, note.note_id);
+            if !key_value.is_empty()
+                && let Some(prev_id) = key_to_note_id.insert(key_value.clone(), note.note_id)
+            {
+                bail!(
+                    "duplicate value '{}' for key field '{}' in deck: note {} and {} \
+                     both have this value. Cannot determine which to update.",
+                    key_value,
+                    key_field,
+                    prev_id,
+                    note.note_id
+                );
             }
         }
     }
@@ -203,13 +235,16 @@ pub fn run(args: ImportArgs) -> Result<()> {
     eprintln!("  - {} new notes to add.", notes_to_add.len());
     eprintln!("  - {} existing notes to update.", notes_to_update.len());
 
+    let mut add_failures = 0usize;
+    let mut update_failures = 0usize;
+
     if !notes_to_add.is_empty() {
         eprintln!("\nAdding {} new notes...", notes_to_add.len());
         let results = client.add_notes(&notes_to_add)?;
         let successes = results.iter().filter(|r| r.is_some()).count();
-        let failures = results.len() - successes;
-        eprintln!("✓ Add operation complete: {successes} succeeded, {failures} failed.");
-        if failures > 0 {
+        add_failures = results.len() - successes;
+        eprintln!("✓ Add operation complete: {successes} succeeded, {add_failures} failed.");
+        if add_failures > 0 {
             eprintln!("  - Some notes failed to add. Check Anki for possible reasons.");
         }
     }
@@ -233,8 +268,9 @@ pub fn run(args: ImportArgs) -> Result<()> {
 
         let results = client.multi(&actions)?;
         let failures: Vec<_> = results.iter().filter(|r| !r.is_null()).collect();
-        if !failures.is_empty() {
-            eprintln!("✗ Update operation failed for {} notes.", failures.len());
+        update_failures = failures.len();
+        if update_failures > 0 {
+            eprintln!("✗ Update operation failed for {update_failures} notes.");
         } else {
             eprintln!(
                 "✓ Update operation complete: {} notes updated successfully.",
@@ -244,6 +280,15 @@ pub fn run(args: ImportArgs) -> Result<()> {
     }
 
     eprintln!("\nImport process finished.");
+
+    if add_failures > 0 || update_failures > 0 {
+        bail!(
+            "import completed with failures: {} add(s) and {} update(s) failed",
+            add_failures,
+            update_failures
+        );
+    }
+
     Ok(())
 }
 
