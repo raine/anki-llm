@@ -1,4 +1,6 @@
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::{Line, Span};
 
 use super::cards::ValidatedCard;
 
@@ -58,6 +60,62 @@ pub fn markdown_to_ansi(md: &str) -> String {
     }
 
     out.trim_end_matches('\n').to_string()
+}
+
+/// Render markdown to ratatui `Line`s with inline styling (bold, italic, code).
+pub fn markdown_to_lines(md: &str, indent: &str) -> Vec<Line<'static>> {
+    let parser = Parser::new_ext(md, Options::all());
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut style = Style::default();
+
+    // Start each line with indent
+    if !indent.is_empty() {
+        spans.push(Span::raw(indent.to_string()));
+    }
+
+    for event in parser {
+        match event {
+            Event::Text(t) => {
+                spans.push(Span::styled(t.to_string(), style));
+            }
+            Event::Code(t) => {
+                let code_style = Style::default().add_modifier(Modifier::REVERSED);
+                spans.push(Span::styled(t.to_string(), code_style));
+            }
+            Event::Start(Tag::Strong) => style = style.add_modifier(Modifier::BOLD),
+            Event::End(TagEnd::Strong) => style = style.remove_modifier(Modifier::BOLD),
+            Event::Start(Tag::Emphasis) => style = style.add_modifier(Modifier::ITALIC),
+            Event::End(TagEnd::Emphasis) => style = style.remove_modifier(Modifier::ITALIC),
+            Event::Start(Tag::Item) => {
+                spans.push(Span::raw("• ".to_string()));
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
+                if !indent.is_empty() {
+                    spans.push(Span::raw(indent.to_string()));
+                }
+            }
+            Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Item) => {
+                lines.push(Line::from(spans.drain(..).collect::<Vec<_>>()));
+                if !indent.is_empty() {
+                    spans.push(Span::raw(indent.to_string()));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if !spans.is_empty() {
+        // Don't push a line that's only indent whitespace
+        let only_indent =
+            spans.len() == 1 && spans[0].content.chars().all(|c| c.is_ascii_whitespace());
+        if !only_indent {
+            lines.push(Line::from(spans));
+        }
+    }
+
+    lines
 }
 
 /// One-line summary of a card for list display.

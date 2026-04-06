@@ -745,11 +745,7 @@ fn draw_selecting(frame: &mut Frame, _app: &App, state: &SelectionState) {
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             )));
-            // Render markdown as plain text with basic formatting
-            let plain = super::selector::strip_html_tags(value);
-            for l in plain.lines() {
-                lines.push(Line::from(format!("  {l}")));
-            }
+            lines.extend(super::selector::markdown_to_lines(value, "  "));
             lines.push(Line::from(""));
         }
 
@@ -801,10 +797,7 @@ fn draw_reviewing(frame: &mut Frame, state: &ReviewState) {
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             )));
-            let plain = super::selector::strip_html_tags(value);
-            for l in plain.lines() {
-                lines.push(Line::from(format!("  {l}")));
-            }
+            lines.extend(super::selector::markdown_to_lines(value, "  "));
             lines.push(Line::from(""));
         }
 
