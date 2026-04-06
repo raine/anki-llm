@@ -19,7 +19,14 @@ use super::quality::FlaggedCard;
 // Events / responses
 // ---------------------------------------------------------------------------
 
+pub struct SessionInfo {
+    pub deck: String,
+    pub note_type: String,
+    pub model: String,
+}
+
 pub enum BackendEvent {
+    SessionReady(SessionInfo),
     Log(String),
     StepUpdate {
         step: PipelineStep,
@@ -237,6 +244,7 @@ const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦
 
 struct App {
     mode: AppMode,
+    session_info: Option<SessionInfo>,
     logs: Vec<String>,
     steps: Vec<(PipelineStep, StepStatus)>,
     /// Cost for the current run.
@@ -272,6 +280,7 @@ impl App {
         };
         App {
             mode,
+            session_info: None,
             logs: Vec::new(),
             steps,
             run_cost: 0.0,
@@ -308,6 +317,9 @@ impl App {
 
     fn handle_backend_event(&mut self, event: BackendEvent) {
         match event {
+            BackendEvent::SessionReady(info) => {
+                self.session_info = Some(info);
+            }
             BackendEvent::Log(msg) => {
                 self.logs.push(msg);
                 // Auto-scroll to bottom
@@ -490,7 +502,7 @@ impl App {
 
 fn draw(frame: &mut Frame, app: &App) {
     match &app.mode {
-        AppMode::Input(text) => draw_input(frame, text),
+        AppMode::Input(text) => draw_input(frame, text, app.session_info.as_ref()),
         AppMode::Running => draw_running(frame, app),
         AppMode::Selecting(state) => draw_selecting(frame, app, state),
         AppMode::Reviewing(state) => draw_reviewing(frame, state),
@@ -499,29 +511,63 @@ fn draw(frame: &mut Frame, app: &App) {
     }
 }
 
-fn draw_input(frame: &mut Frame, text: &str) {
+fn draw_input(frame: &mut Frame, text: &str, session_info: Option<&SessionInfo>) {
     let area = frame.area();
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(0),
-            Constraint::Length(3),
-            Constraint::Min(0),
-        ])
-        .split(area);
+    // Centered column: max 50 chars wide
+    let max_width = 50u16.min(area.width.saturating_sub(4));
+    let h_pad = area.width.saturating_sub(max_width) / 2;
 
     let h_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(15),
-            Constraint::Percentage(70),
-            Constraint::Percentage(15),
+            Constraint::Length(h_pad),
+            Constraint::Length(max_width),
+            Constraint::Min(0),
         ])
-        .split(chunks[1]);
+        .split(area);
 
-    let input_area = h_chunks[1];
+    let col = h_chunks[1];
 
+    // Build content: session info lines + input box
+    let info_height: u16 = if session_info.is_some() { 4 } else { 0 };
+    let input_height: u16 = 3;
+    let total_height = info_height + input_height;
+    let v_pad = col.height.saturating_sub(total_height) / 2;
+
+    let v_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(v_pad),
+            Constraint::Length(info_height),
+            Constraint::Length(input_height),
+            Constraint::Min(0),
+        ])
+        .split(col);
+
+    // Session info
+    if let Some(info) = session_info {
+        let info_lines = vec![
+            Line::from(vec![
+                Span::styled("Deck  ", Style::default().fg(Color::DarkGray)),
+                Span::raw(&info.deck),
+            ]),
+            Line::from(vec![
+                Span::styled("Note  ", Style::default().fg(Color::DarkGray)),
+                Span::raw(&info.note_type),
+            ]),
+            Line::from(vec![
+                Span::styled("Model ", Style::default().fg(Color::DarkGray)),
+                Span::raw(&info.model),
+            ]),
+            Line::from(""),
+        ];
+        let info_para = Paragraph::new(Text::from(info_lines));
+        frame.render_widget(info_para, v_chunks[1]);
+    }
+
+    // Input box
+    let input_area = v_chunks[2];
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Enter term ")

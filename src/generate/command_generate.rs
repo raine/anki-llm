@@ -19,7 +19,7 @@ use super::processor::{CardCandidate, generate_cards};
 use super::quality::run_quality_checks;
 use super::sanitize::sanitize_fields;
 use super::selector::{display_cards, select_cards_legacy};
-use super::tui::{BackendEvent, PipelineStep, StepStatus, WorkerCommand};
+use super::tui::{BackendEvent, PipelineStep, SessionInfo, StepStatus, WorkerCommand};
 use super::validate::{ValidationResult, validate_anki_assets};
 
 /// Entry point: dispatch to TUI or legacy mode.
@@ -162,8 +162,12 @@ pub fn run_pipeline(
         logger,
     };
 
-    // If a term was provided on the CLI, the TUI will have already sent
-    // Start(term) before we reach this point, so we go straight into the loop.
+    tx.send(BackendEvent::SessionReady(SessionInfo {
+        deck: session.frontmatter.deck.clone(),
+        note_type: session.frontmatter.note_type.clone(),
+        model: session.runtime.model.clone(),
+    }))
+    .ok();
 
     // --- Per-term loop ---
     loop {
