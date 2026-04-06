@@ -17,6 +17,7 @@ pub struct Frontmatter {
 pub struct QualityCheckConfig {
     pub field: String,
     pub prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 }
 
