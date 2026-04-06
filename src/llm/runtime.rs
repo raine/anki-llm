@@ -37,10 +37,10 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
         );
     }
 
-    if let Some(t) = args.temperature {
-        if !(0.0..=2.0).contains(&t) {
-            bail!("temperature must be between 0 and 2, got {t}");
-        }
+    if let Some(t) = args.temperature
+        && !(0.0..=2.0).contains(&t)
+    {
+        bail!("temperature must be between 0 and 2, got {t}");
     }
 
     let api_key = if args.dry_run {
