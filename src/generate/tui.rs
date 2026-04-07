@@ -715,20 +715,21 @@ impl App {
                 self.worker_tx.send(WorkerCommand::Selection(indices)).ok();
             }
             KeyCode::Char('c') => {
-                let card = &state.cards[state.cursor];
-                let text = card
-                    .raw_anki_fields
-                    .iter()
-                    .map(|(name, value)| {
-                        let plain = super::selector::strip_html_tags(value);
-                        format!("{name}\n{plain}")
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n\n");
-                if let Ok(mut cb) = arboard::Clipboard::new() {
-                    cb.set_text(text).ok();
+                if let Some(card) = state.cards.get(state.cursor) {
+                    let text = card
+                        .raw_anki_fields
+                        .iter()
+                        .map(|(name, value)| {
+                            let plain = super::selector::strip_html_tags(value);
+                            format!("{name}\n{plain}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n\n");
+                    if let Ok(mut cb) = arboard::Clipboard::new() {
+                        cb.set_text(text).ok();
+                    }
+                    state.copied_at = Some(self.tick);
                 }
-                state.copied_at = Some(self.tick);
             }
             KeyCode::PageUp => {
                 if let AppMode::Selecting(ref mut s) = self.mode {
