@@ -1021,7 +1021,13 @@ fn draw(frame: &mut Frame, app: &App) {
     // Render main content first, then sidebar on top so CJK bleed is covered
     let main_area = cols[1];
     match &app.mode {
-        AppMode::Input(input) => draw_input(frame, input, app.history.browse_position(), main_area),
+        AppMode::Input(input) => draw_input(
+            frame,
+            input,
+            app.history.browse_position(),
+            main_area,
+            app.model_picker.is_none(),
+        ),
         AppMode::Running => draw_running(frame, app, main_area),
         AppMode::Selecting(state) => draw_selecting(frame, state, &app.glyphs, main_area),
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
@@ -1438,6 +1444,7 @@ fn draw_input(
     input: &LineInput,
     history_pos: Option<(usize, usize)>,
     area: Rect,
+    show_cursor: bool,
 ) {
     // Center the input box in the main area
     let max_width = 50u16.min(area.width.saturating_sub(4));
@@ -1486,10 +1493,12 @@ fn draw_input(
         .scroll((0, scroll as u16));
     frame.render_widget(para, input_area);
 
-    frame.set_cursor_position((
-        input_area.x + 1 + (input.visual_cursor().saturating_sub(scroll)) as u16,
-        input_area.y + 1,
-    ));
+    if show_cursor {
+        frame.set_cursor_position((
+            input_area.x + 1 + (input.visual_cursor().saturating_sub(scroll)) as u16,
+            input_area.y + 1,
+        ));
+    }
 }
 
 fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
