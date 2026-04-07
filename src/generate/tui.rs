@@ -801,6 +801,9 @@ impl App {
             AppMode::Selecting(_) => self.handle_key_selection(key),
             AppMode::Reviewing(_) => self.handle_key_review(key),
             AppMode::Done(_) | AppMode::Error(_) => match key.code {
+                KeyCode::Tab if !self.is_fatal => {
+                    self.open_model_picker();
+                }
                 KeyCode::Char('n') if !self.is_fatal => {
                     self.reset_for_new_run();
                     self.mode = AppMode::Input(LineInput::default());
@@ -1083,7 +1086,12 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("q", "Quit"),
         ],
         AppMode::Done(_) | AppMode::Error(_) => {
-            vec![("n", "New term"), ("r", "Retry"), ("q", "Quit")]
+            vec![
+                ("n", "New term"),
+                ("r", "Retry"),
+                ("Tab", "Model"),
+                ("q", "Quit"),
+            ]
         }
     };
 
@@ -1428,6 +1436,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                     s.push(footer_pipe());
                     s.extend(footer_cmd("r", "Retry"));
                 }
+                s.push(footer_pipe());
+                s.extend(footer_cmd("Tab", "Model"));
                 s.push(footer_pipe());
             }
             s.extend(footer_cmd("q", "Quit"));
