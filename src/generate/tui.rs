@@ -739,11 +739,8 @@ impl App {
                 self.worker_tx.send(WorkerCommand::Refresh).ok();
             }
             KeyCode::Esc => {
-                let was_refreshing = state.refresh_in_flight;
                 self.worker_tx.send(WorkerCommand::Cancel).ok();
-                if was_refreshing {
-                    self.pending_cancels += 1;
-                }
+                self.pending_cancels += 1;
                 self.reset_for_new_run();
                 self.mode = AppMode::Input(LineInput::default());
             }
