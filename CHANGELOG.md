@@ -1,3 +1,13 @@
+## v2.0.3 (2026-04-07)
+
+- Added interactive TUI for the `generate` command — full-screen terminal
+  interface with sidebar progress, card preview, and keyboard-driven workflow
+- Added `post_process` support in prompt templates — delegate individual field
+  generation to separate focused LLM calls for higher quality results
+- **Breaking:** prompt template YAML keys switched from camelCase to snake_case
+  (`noteType` → `note_type`, `fieldMap` → `field_map`, `qualityCheck` →
+  `quality_check`). Old keys will produce a clear error prompting you to update.
+
 ## v2.0.2 (2026-04-06)
 
 - Improved terminal output with colors and better-styled progress bars
