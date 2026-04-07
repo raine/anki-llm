@@ -66,7 +66,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "tui-input",
+ "unicode-width 0.2.0",
  "ureq",
 ]
 
@@ -2787,17 +2787,6 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "tui-input"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce25d24adf2c5350c57426f25cf12bc767455a6d9202be155458fc768ea1268"
-dependencies = [
- "crossterm 0.29.0",
- "ratatui",
- "unicode-width 0.2.0",
 ]
 
 [[package]]

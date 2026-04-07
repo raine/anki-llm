@@ -11,8 +11,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
-use tui_input::Input;
-use tui_input::backend::crossterm::EventHandler;
+
+use super::line_input::LineInput;
 
 use crate::cli::GenerateArgs;
 use crate::llm::pricing;
@@ -115,7 +115,7 @@ pub enum StepStatus {
 // ---------------------------------------------------------------------------
 
 enum AppMode {
-    Input(Input), // term text being typed
+    Input(LineInput), // term text being typed
     Running,
     Selecting(SelectionState),
     Reviewing(ReviewState),
@@ -461,7 +461,7 @@ impl App {
             worker_tx.send(WorkerCommand::Start(term)).ok();
             AppMode::Running
         } else {
-            AppMode::Input(Input::default())
+            AppMode::Input(LineInput::default())
         };
         App {
             mode,
@@ -597,7 +597,7 @@ impl App {
                     self.worker_tx.send(WorkerCommand::Cancel).ok();
                     self.pending_cancels += 1;
                     self.reset_for_new_run();
-                    self.mode = AppMode::Input(Input::default());
+                    self.mode = AppMode::Input(LineInput::default());
                 }
                 KeyCode::Char('q') => {
                     self.worker_tx.send(WorkerCommand::Quit).ok();
@@ -639,7 +639,7 @@ impl App {
             AppMode::Done(_) | AppMode::Error(_) => match key.code {
                 KeyCode::Char('n') if !self.is_fatal => {
                     self.reset_for_new_run();
-                    self.mode = AppMode::Input(Input::default());
+                    self.mode = AppMode::Input(LineInput::default());
                 }
                 KeyCode::Char('r') if !self.is_fatal => {
                     if let Some(term) = self.last_term.clone() {
@@ -678,14 +678,14 @@ impl App {
                 if let Some(entry) = self.history.up(input.value()) {
                     let text = entry.to_string();
                     let len = text.chars().count();
-                    *input = Input::new(text).with_cursor(len);
+                    *input = LineInput::new(text).with_cursor(len);
                 }
             }
             KeyCode::Down => {
                 if let Some(entry) = self.history.down() {
                     let text = entry.to_string();
                     let len = text.chars().count();
-                    *input = Input::new(text).with_cursor(len);
+                    *input = LineInput::new(text).with_cursor(len);
                 }
             }
             KeyCode::Enter => {
@@ -699,9 +699,7 @@ impl App {
                 }
             }
             _ => {
-                if let Some(change) = input.handle_event(&Event::Key(key))
-                    && change.value
-                {
+                if input.handle_event(&Event::Key(key)) {
                     self.history.reset_browse();
                 }
             }
@@ -712,25 +710,9 @@ impl App {
         let AppMode::Input(ref mut input) = self.mode else {
             return;
         };
-        // Normalize newlines for single-line input
-        let cleaned = text.replace(['\r', '\n'], " ");
-
-        // tui-input's EventHandler ignores Event::Paste, so insert manually
-        let val = input.value();
-        let cursor_char_idx = input.cursor();
-        let byte_idx = val
-            .char_indices()
-            .nth(cursor_char_idx)
-            .map(|(i, _)| i)
-            .unwrap_or(val.len());
-        let mut new_val = String::with_capacity(val.len() + cleaned.len());
-        new_val.push_str(&val[..byte_idx]);
-        new_val.push_str(&cleaned);
-        new_val.push_str(&val[byte_idx..]);
-        let new_cursor = cursor_char_idx + cleaned.chars().count();
-        *input = Input::new(new_val).with_cursor(new_cursor);
-
-        self.history.reset_browse();
+        if input.handle_event(&Event::Paste(text)) {
+            self.history.reset_browse();
+        }
     }
 
     fn handle_key_selection(&mut self, key: crossterm::event::KeyEvent) {
@@ -755,7 +737,7 @@ impl App {
                     self.pending_cancels += 1;
                 }
                 self.reset_for_new_run();
-                self.mode = AppMode::Input(Input::default());
+                self.mode = AppMode::Input(LineInput::default());
             }
             KeyCode::Char('q') => {
                 self.worker_tx.send(WorkerCommand::Quit).ok();
@@ -1194,7 +1176,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(s)), area);
 }
 
-fn draw_input(frame: &mut Frame, input: &Input, area: Rect) {
+fn draw_input(frame: &mut Frame, input: &LineInput, area: Rect) {
     // Center the input box in the main area
     let max_width = 50u16.min(area.width.saturating_sub(4));
     let h_pad = area.width.saturating_sub(max_width) / 2;
