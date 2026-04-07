@@ -715,6 +715,9 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
     if !parsed.body.contains("{count}") {
         anyhow::bail!("Prompt is missing required placeholder: {{count}}");
     }
+    if args.copy && !frontmatter.field_tasks.is_empty() {
+        anyhow::bail!("fieldTasks are not supported in --copy mode");
+    }
 
     let s = style();
     eprintln!("  {}  {}", s.muted("Deck     "), s.cyan(&frontmatter.deck));
@@ -872,10 +875,7 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
 
     // 5b. Field tasks
     if !frontmatter.field_tasks.is_empty() && !candidates.is_empty() {
-        let client_ref = client.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("fieldTasks require an LLM client (not supported in --copy mode)")
-        })?;
-
+        let client_ref = client.as_ref().unwrap();
         let spinner = crate::spinner::llm_spinner("Running field tasks...".to_string());
         let ft_result = run_field_tasks(
             candidates,
