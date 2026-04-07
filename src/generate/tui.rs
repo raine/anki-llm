@@ -463,6 +463,11 @@ impl InputHistory {
         self.cursor = None;
         self.stashed.clear();
     }
+
+    /// Returns `(1-based position, total)` when browsing history, or `None`.
+    fn browse_position(&self) -> Option<(usize, usize)> {
+        self.cursor.map(|i| (i + 1, self.entries.len()))
+    }
 }
 
 struct App {
@@ -911,7 +916,7 @@ fn draw(frame: &mut Frame, app: &App) {
     // Render main content first, then sidebar on top so CJK bleed is covered
     let main_area = cols[1];
     match &app.mode {
-        AppMode::Input(input) => draw_input(frame, input, main_area),
+        AppMode::Input(input) => draw_input(frame, input, app.history.browse_position(), main_area),
         AppMode::Running => draw_running(frame, app, main_area),
         AppMode::Selecting(state) => draw_selecting(frame, state, &app.glyphs, main_area),
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
@@ -1257,7 +1262,12 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(s)), area);
 }
 
-fn draw_input(frame: &mut Frame, input: &LineInput, area: Rect) {
+fn draw_input(
+    frame: &mut Frame,
+    input: &LineInput,
+    history_pos: Option<(usize, usize)>,
+    area: Rect,
+) {
     // Center the input box in the main area
     let max_width = 50u16.min(area.width.saturating_sub(4));
     let h_pad = area.width.saturating_sub(max_width) / 2;
@@ -1288,10 +1298,17 @@ fn draw_input(frame: &mut Frame, input: &LineInput, area: Rect) {
     let inner_width = input_area.width.saturating_sub(2).max(1) as usize;
     let scroll = input.visual_scroll(inner_width);
 
-    let block = Block::default()
+    let mut block = Block::default()
         .borders(Borders::ALL)
         .title(" Enter term ")
         .border_style(Style::default().fg(THEME.info));
+
+    if let Some((pos, total)) = history_pos {
+        let indicator = format!(" {pos}/{total} ");
+        block = block.title(
+            Line::from(Span::styled(indicator, Style::default().fg(THEME.dimmed))).right_aligned(),
+        );
+    }
 
     let para = Paragraph::new(input.value())
         .block(block)
