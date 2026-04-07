@@ -9,7 +9,9 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{
+    Block, Borders, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Table, Wrap,
+};
 use ratatui::{DefaultTerminal, Frame};
 
 use super::line_input::LineInput;
@@ -279,6 +281,9 @@ struct Palette {
     danger: Color,
     highlight_bg: Color,
     highlight_fg: Color,
+    help_border: Color,
+    help_muted: Color,
+    header: Color,
 }
 
 const THEME: Palette = Palette {
@@ -291,6 +296,9 @@ const THEME: Palette = Palette {
     danger: Color::Rgb(237, 135, 150),
     highlight_bg: Color::Rgb(40, 48, 62),
     highlight_fg: Color::Rgb(244, 248, 255),
+    help_border: Color::Rgb(81, 104, 130),
+    help_muted: Color::Rgb(112, 126, 144),
+    header: Color::Rgb(180, 200, 220),
 };
 
 /// Build a footer span pair: key in dimmed, label in bold text.
@@ -908,47 +916,71 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
         }
     };
 
-    let max_key_len = shortcuts.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
-    let max_action_len = shortcuts.iter().map(|(_, a)| a.len()).max().unwrap_or(0);
-    let menu_width = (max_key_len + max_action_len + 7) as u16; // padding + separator
-    let menu_height = shortcuts.len() as u16 + 4; // borders + top/bottom padding
+    let row_count = shortcuts.len() as u16;
+    let height = row_count + 5; // borders + padding + empty line at top
+    let width: u16 = 44;
 
     let area = frame.area();
-    let x = area.x + area.width.saturating_sub(menu_width) / 2;
-    let y = area.y + area.height.saturating_sub(menu_height) / 2;
     let rect = Rect::new(
-        x,
-        y,
-        menu_width.min(area.width),
-        menu_height.min(area.height),
+        area.width.saturating_sub(width) / 2,
+        area.height.saturating_sub(height) / 2,
+        width.min(area.width),
+        height.min(area.height),
     );
 
-    frame.render_widget(Clear, rect);
+    let mode_title = match &app.mode {
+        AppMode::Input(_) => "Input",
+        AppMode::Running => "Running",
+        AppMode::Selecting(_) => "Select",
+        AppMode::Reviewing(_) => "Review",
+        AppMode::Done(_) => "Done",
+        AppMode::Error(_) => "Error",
+    };
 
-    let block = Block::default()
-        .borders(Borders::ALL)
+    let block = Block::bordered()
         .border_type(ratatui::widgets::BorderType::Rounded)
-        .border_style(Style::default().fg(THEME.info))
-        .title(" Shortcuts ");
-    let inner = block.inner(rect);
-    frame.render_widget(block, rect);
+        .border_style(Style::default().fg(THEME.help_border))
+        .title(Line::from(vec![
+            Span::styled(" ", Style::default()),
+            Span::styled(
+                mode_title,
+                Style::default()
+                    .fg(THEME.header)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" ", Style::default()),
+        ]))
+        .title_bottom(Line::from(vec![
+            Span::styled(" ", Style::default()),
+            Span::styled("any key", Style::default().fg(THEME.dimmed)),
+            Span::styled(" to close ", Style::default().fg(THEME.help_muted)),
+        ]));
 
-    let lines: Vec<Line> = shortcuts
-        .iter()
-        .map(|(key, action)| {
-            Line::from(vec![
+    let mut rows: Vec<Row> = vec![Row::new(vec![Cell::from(""), Cell::from("")])];
+    rows.extend(shortcuts.into_iter().map(|(key, desc)| {
+        Row::new(vec![
+            Cell::from(Line::from(vec![
+                Span::styled(" ", Style::default()),
                 Span::styled(
-                    format!("{:>width$}", key, width = max_key_len),
-                    Style::default().fg(THEME.info),
+                    format!("{:>8}", key),
+                    Style::default()
+                        .fg(THEME.dimmed)
+                        .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(" │ ", Style::default().fg(THEME.border)),
-                Span::styled(*action, Style::default().fg(THEME.text)),
-            ])
-        })
-        .collect();
+            ])),
+            Cell::from(Line::from(vec![
+                Span::styled(" · ", Style::default().fg(THEME.help_muted)),
+                Span::styled(desc, Style::default().fg(THEME.text)),
+            ])),
+        ])
+    }));
 
-    let para = Paragraph::new(lines).alignment(ratatui::layout::Alignment::Center);
-    frame.render_widget(para, inner);
+    let table = Table::new(rows, [Constraint::Length(10), Constraint::Min(25)])
+        .block(block)
+        .column_spacing(0);
+
+    frame.render_widget(Clear, rect);
+    frame.render_widget(table, rect);
 }
 
 fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
