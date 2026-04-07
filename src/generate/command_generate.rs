@@ -17,8 +17,8 @@ use crate::style::style;
 use super::anki_import::{import_cards_to_anki, report_import_result};
 use super::cards::{ValidatedCard, validate_cards};
 use super::exporter::export_cards;
-use super::field_task::run_field_tasks;
 use super::manual::get_llm_response_manually;
+use super::post_process::run_post_process;
 use super::processor::{CardCandidate, generate_cards};
 use super::quality::run_quality_checks;
 use super::sanitize::sanitize_fields;
@@ -382,12 +382,13 @@ fn execute_pipeline_for_term(
             );
         }
 
-        // Field tasks (rewrite specific fields via sub-LLM calls)
-        if !session.frontmatter.field_tasks.is_empty() && !candidates.is_empty() {
-            step_start!(PipelineStep::FieldTask, None);
-            let ft_result = run_field_tasks(
+        // Post-process (rewrite fields via sub-LLM calls)
+        if !session.frontmatter.post_process.is_empty() && !candidates.is_empty() {
+            step_start!(PipelineStep::PostProcess, None);
+            let pp_result = run_post_process(
                 candidates,
-                &session.frontmatter.field_tasks,
+                &session.frontmatter.post_process,
+                &session.field_map_keys,
                 &session.client,
                 &session.runtime.model,
                 session.runtime.temperature,
@@ -400,19 +401,19 @@ fn execute_pipeline_for_term(
                 tx.send(BackendEvent::RunError(format!("{e}"))).ok();
                 e
             })?;
-            candidates = ft_result.cards;
-            generation_cost += ft_result.cost;
-            if ft_result.cost > 0.0 {
+            candidates = pp_result.cards;
+            generation_cost += pp_result.cost;
+            if pp_result.cost > 0.0 {
                 tx.send(BackendEvent::CostUpdate {
-                    input_tokens: ft_result.input_tokens,
-                    output_tokens: ft_result.output_tokens,
-                    cost: ft_result.cost,
+                    input_tokens: pp_result.input_tokens,
+                    output_tokens: pp_result.output_tokens,
+                    cost: pp_result.cost,
                 })
                 .ok();
             }
-            step_done!(PipelineStep::FieldTask, None);
+            step_done!(PipelineStep::PostProcess, None);
         } else {
-            step_skip!(PipelineStep::FieldTask);
+            step_skip!(PipelineStep::PostProcess);
         }
 
         // Sanitize and validate
@@ -715,8 +716,8 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
     if !parsed.body.contains("{count}") {
         anyhow::bail!("Prompt is missing required placeholder: {{count}}");
     }
-    if args.copy && !frontmatter.field_tasks.is_empty() {
-        anyhow::bail!("fieldTasks are not supported in --copy mode");
+    if args.copy && !frontmatter.post_process.is_empty() {
+        anyhow::bail!("post_process is not supported in --copy mode");
     }
 
     let s = style();
@@ -873,31 +874,33 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         }
     }
 
-    // 5b. Field tasks
-    if !frontmatter.field_tasks.is_empty() && !candidates.is_empty() {
+    // 5b. Post-process
+    if !frontmatter.post_process.is_empty() && !candidates.is_empty() {
         let client_ref = client.as_ref().unwrap();
-        let spinner = crate::spinner::llm_spinner("Running field tasks...".to_string());
-        let ft_result = run_field_tasks(
+        let rt = runtime.as_ref().unwrap();
+        let spinner = crate::spinner::llm_spinner("Running post-process...".to_string());
+        let pp_result = run_post_process(
             candidates,
-            &frontmatter.field_tasks,
+            &frontmatter.post_process,
+            &field_map_keys,
             client_ref,
-            &runtime.model,
-            runtime.temperature,
-            runtime.max_tokens,
-            runtime.retries,
+            &rt.model,
+            rt.temperature,
+            rt.max_tokens,
+            rt.retries,
             Some(&logger),
             on_log,
         )?;
         spinner.finish_and_clear();
 
-        candidates = ft_result.cards;
-        if ft_result.cost > 0.0 {
-            generation_cost += ft_result.cost;
+        candidates = pp_result.cards;
+        if pp_result.cost > 0.0 {
+            generation_cost += pp_result.cost;
             eprintln!(
-                "  Field task tokens: {} in / {} out | Cost: {}",
-                ft_result.input_tokens,
-                ft_result.output_tokens,
-                pricing::format_cost(ft_result.cost)
+                "  Post-process tokens: {} in / {} out | Cost: {}",
+                pp_result.input_tokens,
+                pp_result.output_tokens,
+                pricing::format_cost(pp_result.cost)
             );
         }
     }

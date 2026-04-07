@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -11,27 +12,32 @@ use crate::llm::logger::LlmLogger;
 use crate::llm::parse_json::try_parse_json_object;
 use crate::llm::pricing;
 use crate::template::fill_template;
-use crate::template::frontmatter::FieldTaskConfig;
+use crate::template::frontmatter::PostProcessConfig;
 
 use super::processor::CardCandidate;
 
-/// How many field-task LLM calls to run in parallel.
+/// How many post-process LLM calls to run in parallel.
 const DEFAULT_CONCURRENCY: usize = 10;
 
-pub struct FieldTaskResult {
+pub struct PostProcessResult {
     pub cards: Vec<CardCandidate>,
     pub cost: f64,
     pub input_tokens: u64,
     pub output_tokens: u64,
 }
 
-/// Run field tasks on generated cards. Each task rewrites a single field using
-/// a focused LLM call. Tasks run in order; within each task, cards are processed
-/// concurrently. Cards that fail a task are discarded.
+/// Run post-processing tasks on generated cards. Each task uses a focused LLM
+/// call to rewrite card fields. Tasks run in order; within each task, cards are
+/// processed concurrently. Cards that fail a task are discarded.
+///
+/// If a task has `target` set, the response is treated as a single field value
+/// (plain text or `{"value": "..."}`). If `target` is omitted, the response
+/// must be a JSON object whose keys are merged into the card as a partial patch.
 #[allow(clippy::too_many_arguments)]
-pub fn run_field_tasks(
+pub fn run_post_process(
     cards: Vec<CardCandidate>,
-    tasks: &[FieldTaskConfig],
+    tasks: &[PostProcessConfig],
+    field_map_keys: &[String],
     client: &LlmClient,
     default_model: &str,
     temperature: Option<f64>,
@@ -39,7 +45,7 @@ pub fn run_field_tasks(
     retries: u32,
     logger: Option<&LlmLogger>,
     on_progress: &(dyn Fn(&str) + Send + Sync),
-) -> Result<FieldTaskResult, anyhow::Error> {
+) -> Result<PostProcessResult, anyhow::Error> {
     let mut current_cards = cards;
     let mut total_cost = 0.0;
     let mut total_input_tokens = 0u64;
@@ -49,12 +55,15 @@ pub fn run_field_tasks(
         let model = task.model.as_deref().unwrap_or(default_model);
         let total_cards = current_cards.len();
 
+        let desc = if let Some(ref target) = task.target {
+            format!("rewriting '{target}'")
+        } else {
+            "updating fields".to_string()
+        };
         on_progress(&format!(
-            "Field task {}/{}: rewriting '{}' on {} card(s) using {model}...",
+            "Post-process {}/{}: {desc} on {total_cards} card(s) using {model}...",
             task_idx + 1,
             tasks.len(),
-            task.field,
-            total_cards
         ));
 
         // Build prompts for each card
@@ -73,7 +82,7 @@ pub fn run_field_tasks(
         }
 
         // Process cards concurrently
-        type CardResult = Result<(String, u64, u64, f64), String>;
+        type CardResult = Result<(HashMap<String, String>, u64, u64, f64), String>;
         let results: Arc<Mutex<Vec<(usize, CardResult)>>> =
             Arc::new(Mutex::new(Vec::with_capacity(total_cards)));
 
@@ -93,10 +102,12 @@ pub fn run_field_tasks(
                             break;
                         }
 
-                        let outcome = run_single_task(
+                        let outcome = run_single(
                             client,
                             model,
                             &prompts[idx],
+                            task.target.as_deref(),
+                            field_map_keys,
                             temperature,
                             max_tokens,
                             retries,
@@ -113,7 +124,7 @@ pub fn run_field_tasks(
         let mut results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
         results.sort_by_key(|(idx, _)| *idx);
 
-        // Apply results — replace field or discard card
+        // Apply results — patch fields or discard card
         let mut next_cards = Vec::with_capacity(total_cards);
         let mut cards_iter: Vec<Option<CardCandidate>> =
             current_cards.into_iter().map(Some).collect();
@@ -121,18 +132,20 @@ pub fn run_field_tasks(
         for (idx, result) in results {
             let card = cards_iter[idx].take().unwrap();
             match result {
-                Ok((value, in_tok, out_tok, cost)) => {
+                Ok((updates, in_tok, out_tok, cost)) => {
                     total_cost += cost;
                     total_input_tokens += in_tok;
                     total_output_tokens += out_tok;
 
                     let mut card = card;
-                    card.fields.insert(task.field.clone(), Value::String(value));
+                    for (key, value) in updates {
+                        card.fields.insert(key, Value::String(value));
+                    }
                     next_cards.push(card);
                 }
                 Err(e) => {
                     on_progress(&format!(
-                        "  Field task failed for card {}: {e}. Discarding.",
+                        "  Post-process failed for card {}: {e}. Discarding.",
                         idx + 1
                     ));
                 }
@@ -144,12 +157,12 @@ pub fn run_field_tasks(
 
     if total_cost > 0.0 {
         on_progress(&format!(
-            "  Field task cost: {}",
+            "  Post-process cost: {}",
             pricing::format_cost(total_cost)
         ));
     }
 
-    Ok(FieldTaskResult {
+    Ok(PostProcessResult {
         cards: current_cards,
         cost: total_cost,
         input_tokens: total_input_tokens,
@@ -157,16 +170,20 @@ pub fn run_field_tasks(
     })
 }
 
-/// Run a single field task LLM call. Returns (value, input_tokens, output_tokens, cost).
-fn run_single_task(
+/// Run a single post-process LLM call.
+/// Returns (field_updates, input_tokens, output_tokens, cost).
+#[allow(clippy::too_many_arguments)]
+fn run_single(
     client: &LlmClient,
     model: &str,
     prompt: &str,
+    target: Option<&str>,
+    field_map_keys: &[String],
     temperature: Option<f64>,
     max_tokens: Option<u64>,
     retries: u32,
     logger: Option<&LlmLogger>,
-) -> Result<(String, u64, u64, f64), anyhow::Error> {
+) -> Result<(HashMap<String, String>, u64, u64, f64), anyhow::Error> {
     let mut last_error = String::new();
 
     for attempt in 0..=retries {
@@ -181,7 +198,7 @@ fn run_single_task(
                     logger.log(prompt, &result.content);
                 }
 
-                let value = extract_value(&result.content)?;
+                let updates = extract_updates(&result.content, target, field_map_keys)?;
 
                 let (in_tok, out_tok, cost) = result
                     .usage
@@ -194,7 +211,7 @@ fn run_single_task(
                     })
                     .unwrap_or((0, 0, 0.0));
 
-                return Ok((value, in_tok, out_tok, cost));
+                return Ok((updates, in_tok, out_tok, cost));
             }
             Err(e) => {
                 last_error = e.to_string();
@@ -205,45 +222,119 @@ fn run_single_task(
         }
     }
 
-    anyhow::bail!("Field task failed: {last_error}")
+    anyhow::bail!("Post-process failed: {last_error}")
 }
 
-/// Extract the value from the LLM response. Accepts either:
-/// - JSON object with a "value" key: `{"value": "..."}`
-/// - Plain text (fallback): the trimmed response content
-fn extract_value(content: &str) -> Result<String, anyhow::Error> {
+/// Extract field updates from the LLM response.
+///
+/// - With `target`: single-field mode. Accepts `{"value": "..."}` or plain text.
+/// - Without `target`: multi-field mode. Expects a JSON object whose keys must
+///   all exist in `field_map_keys`. Missing keys are fine (partial patch), but
+///   unknown keys are rejected.
+fn extract_updates(
+    content: &str,
+    target: Option<&str>,
+    field_map_keys: &[String],
+) -> Result<HashMap<String, String>, anyhow::Error> {
     let trimmed = content.trim();
+    let mut updates = HashMap::new();
 
-    // Try JSON first
-    if let Some(obj) = try_parse_json_object(trimmed)
-        && let Some(Value::String(v)) = obj.get("value")
-    {
-        return Ok(v.clone());
+    if let Some(target_field) = target {
+        // Single-field mode
+        if let Some(obj) = try_parse_json_object(trimmed)
+            && let Some(Value::String(v)) = obj.get("value")
+        {
+            updates.insert(target_field.to_string(), v.clone());
+        } else {
+            // Plain text fallback
+            updates.insert(target_field.to_string(), trimmed.to_string());
+        }
+    } else {
+        // Multi-field mode — must be a JSON object
+        let obj = try_parse_json_object(trimmed).ok_or_else(|| {
+            anyhow::anyhow!("Post-process expected JSON object but got plain text")
+        })?;
+
+        for (key, value) in &obj {
+            if !field_map_keys.contains(key) {
+                anyhow::bail!("Post-process returned unknown field '{key}'");
+            }
+            let text = match value {
+                Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            updates.insert(key.clone(), text);
+        }
+
+        if updates.is_empty() {
+            anyhow::bail!("Post-process returned empty JSON object");
+        }
     }
 
-    // Fall back to plain text
-    Ok(trimmed.to_string())
+    Ok(updates)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn keys() -> Vec<String> {
+        vec![
+            "front".into(),
+            "kanji".into(),
+            "read".into(),
+            "context".into(),
+        ]
+    }
+
     #[test]
-    fn extract_json_value() {
+    fn single_target_json_value() {
         let content = r#"{"value": "何[なに]か あったら"}"#;
-        assert_eq!(extract_value(content).unwrap(), "何[なに]か あったら");
+        let updates = extract_updates(content, Some("read"), &keys()).unwrap();
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates["read"], "何[なに]か あったら");
     }
 
     #[test]
-    fn extract_plain_text_fallback() {
+    fn single_target_plain_text() {
         let content = "何[なに]か あったら";
-        assert_eq!(extract_value(content).unwrap(), "何[なに]か あったら");
+        let updates = extract_updates(content, Some("read"), &keys()).unwrap();
+        assert_eq!(updates["read"], "何[なに]か あったら");
     }
 
     #[test]
-    fn extract_json_with_whitespace() {
+    fn multi_field_json() {
+        let content = r#"{"read": "何[なに]か", "context": "Casual"}"#;
+        let updates = extract_updates(content, None, &keys()).unwrap();
+        assert_eq!(updates.len(), 2);
+        assert_eq!(updates["read"], "何[なに]か");
+        assert_eq!(updates["context"], "Casual");
+    }
+
+    #[test]
+    fn multi_field_partial_patch() {
+        let content = r#"{"read": "test"}"#;
+        let updates = extract_updates(content, None, &keys()).unwrap();
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates["read"], "test");
+    }
+
+    #[test]
+    fn multi_field_unknown_key_rejected() {
+        let content = r#"{"read": "test", "bogus": "bad"}"#;
+        assert!(extract_updates(content, None, &keys()).is_err());
+    }
+
+    #[test]
+    fn multi_field_plain_text_rejected() {
+        let content = "just some text";
+        assert!(extract_updates(content, None, &keys()).is_err());
+    }
+
+    #[test]
+    fn single_target_with_whitespace() {
         let content = r#"  {"value": "test"}  "#;
-        assert_eq!(extract_value(content).unwrap(), "test");
+        let updates = extract_updates(content, Some("read"), &keys()).unwrap();
+        assert_eq!(updates["read"], "test");
     }
 }

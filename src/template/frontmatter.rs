@@ -12,7 +12,7 @@ pub struct Frontmatter {
     #[serde(default)]
     pub quality_check: Option<QualityCheckConfig>,
     #[serde(default)]
-    pub field_tasks: Vec<FieldTaskConfig>,
+    pub post_process: Vec<PostProcessConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,8 +24,11 @@ pub struct QualityCheckConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FieldTaskConfig {
-    pub field: String,
+pub struct PostProcessConfig {
+    /// Target field to update. If set, accepts plain text or `{"value": "..."}`.
+    /// If omitted, expects a JSON object whose keys are merged into the card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
     pub prompt: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
@@ -75,17 +78,23 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
         ));
     }
 
-    for task in &frontmatter.field_tasks {
-        if task.field.is_empty() || task.prompt.is_empty() {
+    for task in &frontmatter.post_process {
+        if task.prompt.is_empty() {
             return Err(TemplateError::InvalidFrontmatter(
-                "each fieldTask requires both field and prompt".into(),
+                "each post_process entry requires a prompt".into(),
             ));
         }
-        if !frontmatter.field_map.contains_key(&task.field) {
-            return Err(TemplateError::InvalidFrontmatter(format!(
-                "fieldTask target '{}' must be a key in fieldMap",
-                task.field
-            )));
+        if let Some(ref target) = task.target {
+            if target.is_empty() {
+                return Err(TemplateError::InvalidFrontmatter(
+                    "post_process target must not be empty".into(),
+                ));
+            }
+            if !frontmatter.field_map.contains_key(target) {
+                return Err(TemplateError::InvalidFrontmatter(format!(
+                    "post_process target '{target}' must be a key in field_map",
+                )));
+            }
         }
     }
 
@@ -140,35 +149,53 @@ body";
     }
 
     #[test]
-    fn parse_with_field_tasks() {
+    fn parse_with_post_process_target() {
         let content = "---
 deck: Test
-noteType: Basic
-fieldMap:
+note_type: Basic
+field_map:
   front: Front
   read: Reading
-fieldTasks:
-  - field: read
+post_process:
+  - target: read
     prompt: Fix {front}
 ---
 
 body";
         let parsed = parse_prompt_file(content).unwrap();
-        assert_eq!(parsed.frontmatter.field_tasks.len(), 1);
-        let task = &parsed.frontmatter.field_tasks[0];
-        assert_eq!(task.field, "read");
+        assert_eq!(parsed.frontmatter.post_process.len(), 1);
+        let task = &parsed.frontmatter.post_process[0];
+        assert_eq!(task.target.as_deref(), Some("read"));
         assert_eq!(task.prompt, "Fix {front}");
     }
 
     #[test]
-    fn field_task_unknown_field() {
+    fn parse_with_post_process_no_target() {
         let content = "---
 deck: Test
-noteType: Basic
-fieldMap:
+note_type: Basic
+field_map:
   front: Front
-fieldTasks:
-  - field: nonexistent
+  read: Reading
+post_process:
+  - prompt: Return JSON with read and front
+---
+
+body";
+        let parsed = parse_prompt_file(content).unwrap();
+        assert_eq!(parsed.frontmatter.post_process.len(), 1);
+        assert!(parsed.frontmatter.post_process[0].target.is_none());
+    }
+
+    #[test]
+    fn post_process_unknown_target() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+post_process:
+  - target: nonexistent
     prompt: Fix it
 ---
 
@@ -177,14 +204,14 @@ body";
     }
 
     #[test]
-    fn field_task_empty_prompt() {
+    fn post_process_empty_prompt() {
         let content = "---
 deck: Test
-noteType: Basic
-fieldMap:
+note_type: Basic
+field_map:
   front: Front
-fieldTasks:
-  - field: front
+post_process:
+  - target: front
     prompt: ''
 ---
 
