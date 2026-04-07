@@ -1046,8 +1046,16 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
                 Style::default()
             };
 
+            // Keep checkbox un-bolded so Nerd Font glyphs render at correct size
+            let checkbox_style = if i == state.cursor {
+                Style::default()
+                    .fg(THEME.highlight_fg)
+                    .bg(THEME.highlight_bg)
+            } else {
+                style
+            };
             ListItem::new(Line::from(vec![
-                Span::styled(checkbox, style),
+                Span::styled(checkbox, checkbox_style),
                 Span::styled(format!("{label}{dup_note}"), style),
             ]))
         })
