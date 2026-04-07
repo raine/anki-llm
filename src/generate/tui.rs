@@ -19,6 +19,7 @@ use super::line_input::LineInput;
 use crate::cli::GenerateArgs;
 use crate::config::store::read_config;
 use crate::llm::pricing;
+use crate::llm::provider::available_models;
 
 use super::cards::ValidatedCard;
 use super::quality::FlaggedCard;
@@ -48,9 +49,10 @@ pub enum BackendEvent {
         output_tokens: u64,
         cost: f64,
     },
-    RunDone(String),  // single run finished successfully
-    RunError(String), // single run failed (can retry with new term)
-    Fatal(String),    // session-level error (must exit)
+    RunDone(String),          // single run finished successfully
+    RunError(String),         // single run failed (can retry with new term)
+    ModelChangeError(String), // model switch failed
+    Fatal(String),            // session-level error (must exit)
 }
 
 pub enum WorkerCommand {
@@ -58,6 +60,7 @@ pub enum WorkerCommand {
     Refresh,       // generate more cards for the same term
     Selection(Vec<usize>),
     Review(Vec<bool>), // true = keep, false = discard
+    SetModel(String),  // change model between runs
     Cancel,            // abandon current run, go back to input
     Quit,
 }
@@ -263,6 +266,45 @@ impl ReviewState {
 
     fn is_done(&self) -> bool {
         self.cursor >= self.flagged.len()
+    }
+}
+
+struct ModelPickerState {
+    models: Vec<String>,
+    cursor: usize,
+    list_state: ListState,
+}
+
+impl ModelPickerState {
+    fn new(models: Vec<String>, current_model: Option<&str>) -> Self {
+        let cursor = current_model
+            .and_then(|m| models.iter().position(|s| s == m))
+            .unwrap_or(0);
+        let mut list_state = ListState::default();
+        list_state.select(Some(cursor));
+        Self {
+            models,
+            cursor,
+            list_state,
+        }
+    }
+
+    fn move_up(&mut self) {
+        if self.cursor > 0 {
+            self.cursor -= 1;
+            self.list_state.select(Some(self.cursor));
+        }
+    }
+
+    fn move_down(&mut self) {
+        if self.cursor + 1 < self.models.len() {
+            self.cursor += 1;
+            self.list_state.select(Some(self.cursor));
+        }
+    }
+
+    fn selected(&self) -> Option<&str> {
+        self.models.get(self.cursor).map(|s| s.as_str())
     }
 }
 
@@ -491,6 +533,7 @@ struct App {
     /// True when the user explicitly pressed q/Ctrl-C (as opposed to natural Done/Error exit).
     user_quit: bool,
     show_help: bool,
+    model_picker: Option<ModelPickerState>,
     /// Last term submitted, for retry.
     last_term: Option<String>,
     /// True after a Fatal error — worker is dead, no new runs possible.
@@ -535,6 +578,7 @@ impl App {
             should_quit: false,
             user_quit: false,
             show_help: false,
+            model_picker: None,
             last_term,
             is_fatal: false,
             glyphs,
@@ -620,6 +664,9 @@ impl App {
             BackendEvent::RunError(msg) => {
                 self.mode = AppMode::Error(msg);
             }
+            BackendEvent::ModelChangeError(msg) => {
+                self.logs.push(format!("Model change failed: {msg}"));
+            }
             BackendEvent::Fatal(msg) => {
                 // Mark the currently-running step as failed so the spinner
                 // is replaced with the ✗ icon.
@@ -636,6 +683,32 @@ impl App {
     }
 
     fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
+        // Model picker overlay intercepts all keys when visible
+        if let Some(ref mut picker) = self.model_picker {
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => picker.move_up(),
+                KeyCode::Down | KeyCode::Char('j') => picker.move_down(),
+                KeyCode::Enter => {
+                    if let Some(model) = picker.selected().map(|s| s.to_string()) {
+                        let changed = self
+                            .session_info
+                            .as_ref()
+                            .map(|s| s.model != model)
+                            .unwrap_or(true);
+                        if changed {
+                            self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
+                        }
+                    }
+                    self.model_picker = None;
+                }
+                KeyCode::Esc => {
+                    self.model_picker = None;
+                }
+                _ => {}
+            }
+            return;
+        }
+
         // Help overlay intercepts all keys when visible
         if self.show_help {
             match key.code {
@@ -751,6 +824,15 @@ impl App {
                     let text = entry.to_string();
                     let len = text.chars().count();
                     *input = LineInput::new(text).with_cursor(len);
+                }
+            }
+            KeyCode::Tab => {
+                let models = available_models();
+                if !models.is_empty() {
+                    let current = self.session_info.as_ref().map(|s| s.model.as_str());
+                    let model_strings: Vec<String> =
+                        models.into_iter().map(|s| s.to_string()).collect();
+                    self.model_picker = Some(ModelPickerState::new(model_strings, current));
                 }
             }
             KeyCode::Enter => {
@@ -930,12 +1012,17 @@ fn draw(frame: &mut Frame, app: &App) {
     if app.show_help {
         draw_help_overlay(frame, app);
     }
+
+    if let Some(picker) = &app.model_picker {
+        draw_model_picker(frame, picker);
+    }
 }
 
 fn draw_help_overlay(frame: &mut Frame, app: &App) {
     let shortcuts: Vec<(&str, &str)> = match &app.mode {
         AppMode::Input(_) => vec![
             ("Enter", "Generate"),
+            ("Tab", "Model"),
             ("↑ / ↓", "History"),
             ("Esc", "Clear"),
             ("Ctrl+C", "Quit"),
@@ -1035,6 +1122,62 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
 
     frame.render_widget(Clear, rect);
     frame.render_widget(table, rect);
+}
+
+fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
+    let row_count = picker.models.len() as u16;
+    let height = (row_count + 2).min(20); // borders
+    let width: u16 = 32;
+
+    let area = frame.area();
+    let rect = Rect::new(
+        area.width.saturating_sub(width) / 2,
+        area.height.saturating_sub(height) / 2,
+        width.min(area.width),
+        height.min(area.height),
+    );
+
+    let block = Block::bordered()
+        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_style(Style::default().fg(THEME.help_border))
+        .title(Line::from(vec![
+            Span::styled(" ", Style::default()),
+            Span::styled(
+                "Model",
+                Style::default()
+                    .fg(THEME.header)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" ", Style::default()),
+        ]))
+        .title_bottom(Line::from(vec![
+            Span::styled(" ", Style::default()),
+            Span::styled("Enter", Style::default().fg(THEME.dimmed)),
+            Span::styled(" select ", Style::default().fg(THEME.help_muted)),
+            Span::styled("Esc", Style::default().fg(THEME.dimmed)),
+            Span::styled(" cancel ", Style::default().fg(THEME.help_muted)),
+        ]));
+
+    let items: Vec<ListItem> = picker
+        .models
+        .iter()
+        .map(|m| ListItem::new(Span::styled(m.as_str(), Style::default().fg(THEME.text))))
+        .collect();
+
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(
+            Style::default()
+                .fg(THEME.highlight_fg)
+                .bg(THEME.highlight_bg)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▸ ");
+
+    let mut list_state = picker.list_state;
+
+    frame.render_widget(Clear, rect);
+    frame.render_stateful_widget(list, rect, &mut list_state);
 }
 
 fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
@@ -1167,6 +1310,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     match &app.mode {
         AppMode::Input(_) => {
             s.extend(footer_cmd("Enter", "Generate"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("Tab", "Model"));
             s.push(footer_pipe());
             s.extend(footer_cmd("↑↓", "History"));
             s.push(footer_pipe());

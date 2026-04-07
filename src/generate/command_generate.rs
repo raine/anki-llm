@@ -152,7 +152,7 @@ pub fn run_pipeline(
     let field_map_keys: Vec<String> = frontmatter.field_map.keys().cloned().collect();
     let client = LlmClient::from_config(&runtime);
 
-    let session = PreparedSession {
+    let mut session = PreparedSession {
         frontmatter,
         prompt_body: parsed.body,
         validation,
@@ -195,6 +195,31 @@ pub fn run_pipeline(
                     Err(e) => {
                         // RunError already sent inside execute_pipeline_for_term
                         log!("Pipeline error: {e}");
+                    }
+                }
+            }
+            Ok(WorkerCommand::SetModel(model)) => {
+                match build_runtime_config(RuntimeConfigArgs {
+                    model: Some(&model),
+                    batch_size: None,
+                    max_tokens: args.max_tokens,
+                    temperature: args.temperature,
+                    retries: args.retries,
+                    dry_run: false,
+                }) {
+                    Ok(new_runtime) => {
+                        session.client = LlmClient::from_config(&new_runtime);
+                        session.runtime = new_runtime;
+                        log!("Switched model to {}", session.runtime.model);
+                        tx.send(BackendEvent::SessionReady(SessionInfo {
+                            deck: session.frontmatter.deck.clone(),
+                            note_type: session.frontmatter.note_type.clone(),
+                            model: session.runtime.model.clone(),
+                        }))
+                        .ok();
+                    }
+                    Err(e) => {
+                        tx.send(BackendEvent::ModelChangeError(format!("{e}"))).ok();
                     }
                 }
             }

@@ -31,6 +31,16 @@ pub fn api_key_for_model(model: &str) -> Option<String> {
     env::var(config.api_key_env).ok()
 }
 
+/// Returns models from `SUPPORTED_MODELS` for which an API key is available.
+pub fn available_models() -> Vec<&'static str> {
+    use crate::llm::pricing::SUPPORTED_MODELS;
+    SUPPORTED_MODELS
+        .iter()
+        .copied()
+        .filter(|model| api_key_for_model(model).is_some())
+        .collect()
+}
+
 /// Resolve which model to use.
 /// Priority: CLI flag → config file → env-var auto-detect.
 pub fn resolve_model(user_model: Option<&str>) -> String {
