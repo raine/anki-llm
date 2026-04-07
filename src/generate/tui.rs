@@ -246,6 +246,49 @@ impl ReviewState {
 
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+// ---------------------------------------------------------------------------
+// Theme palette (matches workmux default dark)
+// ---------------------------------------------------------------------------
+
+struct Palette {
+    dimmed: Color,
+    text: Color,
+    border: Color,
+    info: Color,
+    success: Color,
+    warning: Color,
+    danger: Color,
+    highlight_bg: Color,
+    highlight_fg: Color,
+}
+
+const THEME: Palette = Palette {
+    dimmed: Color::Rgb(108, 112, 134),
+    text: Color::Rgb(205, 214, 244),
+    border: Color::Rgb(58, 74, 94),
+    info: Color::Rgb(120, 225, 213),
+    success: Color::Rgb(166, 218, 149),
+    warning: Color::Rgb(249, 226, 175),
+    danger: Color::Rgb(237, 135, 150),
+    highlight_bg: Color::Rgb(40, 48, 62),
+    highlight_fg: Color::Rgb(244, 248, 255),
+};
+
+/// Build a footer span pair: key in dimmed, label in bold text.
+fn footer_cmd(key: &str, label: &str) -> Vec<Span<'static>> {
+    vec![
+        Span::styled(key.to_string(), Style::default().fg(THEME.dimmed)),
+        Span::styled(
+            format!(" {label}"),
+            Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
+        ),
+    ]
+}
+
+fn footer_pipe() -> Span<'static> {
+    Span::styled(" \u{2502} ", Style::default().fg(THEME.border))
+}
+
 struct App {
     mode: AppMode,
     session_info: Option<SessionInfo>,
@@ -585,7 +628,9 @@ fn draw(frame: &mut Frame, app: &App) {
 }
 
 fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
-    let block = Block::default().borders(Borders::RIGHT);
+    let block = Block::default()
+        .borders(Borders::RIGHT)
+        .border_style(Style::default().fg(THEME.border));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -601,12 +646,12 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
     for (step, status) in &app.steps {
         let is_interactive = matches!(step, PipelineStep::Select | PipelineStep::QualityCheck);
         let (icon, style): (&str, Style) = match status {
-            StepStatus::Pending => ("  ", Style::default().fg(Color::DarkGray)),
-            StepStatus::Running(_) if is_interactive => ("▸ ", Style::default().fg(Color::Cyan)),
-            StepStatus::Running(_) => (&spinner_frame, Style::default().fg(Color::Cyan)),
-            StepStatus::Done(_) => ("✓ ", Style::default().fg(Color::Green)),
-            StepStatus::Skipped => ("- ", Style::default().fg(Color::DarkGray)),
-            StepStatus::Error(_) => ("✗ ", Style::default().fg(Color::Red)),
+            StepStatus::Pending => ("  ", Style::default().fg(THEME.dimmed)),
+            StepStatus::Running(_) if is_interactive => ("▸ ", Style::default().fg(THEME.info)),
+            StepStatus::Running(_) => (&spinner_frame, Style::default().fg(THEME.info)),
+            StepStatus::Done(_) => ("✓ ", Style::default().fg(THEME.success)),
+            StepStatus::Skipped => ("- ", Style::default().fg(THEME.dimmed)),
+            StepStatus::Error(_) => ("✗ ", Style::default().fg(THEME.danger)),
         };
 
         let detail = match status {
@@ -623,7 +668,7 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
                 step_lines.push(Line::from(vec![
                     Span::styled(icon, style),
                     Span::styled(step.label(), style),
-                    Span::styled(format!("  {d}"), Style::default().fg(Color::DarkGray)),
+                    Span::styled(format!("  {d}"), Style::default().fg(THEME.dimmed)),
                 ]));
             } else {
                 step_lines.push(Line::from(vec![
@@ -632,7 +677,7 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
                 ]));
                 step_lines.push(Line::from(Span::styled(
                     format!("    {d}"),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(THEME.dimmed),
                 )));
             }
         } else {
@@ -659,15 +704,15 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
     if let Some(info) = &app.session_info {
         let lines = vec![
             Line::from(vec![
-                Span::styled("Deck  ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Deck  ", Style::default().fg(THEME.dimmed)),
                 Span::raw(&info.deck),
             ]),
             Line::from(vec![
-                Span::styled("Note  ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Note  ", Style::default().fg(THEME.dimmed)),
                 Span::raw(&info.note_type),
             ]),
             Line::from(vec![
-                Span::styled("Model ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Model ", Style::default().fg(THEME.dimmed)),
                 Span::raw(&info.model),
             ]),
         ];
@@ -683,7 +728,7 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
                 pricing::format_cost(total),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(THEME.dimmed),
             ))),
             chunks[3],
         );
@@ -691,36 +736,74 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let hints = match &app.mode {
-        AppMode::Input(_) => " [Enter] generate  [q] quit".to_string(),
-        AppMode::Running => " [Esc] cancel  [q] quit".to_string(),
+    let mut s: Vec<Span<'static>> = vec![Span::raw(" ")];
+
+    match &app.mode {
+        AppMode::Input(_) => {
+            s.extend(footer_cmd("Enter", "Generate"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("q", "Quit"));
+        }
+        AppMode::Running => {
+            s.extend(footer_cmd("Esc", "Cancel"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("q", "Quit"));
+        }
         AppMode::Selecting(state) => {
             let n = state.selected.len();
+            s.extend(footer_cmd("Space", "Toggle"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("a", "All"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("n", "None"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("c", "Copy"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("Enter", "Confirm"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("Esc", "Back"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("q", "Quit"));
+            s.push(Span::styled(
+                format!("  ({n} selected)"),
+                Style::default().fg(THEME.dimmed),
+            ));
             let copied = state
                 .copied_at
                 .is_some_and(|t| app.tick.wrapping_sub(t) < 20);
-            let flash = if copied { "  Copied!" } else { "" };
-            format!(
-                " [Space] toggle  [a] all  [n] none  [c] copy  [Enter] confirm  [Esc] back  [q] quit  ({n} selected){flash}"
-            )
+            if copied {
+                s.push(Span::styled(
+                    "  Copied!",
+                    Style::default().fg(THEME.success),
+                ));
+            }
         }
         AppMode::Reviewing(state) => {
             let cur = (state.cursor + 1).min(state.flagged.len());
             let total = state.flagged.len();
-            format!(
-                " Flagged {cur}/{total}  [k] keep  [d] discard  [a] keep all  [x] discard all  [q] quit"
-            )
+            s.push(Span::styled(
+                format!("Flagged {cur}/{total}"),
+                Style::default().fg(THEME.warning),
+            ));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("k", "Keep"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("d", "Discard"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("a", "Keep all"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("x", "Discard all"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("q", "Quit"));
         }
-        AppMode::Done(_) | AppMode::Error(_) => " [n] new term  [any key] quit".to_string(),
-    };
+        AppMode::Done(_) | AppMode::Error(_) => {
+            s.extend(footer_cmd("n", "New term"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("any key", "Quit"));
+        }
+    }
 
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            hints,
-            Style::default().fg(Color::DarkGray),
-        ))),
-        area,
-    );
+    frame.render_widget(Paragraph::new(Line::from(s)), area);
 }
 
 fn draw_input(frame: &mut Frame, text: &str, area: Rect) {
@@ -754,7 +837,7 @@ fn draw_input(frame: &mut Frame, text: &str, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Enter term ")
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(THEME.info));
 
     let para = Paragraph::new(text).block(block);
     frame.render_widget(para, input_area);
@@ -778,7 +861,10 @@ fn draw_log_panel(frame: &mut Frame, app: &App, area: Rect) {
         .collect::<Vec<_>>()
         .into();
 
-    let log_block = Block::default().borders(Borders::ALL).title(" Log ");
+    let log_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Log ")
+        .border_style(Style::default().fg(THEME.border));
     let log_para = Paragraph::new(log_text)
         .block(log_block)
         .wrap(Wrap { trim: false });
@@ -817,13 +903,13 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
 
             let style = if i == state.cursor {
                 Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::White)
+                    .fg(THEME.highlight_fg)
+                    .bg(THEME.highlight_bg)
                     .add_modifier(Modifier::BOLD)
             } else if card.is_duplicate {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(THEME.dimmed)
             } else if state.selected.contains(&i) {
-                Style::default().fg(Color::Green)
+                Style::default().fg(THEME.success)
             } else {
                 Style::default()
             };
@@ -836,7 +922,11 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
         .collect();
 
     let mut list_state = state.list_state;
-    let list = List::new(list_items).block(Block::default().borders(Borders::BOTTOM));
+    let list = List::new(list_items).block(
+        Block::default()
+            .borders(Borders::BOTTOM)
+            .border_style(Style::default().fg(THEME.border)),
+    );
     frame.render_stateful_widget(list, chunks[0], &mut list_state);
 
     // Detail pane for focused card
@@ -846,7 +936,7 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
         if card.is_duplicate {
             lines.push(Line::from(Span::styled(
                 "  ⚠ Already exists in Anki",
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(THEME.warning),
             )));
             lines.push(Line::from(""));
         }
@@ -854,9 +944,7 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
         for (name, value) in &card.raw_anki_fields {
             lines.push(Line::from(Span::styled(
                 name.clone(),
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
             )));
             lines.extend(super::selector::markdown_to_lines(value, "  "));
             lines.push(Line::from(""));
@@ -882,7 +970,7 @@ fn draw_reviewing(frame: &mut Frame, state: &ReviewState, area: Rect) {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(" Reason ")
-                    .border_style(Style::default().fg(Color::Yellow)),
+                    .border_style(Style::default().fg(THEME.warning)),
             )
             .wrap(Wrap { trim: false });
         frame.render_widget(reason_para, chunks[0]);
@@ -892,16 +980,19 @@ fn draw_reviewing(frame: &mut Frame, state: &ReviewState, area: Rect) {
         for (name, value) in &flagged.card.raw_anki_fields {
             lines.push(Line::from(Span::styled(
                 name.clone(),
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
             )));
             lines.extend(super::selector::markdown_to_lines(value, "  "));
             lines.push(Line::from(""));
         }
 
         let detail_para = Paragraph::new(Text::from(lines))
-            .block(Block::default().borders(Borders::ALL).title(" Card "))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Card ")
+                    .border_style(Style::default().fg(THEME.border)),
+            )
             .wrap(Wrap { trim: false })
             .scroll((state.detail_scroll, 0));
         frame.render_widget(detail_para, chunks[1]);
@@ -913,7 +1004,7 @@ fn draw_done(frame: &mut Frame, app: &App, msg: &str, area: Rect) {
         Line::from(Span::styled(
             "✓ Done",
             Style::default()
-                .fg(Color::Green)
+                .fg(THEME.success)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
@@ -944,10 +1035,12 @@ fn draw_error(frame: &mut Frame, msg: &str, area: Rect) {
     let lines = vec![
         Line::from(Span::styled(
             "✗ Error",
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(THEME.danger)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
-        Line::from(Span::styled(msg, Style::default().fg(Color::Red))),
+        Line::from(Span::styled(msg, Style::default().fg(THEME.danger))),
     ];
 
     let para = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
