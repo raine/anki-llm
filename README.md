@@ -466,8 +466,12 @@ card generation.
 Generates multiple new Anki card examples for a given term, lets you review and
 select which ones to keep, and adds them directly to your deck.
 
+The command launches an interactive terminal UI. You can also omit `<term>` to
+enter it in the TUI directly, which lets you generate cards for multiple terms
+in a single session.
+
 - `<term>`: The word or phrase to generate cards for (must be in quotes if it
-  contains spaces).
+  contains spaces). Optional — can be entered in the TUI.
 
 **Required options:**
 
@@ -491,6 +495,39 @@ select which ones to keep, and adds them directly to your deck.
 - `--copy`: Copy the LLM prompt to clipboard and wait for manual response
   pasting. Useful when you don't have API access and want to use a browser LLM
   interface like ChatGPT.
+
+#### Interactive TUI
+
+The generate command runs in a full-screen terminal UI with a sidebar showing
+pipeline progress and session info (deck, note type, model, cost) alongside the
+main content area. Press `?` at any time to see available keyboard shortcuts for
+the current mode.
+
+**Input** — Type or paste a term to generate cards for. Use `↑`/`↓` to browse
+previous terms (history is persisted across sessions). Press `Enter` to start
+generation. After a run completes, you're returned to the input to generate
+cards for another term.
+
+**Generation** — The sidebar tracks each pipeline step (load prompt, validate,
+generate, post-process, check duplicates, etc.) with real-time status. The main
+area shows a scrollable log. You can cancel with `Esc` to go back to input.
+
+**Card selection** — Browse generated cards with a list on the left and a detail
+pane on the right. Toggle cards with `Space`, select all/none with `a`/`n`.
+Duplicates are flagged with `[dup]` and cannot be selected. Press `r` to
+generate more cards for the same term without losing your current selection.
+Press `c` to copy the focused card to clipboard. Confirm with `Enter`.
+
+**Quality check review** — If quality checking is enabled, flagged cards are
+presented one at a time with the LLM's reasoning. Keep (`k`/`y`/`Enter`) or
+discard (`d`/`n`) each card, keep/discard all remaining with `a`/`x`, or go
+back to reconsider with `u`.
+
+**Error recovery** — On error, press `r` to retry the same term or `n` to enter
+a new one.
+
+**Cost tracking** — Token usage and estimated cost are displayed in the sidebar,
+accumulated across the entire session.
 
 #### **Understanding the Prompt File**
 
@@ -723,16 +760,6 @@ anki-llm generate "今日" -p japanese-vocab-prompt.md --copy
 ```
 
 <img src="meta/generate.webp" alt="Interactive card selection in terminal" width="450">
-
-**Key features:**
-
-- ✅ **Interactive selection**: Review and choose which generated cards to keep.
-- ✅ **Duplicate detection**: Automatically flags cards that may already exist
-  in your deck.
-- ✅ **Export option**: Save generated cards to YAML/CSV for review before
-  importing.
-- ✅ **Highly customizable**: Full control over card generation via the prompt
-  file.
 
 ---
 
