@@ -994,7 +994,7 @@ fn draw_log_panel(frame: &mut Frame, app: &App, area: Rect) {
         .into();
 
     let log_block = Block::default()
-        .borders(Borders::ALL)
+        .borders(Borders::ALL.difference(Borders::LEFT))
         .title(" Log ")
         .border_style(Style::default().fg(THEME.border));
     let log_para = Paragraph::new(log_text)
