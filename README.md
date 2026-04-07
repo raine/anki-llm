@@ -510,6 +510,9 @@ The frontmatter is a YAML block at the top of the file enclosed by `---`.
   using a separate LLM call. The verification criteria is fully customizable via
   a prompt template. Added automatically by `generate-init` when you enable this
   feature.
+- `post_process` (optional): Runs focused sub-LLM calls to rewrite or fix
+  specific fields after generation. Useful for tasks like formatting Japanese
+  furigana readings that are hard to get right in the main prompt.
 
 ##### Optional: Quality Check
 
@@ -562,6 +565,59 @@ Each selected card requires one additional API call for the quality check. You
 can can use a cheaper model (like `gpt-4o-mini`) for quality checks by adding a
 `model` field to the `quality_check` section. If not specified, it will use the
 same model as card generation.
+
+##### Optional: Post-Processing
+
+You can add a `post_process` section to your prompt file frontmatter to run
+focused sub-LLM calls on generated cards. This is useful when a specific field
+requires precise formatting that's hard to get right in the main generation
+prompt.
+
+Post-processing runs after card generation but before duplicate checking and
+card selection, so you see corrected fields when choosing which cards to keep.
+
+**Single-field mode:**
+
+Use `target` to rewrite one field. The LLM response is used as the new field
+value directly (plain text).
+
+```yaml
+post_process:
+  - target: read
+    model: gpt-4o-mini # Optional: use a different model
+    prompt: |
+      You are a Japanese linguistics expert.
+      Segment this sentence with correct bunsetsu spacing and Kanji[reading] annotations.
+      Sentence: {kanji}
+      English meaning: {front}
+      Output only the formatted reading, nothing else.
+```
+
+**Multi-field mode:**
+
+Omit `target` to update multiple fields in one LLM call. The response must be a
+JSON object — its keys are merged into the card as a partial patch. Only the
+returned keys are updated; other fields stay unchanged.
+
+```yaml
+post_process:
+  - prompt: |
+      Given this Japanese sentence: {kanji}
+      Return a JSON object with:
+      - "read": the sentence with furigana and bunsetsu spacing
+      - "context": who would say this and when
+      Respond with JSON only: {"read": "...", "context": "..."}
+```
+
+**Key details:**
+
+- All card fields are available as `{placeholders}` in the prompt (e.g.
+  `{kanji}`, `{front}`, `{read}`, `{expl}`, `{context}`).
+- Multiple post-process entries run in order. Later entries see results from
+  earlier ones.
+- Cards that fail a post-process step are discarded.
+- Each entry can specify its own `model`.
+- Not supported in `--copy` mode.
 
 **Prompt Body**
 
