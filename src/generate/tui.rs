@@ -1,4 +1,7 @@
 use std::collections::BTreeSet;
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -289,6 +292,104 @@ fn footer_pipe() -> Span<'static> {
     Span::styled(" \u{2502} ", Style::default().fg(THEME.border))
 }
 
+// ---------------------------------------------------------------------------
+// Input history
+// ---------------------------------------------------------------------------
+
+const HISTORY_MAX: usize = 100;
+
+struct InputHistory {
+    entries: Vec<String>,
+    /// Index into entries (0 = most recent). `None` = not browsing history.
+    cursor: Option<usize>,
+    /// Text the user was typing before they started browsing history.
+    stashed: String,
+}
+
+impl InputHistory {
+    fn load() -> Self {
+        let entries = Self::path()
+            .and_then(|p| fs::read_to_string(p).ok())
+            .map(|s| s.lines().rev().map(String::from).collect::<Vec<_>>())
+            .unwrap_or_default();
+        InputHistory {
+            entries,
+            cursor: None,
+            stashed: String::new(),
+        }
+    }
+
+    fn path() -> Option<PathBuf> {
+        home::home_dir().map(|h| {
+            h.join(".local")
+                .join("state")
+                .join("anki-llm")
+                .join("history")
+        })
+    }
+
+    fn push(&mut self, term: &str) {
+        // Don't add duplicate of most recent entry
+        if self.entries.first().is_some_and(|e| e == term) {
+            return;
+        }
+        self.entries.insert(0, term.to_string());
+        self.entries.truncate(HISTORY_MAX);
+        self.save();
+    }
+
+    fn save(&self) {
+        let Some(path) = Self::path() else { return };
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).ok();
+        }
+        // Write oldest-first so the file reads chronologically
+        if let Ok(mut f) = fs::File::create(&path) {
+            for entry in self.entries.iter().rev() {
+                let _ = writeln!(f, "{entry}");
+            }
+        }
+    }
+
+    /// Move up (older). Returns the history entry to show.
+    fn up(&mut self, current_text: &str) -> Option<&str> {
+        let next = match self.cursor {
+            None => {
+                self.stashed = current_text.to_string();
+                0
+            }
+            Some(i) => i + 1,
+        };
+        if next < self.entries.len() {
+            self.cursor = Some(next);
+            Some(&self.entries[next])
+        } else {
+            self.cursor
+                .and_then(|i| self.entries.get(i).map(|s| s.as_str()))
+        }
+    }
+
+    /// Move down (newer). Returns the text to show (history entry or stashed).
+    fn down(&mut self) -> &str {
+        match self.cursor {
+            None | Some(0) => {
+                self.cursor = None;
+                &self.stashed
+            }
+            Some(i) => {
+                let next = i - 1;
+                self.cursor = Some(next);
+                &self.entries[next]
+            }
+        }
+    }
+
+    fn reset_browse(&mut self) {
+        self.cursor = None;
+        self.stashed.clear();
+    }
+}
+
 struct App {
     mode: AppMode,
     session_info: Option<SessionInfo>,
@@ -308,6 +409,7 @@ struct App {
     should_quit: bool,
     /// True when the user explicitly pressed q/Ctrl-C (as opposed to natural Done/Error exit).
     user_quit: bool,
+    history: InputHistory,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
 }
@@ -342,6 +444,7 @@ impl App {
             pending_cancels: 0,
             should_quit: false,
             user_quit: false,
+            history: InputHistory::load(),
             backend_rx,
             worker_tx,
         }
@@ -479,13 +582,27 @@ impl App {
                 self.should_quit = true;
                 self.user_quit = true;
             }
-            KeyCode::Char(c) => text.push(c),
+            KeyCode::Char(c) => {
+                self.history.reset_browse();
+                text.push(c);
+            }
             KeyCode::Backspace => {
+                self.history.reset_browse();
                 text.pop();
+            }
+            KeyCode::Up => {
+                if let Some(entry) = self.history.up(text) {
+                    *text = entry.to_string();
+                }
+            }
+            KeyCode::Down => {
+                *text = self.history.down().to_string();
             }
             KeyCode::Enter => {
                 let term = text.trim().to_string();
                 if !term.is_empty() {
+                    self.history.push(&term);
+                    self.history.reset_browse();
                     self.mode = AppMode::Running;
                     self.worker_tx.send(WorkerCommand::Start(term)).ok();
                 }
@@ -741,6 +858,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     match &app.mode {
         AppMode::Input(_) => {
             s.extend(footer_cmd("Enter", "Generate"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("↑↓", "History"));
             s.push(footer_pipe());
             s.extend(footer_cmd("q", "Quit"));
         }
