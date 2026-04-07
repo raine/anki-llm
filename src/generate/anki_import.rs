@@ -1,5 +1,6 @@
 use crate::anki::client::AnkiClient;
 use crate::anki::schema::AddNoteParams;
+use crate::style::style;
 use crate::template::frontmatter::Frontmatter;
 
 use super::cards::ValidatedCard;
@@ -45,20 +46,27 @@ pub fn import_cards_to_anki(
     })
 }
 
-/// Report import results via a log callback.
-pub fn report_import_result(result: &ImportResult, deck_name: &str, on_log: &dyn Fn(&str)) {
+/// Print import results to stderr (legacy mode).
+pub fn report_import_result(result: &ImportResult, deck_name: &str) {
+    let s = style();
     if result.failures > 0 {
-        on_log(&format!(
-            "Added {} card(s), {} failed.",
-            result.successes, result.failures
-        ));
-        on_log("Some cards may have been duplicates or had invalid field values.");
+        eprintln!(
+            "\n  {} card(s) added, {} failed",
+            result.successes,
+            s.error_text(result.failures)
+        );
+        eprintln!(
+            "  {}",
+            s.muted("Some cards may have been duplicates or had invalid field values.")
+        );
     } else if result.successes > 0 {
-        on_log(&format!(
-            "Successfully added {} new note(s) to \"{}\"",
-            result.successes, deck_name
-        ));
+        eprintln!(
+            "\n  {} {} note(s) to {}",
+            s.success("Added"),
+            result.successes,
+            s.cyan(format!("\"{deck_name}\""))
+        );
     } else {
-        on_log("No cards were added to Anki.");
+        eprintln!("\n  No cards were added to Anki.");
     }
 }

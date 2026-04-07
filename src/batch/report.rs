@@ -1,4 +1,8 @@
 use crate::llm::pricing;
+use crate::style::style;
+
+/// Field key used to record processing errors on failed rows.
+pub const ERROR_FIELD: &str = "_error";
 
 /// Accumulated token counts across all processed rows.
 #[derive(Debug, Default, Clone)]
@@ -58,39 +62,44 @@ pub fn print_summary(
 ) {
     let total = succeeded + failed;
     let cost = pricing::calculate_cost(model, tokens.input, tokens.output);
+    let s = style();
 
-    eprintln!("\n{}", "=".repeat(60));
-    eprintln!("Processing complete");
-    eprintln!("{}", "=".repeat(60));
-    eprintln!("\nResults:");
-    eprintln!("  Processed: {total}");
-    eprintln!("  Succeeded: {succeeded}");
+    eprintln!("\n{}", s.dim("─".repeat(50)));
+    eprintln!("{}", s.bold("Summary"));
+    eprintln!("{}", s.dim("─".repeat(50)));
+
+    eprintln!("\n{}", s.bold("Results"));
+    eprintln!("  Processed  {total}");
+    eprintln!("  Succeeded  {}", s.success(succeeded));
     if failed > 0 {
-        eprintln!("  Failed:    {failed}");
+        eprintln!("  Failed     {}", s.error_text(failed));
     }
-    eprintln!("\nToken Usage:");
-    eprintln!("  Input tokens:  {}", tokens.input);
-    eprintln!("  Output tokens: {}", tokens.output);
-    eprintln!("  Total tokens:  {}", tokens.total());
-    eprintln!("\nCost:");
-    eprintln!("  Model: {model}");
+
+    eprintln!("\n{}", s.bold("Tokens"));
+    eprintln!("  Input      {}", tokens.input);
+    eprintln!("  Output     {}", tokens.output);
+    eprintln!("  Total      {}", tokens.total());
+
+    eprintln!("\n{}", s.bold("Cost"));
+    eprintln!("  Model      {model}");
     if let Some(p) = pricing::model_pricing(model) {
         eprintln!(
-            "  Input cost:  {} (${:.2}/M tokens)",
+            "  Input      {} {}",
             pricing::format_cost((tokens.input as f64 / 1_000_000.0) * p.input_cost_per_million),
-            p.input_cost_per_million
+            s.muted(format!("(${:.2}/M)", p.input_cost_per_million))
         );
         eprintln!(
-            "  Output cost: {} (${:.2}/M tokens)",
+            "  Output     {} {}",
             pricing::format_cost((tokens.output as f64 / 1_000_000.0) * p.output_cost_per_million),
-            p.output_cost_per_million
+            s.muted(format!("(${:.2}/M)", p.output_cost_per_million))
         );
     }
-    eprintln!("  Total cost:  {}", pricing::format_cost(cost));
-    eprintln!("\nPerformance:");
-    eprintln!("  Total time: {:.1}s", elapsed.as_secs_f64());
+    eprintln!("  Total      {}", s.accent(pricing::format_cost(cost)));
+
+    eprintln!("\n{}", s.bold("Performance"));
+    eprintln!("  Time       {:.1}s", elapsed.as_secs_f64());
     if total > 0 {
         let avg = elapsed.as_millis() as f64 / total as f64;
-        eprintln!("  Avg time per row: {avg:.0}ms");
+        eprintln!("  Avg/row    {avg:.0}ms");
     }
 }

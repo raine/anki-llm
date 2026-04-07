@@ -1,3 +1,8 @@
+## v2.0.2 (2026-04-06)
+
+- Improved terminal output with colors and better-styled progress bars
+- Card selector now shows full field content without truncation
+
 ## v2.0.0 (2026-04-06)
 
 - Rewrote the entire tool in Rust - single self-contained binary, no Node.js

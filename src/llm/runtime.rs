@@ -37,6 +37,12 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
         );
     }
 
+    if let Some(t) = args.temperature
+        && !(0.0..=2.0).contains(&t)
+    {
+        bail!("temperature must be between 0 and 2, got {t}");
+    }
+
     let api_key = if args.dry_run {
         "dry-run".to_string()
     } else {
@@ -76,6 +82,37 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_temperature_out_of_range() {
+        for bad in [-0.1, 2.1, -1.0, 100.0] {
+            let result = build_runtime_config(RuntimeConfigArgs {
+                model: Some("gpt-5-mini"),
+                batch_size: None,
+                max_tokens: None,
+                temperature: Some(bad),
+                retries: 0,
+                dry_run: true,
+            });
+            assert!(result.is_err(), "expected error for temperature={bad}");
+            assert!(result.unwrap_err().to_string().contains("temperature"));
+        }
+    }
+
+    #[test]
+    fn accepts_temperature_boundary_values() {
+        for ok in [0.0, 1.0, 2.0] {
+            let result = build_runtime_config(RuntimeConfigArgs {
+                model: Some("gpt-5-mini"),
+                batch_size: None,
+                max_tokens: None,
+                temperature: Some(ok),
+                retries: 0,
+                dry_run: true,
+            });
+            assert!(result.is_ok(), "expected Ok for temperature={ok}");
+        }
+    }
 
     #[test]
     fn rejects_unknown_model() {

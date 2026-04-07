@@ -12,6 +12,8 @@ use crate::llm::pricing;
 use crate::llm::runtime::{RuntimeConfig, RuntimeConfigArgs, build_runtime_config};
 use crate::template::frontmatter::{Frontmatter, parse_prompt_file};
 
+use crate::style::style;
+
 use super::anki_import::{import_cards_to_anki, report_import_result};
 use super::cards::{ValidatedCard, validate_cards};
 use super::exporter::export_cards;
@@ -680,41 +682,49 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         anyhow::bail!("Prompt is missing required placeholder: {{count}}");
     }
 
-    eprintln!("Loaded prompt for deck: {}", frontmatter.deck);
-    eprintln!("Note type: {}", frontmatter.note_type);
+    let s = style();
+    eprintln!("  {}  {}", s.muted("Deck     "), s.cyan(&frontmatter.deck));
+    eprintln!(
+        "  {}  {}",
+        s.muted("Note type"),
+        s.cyan(&frontmatter.note_type)
+    );
 
     // 2. Validate Anki assets
     let anki = AnkiClient::new();
-    eprintln!("\nValidating Anki configuration...");
     let validation = validate_anki_assets(&anki, &frontmatter)?;
     eprintln!(
-        "Note type fields: {}",
-        validation.note_type_fields.join(", ")
+        "  {}  {}",
+        s.muted("Fields   "),
+        s.muted(validation.note_type_fields.join(", "))
     );
 
     // 3. Build logger
     let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
 
-    // 4. Resolve LLM config
-    let runtime = build_runtime_config(RuntimeConfigArgs {
-        model: args.model.as_deref(),
-        batch_size: None,
-        max_tokens: args.max_tokens,
-        temperature: args.temperature,
-        retries: args.retries,
-        dry_run: false,
-    })?;
+    // 4. Resolve LLM config (skipped in --copy mode — no API key needed)
+    // dry_run: false because generate always calls the LLM when not in --copy
+    // mode (dry-run only skips the Anki import step). Passing dry_run: true
+    // would replace the API key with "dry-run" and cause HTTP 400.
+    let runtime = if !args.copy {
+        Some(build_runtime_config(RuntimeConfigArgs {
+            model: args.model.as_deref(),
+            batch_size: None,
+            max_tokens: args.max_tokens,
+            temperature: args.temperature,
+            retries: args.retries,
+            dry_run: false,
+        })?)
+    } else {
+        None
+    };
 
     // 5. Generate cards
     let field_map_keys: Vec<String> = frontmatter.field_map.keys().cloned().collect();
     let mut generation_cost = 0.0;
     let candidates: Vec<CardCandidate>;
 
-    let client = if args.copy {
-        None
-    } else {
-        Some(LlmClient::from_config(&runtime))
-    };
+    let client = runtime.as_ref().map(LlmClient::from_config);
 
     let on_log: &(dyn Fn(&str) + Send + Sync) = &|msg| eprintln!("{msg}");
 
@@ -745,7 +755,10 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
                         }
                         None => {
                             eprintln!(
-                                "  Warning: Response is missing field \"{key}\". Skipping card."
+                                "  {}",
+                                s.warning(format!(
+                                    "Response is missing field \"{key}\". Skipping card."
+                                ))
                             );
                             missing = true;
                         }
@@ -761,15 +774,19 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
             .collect();
 
         if skipped > 0 {
-            eprintln!("Skipped {} card(s) due to missing fields.", skipped);
+            eprintln!(
+                "  {}",
+                s.warning(format!("Skipped {skipped} card(s) due to missing fields."))
+            );
         }
-        eprintln!("Parsed {} card(s) from response", candidates.len());
+        eprintln!("  Parsed {} card(s) from response", candidates.len());
     } else {
         let client = client.as_ref().unwrap();
 
+        let rt = runtime.as_ref().unwrap();
         let spinner = crate::spinner::llm_spinner(format!(
             "Generating {} card(s) for \"{}\" using {}...",
-            args.count, term, runtime.model
+            args.count, term, rt.model
         ));
 
         let result = generate_cards(
@@ -779,10 +796,10 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
             &field_map_keys,
             None,
             client,
-            &runtime.model,
-            runtime.temperature,
-            runtime.max_tokens,
-            runtime.retries,
+            &rt.model,
+            rt.temperature,
+            rt.max_tokens,
+            rt.retries,
             Some(&logger),
             on_log,
         )?;
@@ -791,10 +808,11 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         if let Some(ref cost) = result.cost {
             generation_cost = cost.total_cost;
             eprintln!(
-                "  Tokens: {} in / {} out | Cost: {}",
+                "  {}  {} in / {} out   {}",
+                s.muted("Tokens"),
                 cost.input_tokens,
                 cost.output_tokens,
-                pricing::format_cost(cost.total_cost)
+                s.muted(pricing::format_cost(cost.total_cost))
             );
         }
 
@@ -804,19 +822,21 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
             anyhow::bail!("No cards were generated");
         }
 
-        eprintln!("Generated {} card(s)", candidates.len());
+        eprintln!("  {} card(s) generated", s.green(candidates.len()));
 
         if candidates.len() != args.count as usize {
             eprintln!(
-                "  Warning: Requested {} cards, received {}",
-                args.count,
-                candidates.len()
+                "  {}",
+                s.warning(format!(
+                    "Requested {} cards, received {}",
+                    args.count,
+                    candidates.len()
+                ))
             );
         }
     }
 
     // 5. Sanitize and validate
-    eprintln!("\nChecking for duplicates...");
 
     let sanitized_pairs: Vec<_> = candidates
         .into_iter()
@@ -831,7 +851,10 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
 
     let dup_count = validated.iter().filter(|c| c.is_duplicate).count();
     if dup_count > 0 {
-        eprintln!("Found {dup_count} duplicate(s) (already in Anki)");
+        eprintln!(
+            "  {}",
+            s.muted(format!("{dup_count} duplicate(s) already in Anki"))
+        );
     }
 
     // 6. Select cards
@@ -858,7 +881,10 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
 
     let dup_selected = selected.iter().filter(|c| c.is_duplicate).count();
     if dup_selected > 0 {
-        eprintln!("\nSkipping {dup_selected} duplicate(s) — already exist in Anki.");
+        eprintln!(
+            "  {}",
+            s.muted(format!("Skipping {dup_selected} duplicate(s)"))
+        );
         selected.retain(|c| !c.is_duplicate);
     }
 
@@ -868,18 +894,52 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
     }
 
     // 7. Quality check
-    let qc_result = if let Some(ref client) = client {
-        let spinner =
-            crate::spinner::llm_spinner(format!("Quality check using {}...", runtime.model));
+    let qc_result = if let (Some(client), Some(rt)) = (client.as_ref(), runtime.as_ref()) {
+        // If the QC config specifies a different model, build a dedicated client
+        // for it so the correct provider base URL and API key are used.
+        let qc_runtime;
+        let (qc_client_storage, qc_model, qc_temp, qc_max_tokens, qc_retries) = if let Some(m) =
+            frontmatter
+                .quality_check
+                .as_ref()
+                .and_then(|qc| qc.model.as_deref())
+        {
+            qc_runtime = build_runtime_config(RuntimeConfigArgs {
+                model: Some(m),
+                batch_size: None,
+                max_tokens: rt.max_tokens,
+                temperature: rt.temperature,
+                retries: rt.retries,
+                dry_run: false,
+            })?;
+            (
+                Some(LlmClient::from_config(&qc_runtime)),
+                qc_runtime.model.as_str(),
+                qc_runtime.temperature,
+                qc_runtime.max_tokens,
+                qc_runtime.retries,
+            )
+        } else {
+            (
+                None,
+                rt.model.as_str(),
+                rt.temperature,
+                rt.max_tokens,
+                rt.retries,
+            )
+        };
+        let effective_client = qc_client_storage.as_ref().unwrap_or(client);
+
+        let spinner = crate::spinner::llm_spinner(format!("Quality check using {}...", qc_model));
 
         let result = run_quality_checks(
             selected,
             frontmatter.quality_check.as_ref(),
-            client,
-            &runtime.model,
-            runtime.temperature,
-            runtime.max_tokens,
-            runtime.retries,
+            effective_client,
+            qc_model,
+            qc_temp,
+            qc_max_tokens,
+            qc_retries,
             Some(&logger),
             on_log,
         )?;
@@ -929,8 +989,9 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
     let total_cost = generation_cost + qc_result.cost;
     if total_cost > 0.0 {
         eprintln!(
-            "\nTotal estimated cost: {}",
-            pricing::format_cost(total_cost)
+            "\n  {}  {}",
+            s.muted("Total cost"),
+            s.accent(pricing::format_cost(total_cost))
         );
     }
 
@@ -939,7 +1000,7 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         export_cards(&final_cards, output_path, on_log)?;
     } else {
         let result = import_cards_to_anki(&final_cards, &frontmatter, &anki, on_log)?;
-        report_import_result(&result, &frontmatter.deck, on_log);
+        report_import_result(&result, &frontmatter.deck);
 
         if result.failures > 0 {
             anyhow::bail!(

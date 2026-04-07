@@ -12,6 +12,7 @@ use crate::template::fill_template;
 
 use super::engine::ProcessFn;
 use super::error::BatchError;
+use super::report::ERROR_FIELD;
 
 /// Configuration for building a row-processing closure.
 pub struct ProcessRowConfig {
@@ -78,8 +79,8 @@ pub fn build_process_fn(config: ProcessRowConfig) -> ProcessFn {
             merge_fields_case_insensitive(&mut output_row, &parsed).map_err(BatchError::Fatal)?;
         }
 
-        // Remove _error field if present (successful retry)
-        output_row.shift_remove("_error");
+        // Remove error field if present from a previous failed attempt
+        output_row.shift_remove(ERROR_FIELD);
 
         Ok((output_row, usage))
     })

@@ -109,6 +109,19 @@ pub fn merge_fields_case_insensitive(
         key_map.insert(lower, key.clone());
     }
 
+    // Check source for internal ambiguity before merging (e.g. source has both
+    // "NewKey" and "newkey"). Must be done upfront — once the first key is
+    // inserted into key_map the second would silently match as an update.
+    let mut source_lower: HashMap<String, &str> = HashMap::new();
+    for source_key in source.keys() {
+        let lower = source_key.to_lowercase();
+        if let Some(existing) = source_lower.insert(lower, source_key) {
+            return Err(format!(
+                "ambiguous keys in source: '{existing}' and '{source_key}' match when lowercased",
+            ));
+        }
+    }
+
     for (source_key, source_value) in source {
         let lower = source_key.to_lowercase();
         if let Some(original_key) = key_map.get(&lower) {
@@ -116,14 +129,7 @@ pub fn merge_fields_case_insensitive(
             let original_key = original_key.clone();
             target.insert(original_key, source_value.clone());
         } else {
-            // Add new field; register in key_map to catch ambiguous source keys
-            // (e.g. source has both "NewKey" and "newkey").
-            if key_map.contains_key(&lower) {
-                return Err(format!(
-                    "ambiguous keys in source: '{}' and '{}' match when lowercased",
-                    key_map[&lower], source_key
-                ));
-            }
+            // New field — add with source casing
             key_map.insert(lower, source_key.clone());
             target.insert(source_key.clone(), source_value.clone());
         }
@@ -199,12 +205,24 @@ mod tests {
     }
 
     #[test]
-    fn merge_ambiguous_keys_error() {
+    fn merge_ambiguous_target_keys_error() {
         let mut target = Row::new();
         target.insert("Name".into(), json!("a"));
         target.insert("name".into(), json!("b"));
 
         let source = serde_json::Map::new();
+        assert!(merge_fields_case_insensitive(&mut target, &source).is_err());
+    }
+
+    #[test]
+    fn merge_ambiguous_source_keys_error() {
+        let mut target = Row::new();
+        target.insert("existing".into(), json!("x"));
+
+        let mut source = serde_json::Map::new();
+        source.insert("NewKey".into(), json!("a"));
+        source.insert("newkey".into(), json!("b"));
+
         assert!(merge_fields_case_insensitive(&mut target, &source).is_err());
     }
 

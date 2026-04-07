@@ -5,4 +5,5 @@ pub mod logger;
 pub mod parse_json;
 pub mod pricing;
 pub mod provider;
+pub mod retry;
 pub mod runtime;

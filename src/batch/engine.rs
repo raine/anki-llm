@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressStyle};
@@ -9,6 +9,27 @@ use crate::llm::pricing;
 
 use super::error::BatchError;
 use super::report::{RowOutcome, TokenStats};
+
+/// The progress bar for the currently running batch, used by the ctrlc handler
+/// to print the interrupt message without tearing the progress bar.
+static CURRENT_PB: LazyLock<Mutex<Option<ProgressBar>>> = LazyLock::new(|| Mutex::new(None));
+
+/// Global interrupted flag shared across all run_batch calls. The ctrlc
+/// handler is installed once on first use; subsequent calls to run_batch
+/// reuse the same flag and handler.
+static INTERRUPTED: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| {
+    let flag = Arc::new(AtomicBool::new(false));
+    let flag_clone = Arc::clone(&flag);
+    let _ = ctrlc::set_handler(move || {
+        flag_clone.store(true, Ordering::SeqCst);
+        let pb_guard = CURRENT_PB.lock().unwrap();
+        match pb_guard.as_ref() {
+            Some(pb) => pb.println("Interrupting... waiting for active requests to finish."),
+            None => eprintln!("Interrupting... waiting for active requests to finish."),
+        }
+    });
+    flag
+});
 
 /// Configuration for the batch engine.
 pub struct BatchConfig {
@@ -37,44 +58,39 @@ pub fn run_batch(
     on_row_done: Option<OnRowDone>,
 ) -> (Vec<RowOutcome>, TokenStats, bool) {
     let total = rows.len();
-    let interrupted = Arc::new(AtomicBool::new(false));
+    // Reset the global flag at the start of each batch (previous batch may
+    // have been interrupted and left it set).
+    let interrupted = Arc::clone(&*INTERRUPTED);
+    interrupted.store(false, Ordering::SeqCst);
 
     // Set up progress bar
     let pb = ProgressBar::new(total as u64);
     pb.set_style(
-        ProgressStyle::with_template("Processing |{bar:40.cyan/blue}| {pos}/{len} | Cost: {msg}")
-            .unwrap()
-            .progress_chars("##-"),
+        ProgressStyle::with_template(
+            "{spinner:.cyan} [{elapsed_precise}] {bar:28.cyan/dim} {pos}/{len}  {msg}",
+        )
+        .unwrap()
+        .progress_chars("━━─")
+        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
     );
 
-    // Shared state
-    let tokens = Arc::new(Mutex::new(TokenStats::default()));
-    let completed: Arc<Mutex<Vec<RowOutcome>>> = Arc::new(Mutex::new(Vec::new()));
-    let next_index = Arc::new(AtomicUsize::new(0));
-    let on_row_done = on_row_done.map(Arc::new);
+    // Shared state — plain values behind Mutex/Atomic; scoped threads borrow
+    // them directly without Arc since the scope guarantees they don't outlive
+    // this stack frame. Only `interrupted` needs Arc because it's also held by
+    // the static ctrlc handler installed above.
+    let tokens = Mutex::new(TokenStats::default());
+    let completed: Mutex<Vec<RowOutcome>> = Mutex::new(Vec::new());
+    let next_index = AtomicUsize::new(0);
 
-    // Install SIGINT handler
-    let interrupted_clone = interrupted.clone();
-    let _ = ctrlc::set_handler(move || {
-        eprintln!("\nInterrupting... waiting for active requests to finish.");
-        interrupted_clone.store(true, Ordering::SeqCst);
-    });
+    // Register the current progress bar so the static ctrlc handler can print
+    // through it (avoids tearing the progress bar display on interrupt).
+    *CURRENT_PB.lock().unwrap() = Some(pb.clone());
 
     let start = Instant::now();
 
     std::thread::scope(|s| {
         for _ in 0..config.batch_size {
-            let rows = &rows;
-            let process = &process;
-            let tokens = Arc::clone(&tokens);
-            let completed = Arc::clone(&completed);
-            let next_index = Arc::clone(&next_index);
-            let pb = &pb;
-            let config = &config;
-            let on_row_done = on_row_done.clone();
-            let interrupted = Arc::clone(&interrupted);
-
-            s.spawn(move || {
+            s.spawn(|| {
                 loop {
                     if interrupted.load(Ordering::SeqCst) {
                         break;
@@ -86,7 +102,7 @@ pub fn run_batch(
                     }
 
                     let row = &rows[idx];
-                    let outcome = process_with_retry(row, process, config.retries, &tokens);
+                    let outcome = process_with_retry(row, &process, config.retries, &tokens, &pb);
 
                     // Notify callback — abort if it returns true
                     if let Some(ref cb) = on_row_done
@@ -110,11 +126,12 @@ pub fn run_batch(
     });
 
     pb.finish_and_clear();
+    *CURRENT_PB.lock().unwrap() = None;
 
     let elapsed = start.elapsed();
     let was_interrupted = interrupted.load(Ordering::SeqCst);
-    let outcomes = Arc::try_unwrap(completed).unwrap().into_inner().unwrap();
-    let tokens = Arc::try_unwrap(tokens).unwrap().into_inner().unwrap();
+    let outcomes = completed.into_inner().unwrap();
+    let tokens = tokens.into_inner().unwrap();
 
     let succeeded = outcomes
         .iter()
@@ -124,7 +141,11 @@ pub fn run_batch(
     super::report::print_summary(&config.model, &tokens, succeeded, failed, elapsed);
 
     if was_interrupted {
-        eprintln!("\nInterrupted by user. Partial results saved.");
+        let s = crate::style::style();
+        eprintln!(
+            "{}",
+            s.yellow("Interrupted by user. Partial results saved.")
+        );
     }
 
     (outcomes, tokens, was_interrupted)
@@ -136,15 +157,23 @@ fn process_with_retry(
     row: &Row,
     process: &ProcessFn,
     max_retries: u32,
-    tokens: &Arc<Mutex<TokenStats>>,
+    tokens: &Mutex<TokenStats>,
+    pb: &ProgressBar,
 ) -> RowOutcome {
+    // Keep the inline loop (rather than retry_with_backoff) so retry messages
+    // go through pb.println and don't tear the live progress bar display.
     let mut last_error = String::new();
 
     for attempt in 0..=max_retries {
         if attempt > 0 {
-            let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1));
-            let backoff = backoff.min(Duration::from_secs(30));
-            eprintln!("  Retry {attempt}/{max_retries}: {last_error}",);
+            let backoff =
+                Duration::from_millis(1000 * 2u64.pow(attempt - 1)).min(Duration::from_secs(30));
+            let s = crate::style::style();
+            pb.println(format!(
+                "  {} {}",
+                s.yellow(format!("Retry {attempt}/{max_retries}:")),
+                s.muted(&last_error)
+            ));
             std::thread::sleep(backoff);
         }
 
@@ -164,15 +193,15 @@ fn process_with_retry(
         }
     }
 
-    // All retries exhausted — return failure with _error field
+    let error = last_error;
     let mut failed_row = row.clone();
     failed_row.insert(
-        "_error".to_string(),
-        serde_json::Value::String(last_error.clone()),
+        super::report::ERROR_FIELD.to_string(),
+        serde_json::Value::String(error.clone()),
     );
     RowOutcome::Failure {
         row: failed_row,
-        error: last_error,
+        error,
     }
 }
 
