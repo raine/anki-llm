@@ -616,6 +616,14 @@ impl App {
                 self.mode = AppMode::Error(msg);
             }
             BackendEvent::Fatal(msg) => {
+                // Mark the currently-running step as failed so the spinner
+                // is replaced with the ✗ icon.
+                for (_, status) in &mut self.steps {
+                    if matches!(status, StepStatus::Running(_)) {
+                        *status = StepStatus::Error(msg.clone());
+                        break;
+                    }
+                }
                 self.mode = AppMode::Error(msg);
                 self.is_fatal = true;
             }
