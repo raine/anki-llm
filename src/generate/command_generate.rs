@@ -263,10 +263,7 @@ fn execute_pipeline_for_term(
     let mut generation_cost = 0.0;
 
     // Generate cards
-    step_start!(
-        PipelineStep::Generate,
-        Some(format!("{} card(s)", args.count))
-    );
+    step_start!(PipelineStep::Generate, None);
     log!(
         "Generating {} card(s) for \"{}\" using {}...",
         args.count,
@@ -314,10 +311,7 @@ fn execute_pipeline_for_term(
         bail_err!("No cards were generated");
     }
 
-    step_done!(
-        PipelineStep::Generate,
-        Some(format!("{} card(s)", candidates.len()))
-    );
+    step_done!(PipelineStep::Generate, None);
     log!("Generated {} card(s)", candidates.len());
     if candidates.len() != args.count as usize {
         log!(
