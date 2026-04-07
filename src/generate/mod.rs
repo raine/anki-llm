@@ -2,6 +2,7 @@ pub mod anki_import;
 pub mod cards;
 pub mod command_generate;
 pub mod exporter;
+pub mod field_task;
 pub mod init;
 pub mod manual;
 pub mod processor;

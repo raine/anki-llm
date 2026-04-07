@@ -81,6 +81,7 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
         note_type,
         field_map: draft.final_field_map,
         quality_check,
+        field_tasks: vec![],
     };
 
     let yaml = serde_yaml::to_string(&frontmatter)?;

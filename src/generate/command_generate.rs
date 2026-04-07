@@ -17,6 +17,7 @@ use crate::style::style;
 use super::anki_import::{import_cards_to_anki, report_import_result};
 use super::cards::{ValidatedCard, validate_cards};
 use super::exporter::export_cards;
+use super::field_task::run_field_tasks;
 use super::manual::get_llm_response_manually;
 use super::processor::{CardCandidate, generate_cards};
 use super::quality::run_quality_checks;
@@ -365,7 +366,7 @@ fn execute_pipeline_for_term(
             );
         }
 
-        let candidates = gen_result.cards;
+        let mut candidates = gen_result.cards;
 
         if candidates.is_empty() && !is_refresh {
             bail_err!("No cards were generated");
@@ -379,6 +380,39 @@ fn execute_pipeline_for_term(
                 args.count,
                 candidates.len()
             );
+        }
+
+        // Field tasks (rewrite specific fields via sub-LLM calls)
+        if !session.frontmatter.field_tasks.is_empty() && !candidates.is_empty() {
+            step_start!(PipelineStep::FieldTask, None);
+            let ft_result = run_field_tasks(
+                candidates,
+                &session.frontmatter.field_tasks,
+                &session.client,
+                &session.runtime.model,
+                session.runtime.temperature,
+                session.runtime.max_tokens,
+                session.runtime.retries,
+                Some(&session.logger),
+                on_log,
+            )
+            .map_err(|e| {
+                tx.send(BackendEvent::RunError(format!("{e}"))).ok();
+                e
+            })?;
+            candidates = ft_result.cards;
+            generation_cost += ft_result.cost;
+            if ft_result.cost > 0.0 {
+                tx.send(BackendEvent::CostUpdate {
+                    input_tokens: ft_result.input_tokens,
+                    output_tokens: ft_result.output_tokens,
+                    cost: ft_result.cost,
+                })
+                .ok();
+            }
+            step_done!(PipelineStep::FieldTask, None);
+        } else {
+            step_skip!(PipelineStep::FieldTask);
         }
 
         // Sanitize and validate
@@ -722,7 +756,7 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
     // 5. Generate cards
     let field_map_keys: Vec<String> = frontmatter.field_map.keys().cloned().collect();
     let mut generation_cost = 0.0;
-    let candidates: Vec<CardCandidate>;
+    let mut candidates: Vec<CardCandidate>;
 
     let client = runtime.as_ref().map(LlmClient::from_config);
 
@@ -832,6 +866,38 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
                     args.count,
                     candidates.len()
                 ))
+            );
+        }
+    }
+
+    // 5b. Field tasks
+    if !frontmatter.field_tasks.is_empty() && !candidates.is_empty() {
+        let client_ref = client.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("fieldTasks require an LLM client (not supported in --copy mode)")
+        })?;
+
+        let spinner = crate::spinner::llm_spinner("Running field tasks...".to_string());
+        let ft_result = run_field_tasks(
+            candidates,
+            &frontmatter.field_tasks,
+            client_ref,
+            &runtime.model,
+            runtime.temperature,
+            runtime.max_tokens,
+            runtime.retries,
+            Some(&logger),
+            on_log,
+        )?;
+        spinner.finish_and_clear();
+
+        candidates = ft_result.cards;
+        if ft_result.cost > 0.0 {
+            generation_cost += ft_result.cost;
+            eprintln!(
+                "  Field task tokens: {} in / {} out | Cost: {}",
+                ft_result.input_tokens,
+                ft_result.output_tokens,
+                pricing::format_cost(ft_result.cost)
             );
         }
     }

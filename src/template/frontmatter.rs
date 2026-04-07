@@ -11,10 +11,20 @@ pub struct Frontmatter {
     pub field_map: IndexMap<String, String>,
     #[serde(default)]
     pub quality_check: Option<QualityCheckConfig>,
+    #[serde(default)]
+    pub field_tasks: Vec<FieldTaskConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QualityCheckConfig {
+    pub field: String,
+    pub prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FieldTaskConfig {
     pub field: String,
     pub prompt: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -65,6 +75,20 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
         ));
     }
 
+    for task in &frontmatter.field_tasks {
+        if task.field.is_empty() || task.prompt.is_empty() {
+            return Err(TemplateError::InvalidFrontmatter(
+                "each fieldTask requires both field and prompt".into(),
+            ));
+        }
+        if !frontmatter.field_map.contains_key(&task.field) {
+            return Err(TemplateError::InvalidFrontmatter(format!(
+                "fieldTask target '{}' must be a key in fieldMap",
+                task.field
+            )));
+        }
+    }
+
     Ok(ParsedPromptFile { frontmatter, body })
 }
 
@@ -112,6 +136,59 @@ body";
     #[test]
     fn missing_frontmatter_markers() {
         let content = "no frontmatter here";
+        assert!(parse_prompt_file(content).is_err());
+    }
+
+    #[test]
+    fn parse_with_field_tasks() {
+        let content = "---
+deck: Test
+noteType: Basic
+fieldMap:
+  front: Front
+  read: Reading
+fieldTasks:
+  - field: read
+    prompt: Fix {front}
+---
+
+body";
+        let parsed = parse_prompt_file(content).unwrap();
+        assert_eq!(parsed.frontmatter.field_tasks.len(), 1);
+        let task = &parsed.frontmatter.field_tasks[0];
+        assert_eq!(task.field, "read");
+        assert_eq!(task.prompt, "Fix {front}");
+    }
+
+    #[test]
+    fn field_task_unknown_field() {
+        let content = "---
+deck: Test
+noteType: Basic
+fieldMap:
+  front: Front
+fieldTasks:
+  - field: nonexistent
+    prompt: Fix it
+---
+
+body";
+        assert!(parse_prompt_file(content).is_err());
+    }
+
+    #[test]
+    fn field_task_empty_prompt() {
+        let content = "---
+deck: Test
+noteType: Basic
+fieldMap:
+  front: Front
+fieldTasks:
+  - field: front
+    prompt: ''
+---
+
+body";
         assert!(parse_prompt_file(content).is_err());
     }
 
