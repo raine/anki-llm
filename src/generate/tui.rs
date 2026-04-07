@@ -427,6 +427,8 @@ struct App {
     user_quit: bool,
     /// Last term submitted, for retry.
     last_term: Option<String>,
+    /// True after a Fatal error — worker is dead, no new runs possible.
+    is_fatal: bool,
     history: InputHistory,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
@@ -465,6 +467,7 @@ impl App {
             should_quit: false,
             user_quit: false,
             last_term,
+            is_fatal: false,
             history: InputHistory::load(),
             backend_rx,
             worker_tx,
@@ -549,7 +552,7 @@ impl App {
             }
             BackendEvent::Fatal(msg) => {
                 self.mode = AppMode::Error(msg);
-                // Fatal means the worker is dead, no point continuing
+                self.is_fatal = true;
             }
         }
     }
@@ -606,11 +609,11 @@ impl App {
             AppMode::Selecting(_) => self.handle_key_selection(key),
             AppMode::Reviewing(_) => self.handle_key_review(key),
             AppMode::Done(_) | AppMode::Error(_) => match key.code {
-                KeyCode::Char('n') => {
+                KeyCode::Char('n') if !self.is_fatal => {
                     self.reset_for_new_run();
                     self.mode = AppMode::Input(String::new());
                 }
-                KeyCode::Char('r') => {
+                KeyCode::Char('r') if !self.is_fatal => {
                     if let Some(term) = self.last_term.clone() {
                         self.reset_for_new_run();
                         self.mode = AppMode::Running;
@@ -997,12 +1000,14 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("q", "Quit"));
         }
         AppMode::Done(_) | AppMode::Error(_) => {
-            s.extend(footer_cmd("n", "New term"));
-            if app.last_term.is_some() {
+            if !app.is_fatal {
+                s.extend(footer_cmd("n", "New term"));
+                if app.last_term.is_some() {
+                    s.push(footer_pipe());
+                    s.extend(footer_cmd("r", "Retry"));
+                }
                 s.push(footer_pipe());
-                s.extend(footer_cmd("r", "Retry"));
             }
-            s.push(footer_pipe());
             s.extend(footer_cmd("q", "Quit"));
         }
     }
