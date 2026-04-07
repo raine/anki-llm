@@ -8,6 +8,7 @@ files:
   symlink:
     - .ignore
     - history
+    - CLAUDE.local.md
 
 pre_merge:
   - just check-ci
