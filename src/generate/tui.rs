@@ -19,7 +19,6 @@ use super::line_input::LineInput;
 use crate::cli::GenerateArgs;
 use crate::config::store::read_config;
 use crate::llm::pricing;
-use crate::llm::provider::available_models;
 
 use super::cards::ValidatedCard;
 use super::quality::FlaggedCard;
@@ -32,6 +31,7 @@ pub struct SessionInfo {
     pub deck: String,
     pub note_type: String,
     pub model: String,
+    pub available_models: Vec<String>,
 }
 
 pub enum BackendEvent {
@@ -601,6 +601,17 @@ impl App {
         }
     }
 
+    fn open_model_picker(&mut self) {
+        if let Some(info) = &self.session_info
+            && !info.available_models.is_empty()
+        {
+            self.model_picker = Some(ModelPickerState::new(
+                info.available_models.clone(),
+                Some(info.model.as_str()),
+            ));
+        }
+    }
+
     fn step_status_mut(&mut self, step: PipelineStep) -> Option<&mut StepStatus> {
         self.steps
             .iter_mut()
@@ -842,13 +853,7 @@ impl App {
                 }
             }
             KeyCode::Tab => {
-                let models = available_models();
-                if !models.is_empty() {
-                    let current = self.session_info.as_ref().map(|s| s.model.as_str());
-                    let model_strings: Vec<String> =
-                        models.into_iter().map(|s| s.to_string()).collect();
-                    self.model_picker = Some(ModelPickerState::new(model_strings, current));
-                }
+                self.open_model_picker();
             }
             KeyCode::Enter => {
                 let term = input.value().trim().to_string();
@@ -893,13 +898,7 @@ impl App {
                 self.worker_tx.send(WorkerCommand::Refresh).ok();
             }
             KeyCode::Tab => {
-                let models = available_models();
-                if !models.is_empty() {
-                    let current = self.session_info.as_ref().map(|s| s.model.as_str());
-                    let model_strings: Vec<String> =
-                        models.into_iter().map(|s| s.to_string()).collect();
-                    self.model_picker = Some(ModelPickerState::new(model_strings, current));
-                }
+                self.open_model_picker();
             }
             KeyCode::Esc => {
                 self.worker_tx.send(WorkerCommand::Cancel).ok();

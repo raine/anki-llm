@@ -9,6 +9,7 @@ use crate::llm::client::LlmClient;
 use crate::llm::logger::LlmLogger;
 use crate::llm::parse_json::try_parse_json_array;
 use crate::llm::pricing;
+use crate::llm::provider::available_models;
 use crate::llm::runtime::{RuntimeConfig, RuntimeConfigArgs, build_runtime_config};
 use crate::template::frontmatter::{Frontmatter, parse_prompt_file};
 
@@ -163,10 +164,16 @@ pub fn run_pipeline(
         logger,
     };
 
+    let models: Vec<String> = available_models(args.dry_run)
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
+
     tx.send(BackendEvent::SessionReady(SessionInfo {
         deck: session.frontmatter.deck.clone(),
         note_type: session.frontmatter.note_type.clone(),
         model: session.runtime.model.clone(),
+        available_models: models.clone(),
     }))
     .ok();
 
@@ -215,6 +222,7 @@ pub fn run_pipeline(
                             deck: session.frontmatter.deck.clone(),
                             note_type: session.frontmatter.note_type.clone(),
                             model: session.runtime.model.clone(),
+                            available_models: models.clone(),
                         }))
                         .ok();
                     }

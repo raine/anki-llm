@@ -26,14 +26,21 @@ pub fn provider_config(model: &str) -> ProviderConfig {
 }
 
 /// Get the API key for the given model from the environment.
+/// Returns `None` if the env var is unset or empty/whitespace-only.
 pub fn api_key_for_model(model: &str) -> Option<String> {
     let config = provider_config(model);
-    env::var(config.api_key_env).ok()
+    env::var(config.api_key_env)
+        .ok()
+        .filter(|k| !k.trim().is_empty())
 }
 
 /// Returns models from `SUPPORTED_MODELS` for which an API key is available.
-pub fn available_models() -> Vec<&'static str> {
+/// If `include_all` is true (e.g. dry-run mode), returns all models.
+pub fn available_models(include_all: bool) -> Vec<&'static str> {
     use crate::llm::pricing::SUPPORTED_MODELS;
+    if include_all {
+        return SUPPORTED_MODELS.to_vec();
+    }
     SUPPORTED_MODELS
         .iter()
         .copied()
