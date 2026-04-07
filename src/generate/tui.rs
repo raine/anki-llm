@@ -9,7 +9,7 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 use tui_input::Input;
 use tui_input::backend::crossterm::EventHandler;
@@ -433,6 +433,7 @@ struct App {
     should_quit: bool,
     /// True when the user explicitly pressed q/Ctrl-C (as opposed to natural Done/Error exit).
     user_quit: bool,
+    show_help: bool,
     /// Last term submitted, for retry.
     last_term: Option<String>,
     /// True after a Fatal error — worker is dead, no new runs possible.
@@ -474,6 +475,7 @@ impl App {
             pending_cancels: 0,
             should_quit: false,
             user_quit: false,
+            show_help: false,
             last_term,
             is_fatal: false,
             history: InputHistory::load(),
@@ -566,6 +568,21 @@ impl App {
     }
 
     fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
+        // Help overlay intercepts all keys when visible
+        if self.show_help {
+            match key.code {
+                KeyCode::Char('?') | KeyCode::Esc => self.show_help = false,
+                _ => {}
+            }
+            return;
+        }
+
+        // Toggle help overlay from any mode
+        if key.code == KeyCode::Char('?') && !matches!(self.mode, AppMode::Input(_)) {
+            self.show_help = true;
+            return;
+        }
+
         match &mut self.mode {
             AppMode::Input(_) => self.handle_key_input(key),
             AppMode::Running => match key.code {
@@ -847,6 +864,91 @@ fn draw(frame: &mut Frame, app: &App) {
 
     draw_sidebar(frame, app, cols[0]);
     draw_footer(frame, app, rows[1]);
+
+    if app.show_help {
+        draw_help_overlay(frame, app);
+    }
+}
+
+fn draw_help_overlay(frame: &mut Frame, app: &App) {
+    let shortcuts: Vec<(&str, &str)> = match &app.mode {
+        AppMode::Input(_) => vec![
+            ("Enter", "Generate"),
+            ("↑ / ↓", "History"),
+            ("Esc", "Clear"),
+            ("Ctrl+C", "Quit"),
+        ],
+        AppMode::Running => vec![
+            ("j / k", "Scroll log"),
+            ("PgUp/PgDn", "Scroll log fast"),
+            ("Esc", "Cancel"),
+            ("q", "Quit"),
+        ],
+        AppMode::Selecting(_) => vec![
+            ("Space", "Toggle"),
+            ("a", "All"),
+            ("n", "None"),
+            ("c", "Copy"),
+            ("r", "More"),
+            ("Enter", "Confirm"),
+            ("Esc", "Back"),
+            ("q", "Quit"),
+            ("PgUp/PgDn", "Scroll"),
+        ],
+        AppMode::Reviewing(_) => vec![
+            ("k / y", "Keep"),
+            ("d / n", "Discard"),
+            ("a", "Keep all"),
+            ("x", "Discard all"),
+            ("u", "Back"),
+            ("q", "Quit"),
+        ],
+        AppMode::Done(_) | AppMode::Error(_) => {
+            vec![("n", "New term"), ("r", "Retry"), ("q", "Quit")]
+        }
+    };
+
+    let max_key_len = shortcuts.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
+    let max_action_len = shortcuts.iter().map(|(_, a)| a.len()).max().unwrap_or(0);
+    let menu_width = (max_key_len + max_action_len + 7) as u16; // padding + separator
+    let menu_height = shortcuts.len() as u16 + 4; // borders + top/bottom padding
+
+    let area = frame.area();
+    let x = area.x + area.width.saturating_sub(menu_width) / 2;
+    let y = area.y + area.height.saturating_sub(menu_height) / 2;
+    let rect = Rect::new(
+        x,
+        y,
+        menu_width.min(area.width),
+        menu_height.min(area.height),
+    );
+
+    frame.render_widget(Clear, rect);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_style(Style::default().fg(THEME.info))
+        .title(" Shortcuts ");
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+
+    let lines: Vec<Line> = shortcuts
+        .iter()
+        .map(|(key, action)| {
+            Line::from(vec![
+                Span::styled(
+                    format!("{:>width$}", key, width = max_key_len),
+                    Style::default().fg(THEME.info),
+                ),
+                Span::styled(" │ ", Style::default().fg(THEME.border)),
+                Span::styled(*action, Style::default().fg(THEME.text)),
+            ])
+        })
+        .collect();
+
+    let para = Paragraph::new(lines).alignment(ratatui::layout::Alignment::Center);
+    frame.render_widget(para, inner);
 }
 
 fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
@@ -983,11 +1085,15 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("↑↓", "History"));
             s.push(footer_pipe());
             s.extend(footer_cmd("Ctrl+C", "Quit"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("?", "Help"));
         }
         AppMode::Running => {
             s.extend(footer_cmd("Esc", "Cancel"));
             s.push(footer_pipe());
             s.extend(footer_cmd("q", "Quit"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("?", "Help"));
         }
         AppMode::Selecting(state) => {
             let n = state.selected.len();
@@ -1014,6 +1120,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("Esc", "Back"));
             s.push(footer_pipe());
             s.extend(footer_cmd("q", "Quit"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("?", "Help"));
             s.push(Span::styled(
                 format!("  ({n} selected)"),
                 Style::default().fg(THEME.dimmed),
@@ -1047,6 +1155,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("x", "Discard all"));
             s.push(footer_pipe());
             s.extend(footer_cmd("q", "Quit"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("?", "Help"));
         }
         AppMode::Done(_) | AppMode::Error(_) => {
             if !app.is_fatal {
@@ -1058,6 +1168,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                 s.push(footer_pipe());
             }
             s.extend(footer_cmd("q", "Quit"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("?", "Help"));
         }
     }
 
