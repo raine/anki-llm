@@ -417,6 +417,7 @@ struct App {
     /// Accumulated cost across all runs in this session.
     session_cost: f64,
     log_scroll: u16,
+    log_auto_scroll: bool,
     tick: u64,
     /// Counts how many runs have been cancelled. While > 0, backend events are
     /// discarded. Decremented when RunDone/RunError arrives from a cancelled run.
@@ -455,6 +456,7 @@ impl App {
             run_output_tokens: 0,
             session_cost: 0.0,
             log_scroll: 0,
+            log_auto_scroll: true,
             tick: 0,
             pending_cancels: 0,
             should_quit: false,
@@ -468,6 +470,7 @@ impl App {
     fn reset_for_new_run(&mut self) {
         self.logs.clear();
         self.log_scroll = 0;
+        self.log_auto_scroll = true;
         self.session_cost += self.run_cost;
         self.run_cost = 0.0;
         self.run_input_tokens = 0;
@@ -504,8 +507,9 @@ impl App {
             BackendEvent::SessionReady(_) => unreachable!(),
             BackendEvent::Log(msg) => {
                 self.logs.push(msg);
-                // Auto-scroll to bottom
-                self.log_scroll = self.logs.len().saturating_sub(1) as u16;
+                if self.log_auto_scroll {
+                    self.log_scroll = self.logs.len().saturating_sub(1) as u16;
+                }
             }
             BackendEvent::StepUpdate { step, status } => {
                 if let Some(st) = self.step_status_mut(step) {
@@ -569,6 +573,29 @@ impl App {
                     self.worker_tx.send(WorkerCommand::Quit).ok();
                     self.should_quit = true;
                     self.user_quit = true;
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.log_scroll = self.log_scroll.saturating_sub(1);
+                    self.log_auto_scroll = false;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.log_scroll =
+                        (self.log_scroll + 1).min(self.logs.len().saturating_sub(1) as u16);
+                    // Re-enable auto-scroll if at the bottom
+                    if self.log_scroll as usize >= self.logs.len().saturating_sub(1) {
+                        self.log_auto_scroll = true;
+                    }
+                }
+                KeyCode::PageUp => {
+                    self.log_scroll = self.log_scroll.saturating_sub(10);
+                    self.log_auto_scroll = false;
+                }
+                KeyCode::PageDown => {
+                    self.log_scroll =
+                        (self.log_scroll + 10).min(self.logs.len().saturating_sub(1) as u16);
+                    if self.log_scroll as usize >= self.logs.len().saturating_sub(1) {
+                        self.log_auto_scroll = true;
+                    }
                 }
                 _ => {}
             },
@@ -1014,9 +1041,12 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
 fn draw_log_panel(frame: &mut Frame, app: &App, area: Rect) {
     let visible_height = area.height.saturating_sub(2) as usize;
     let total_logs = app.logs.len();
-    let start = total_logs.saturating_sub(visible_height);
+    let scroll_pos = app.log_scroll as usize;
+    // Show a window of logs ending at scroll_pos (inclusive)
+    let end = (scroll_pos + 1).min(total_logs);
+    let start = end.saturating_sub(visible_height);
 
-    let log_text: Text = app.logs[start..]
+    let log_text: Text = app.logs[start..end]
         .iter()
         .map(|l| Line::from(l.as_str()))
         .collect::<Vec<_>>()
