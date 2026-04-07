@@ -40,6 +40,7 @@ pub fn generate_cards(
     prompt_template: &str,
     count: u32,
     field_map_keys: &[String],
+    exclude_terms: Option<&[String]>,
     client: &LlmClient,
     model: &str,
     temperature: Option<f64>,
@@ -52,6 +53,14 @@ pub fn generate_cards(
     let mut row = Row::new();
     row.insert("term".into(), Value::String(term.into()));
     row.insert("count".into(), Value::String(count.to_string()));
+
+    // Only inject {exclude} if the template uses it (avoids error on missing placeholder)
+    if prompt_template.contains("{exclude}") {
+        let exclude_text = exclude_terms
+            .map(|terms| terms.join("\n"))
+            .unwrap_or_default();
+        row.insert("exclude".into(), Value::String(exclude_text));
+    }
 
     let filled_prompt = fill_template(prompt_template, &row)?;
 

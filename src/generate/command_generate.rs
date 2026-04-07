@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::mpsc;
 
 use anyhow::Result;
@@ -261,142 +262,212 @@ fn execute_pipeline_for_term(
     };
 
     let mut generation_cost = 0.0;
-
-    // Generate cards
-    step_start!(PipelineStep::Generate, None);
-    log!(
-        "Generating {} card(s) for \"{}\" using {}...",
-        args.count,
-        term,
-        session.runtime.model
-    );
-
-    let gen_result = generate_cards(
-        term,
-        &session.prompt_body,
-        args.count,
-        &session.field_map_keys,
-        &session.client,
-        &session.runtime.model,
-        session.runtime.temperature,
-        session.runtime.max_tokens,
-        session.runtime.retries,
-        Some(&session.logger),
-        on_log,
-    )
-    .map_err(|e| {
-        tx.send(BackendEvent::RunError(format!("{e}"))).ok();
-        e
-    })?;
-
-    if let Some(ref cost) = gen_result.cost {
-        generation_cost = cost.total_cost;
-        tx.send(BackendEvent::CostUpdate {
-            input_tokens: cost.input_tokens,
-            output_tokens: cost.output_tokens,
-            cost: cost.total_cost,
-        })
-        .ok();
-        log!(
-            "Tokens: {} in / {} out | Cost: {}",
-            cost.input_tokens,
-            cost.output_tokens,
-            pricing::format_cost(cost.total_cost)
-        );
-    }
-
-    let candidates = gen_result.cards;
-
-    if candidates.is_empty() {
-        bail_err!("No cards were generated");
-    }
-
-    step_done!(PipelineStep::Generate, None);
-    log!("Generated {} card(s)", candidates.len());
-    if candidates.len() != args.count as usize {
-        log!(
-            "Warning: requested {} cards, received {}",
-            args.count,
-            candidates.len()
-        );
-    }
-
-    // Sanitize and validate
-    step_start!(PipelineStep::Validate, None);
-    log!("Checking for duplicates...");
-
-    let sanitized_pairs: Vec<_> = candidates
-        .into_iter()
-        .map(|c| {
-            let s = sanitize_fields(&c.fields);
-            (c, s)
-        })
-        .collect();
-
     let first_field_name = &session.validation.note_type_fields[0];
-    let validated = validate_cards(
-        sanitized_pairs,
-        &session.frontmatter,
-        first_field_name,
-        &session.anki,
-    )
-    .map_err(|e| {
-        tx.send(BackendEvent::RunError(format!("{e}"))).ok();
-        e
-    })?;
 
-    let dup_count = validated.iter().filter(|c| c.is_duplicate).count();
-    step_done!(
-        PipelineStep::Validate,
-        if dup_count > 0 {
-            Some(format!("{dup_count} duplicate(s)"))
+    // --- Generate / validate / select loop (supports refresh) ---
+
+    let mut all_validated: Vec<ValidatedCard> = Vec::new();
+    let mut seen_keys: HashSet<String> = HashSet::new();
+    let mut is_refresh = false;
+
+    let selected_indices = loop {
+        // Build exclude list from previously seen first-field values
+        let exclude_terms: Vec<String> = seen_keys.iter().cloned().collect();
+
+        step_start!(PipelineStep::Generate, None);
+        if is_refresh {
+            log!("Generating {} more card(s) for \"{}\"...", args.count, term,);
         } else {
-            None
+            log!(
+                "Generating {} card(s) for \"{}\" using {}...",
+                args.count,
+                term,
+                session.runtime.model
+            );
         }
-    );
-    if dup_count > 0 {
-        log!("Found {dup_count} duplicate(s) (already in Anki)");
-    }
 
-    // Select cards (or dry-run display)
-    if args.dry_run {
-        step_skip!(PipelineStep::Select);
-        step_skip!(PipelineStep::QualityCheck);
-        step_skip!(PipelineStep::Finish);
-        for (i, card) in validated.iter().enumerate() {
-            let dup = if card.is_duplicate {
-                " (Duplicate)"
+        let gen_result = generate_cards(
+            term,
+            &session.prompt_body,
+            args.count,
+            &session.field_map_keys,
+            if exclude_terms.is_empty() {
+                None
             } else {
-                ""
-            };
-            log!("Card {}{dup}", i + 1);
-            for (name, value) in &card.raw_anki_fields {
-                log!("  {name}: {value}");
+                Some(&exclude_terms)
+            },
+            &session.client,
+            &session.runtime.model,
+            session.runtime.temperature,
+            session.runtime.max_tokens,
+            session.runtime.retries,
+            Some(&session.logger),
+            on_log,
+        );
+
+        let gen_result = match gen_result {
+            Ok(r) => r,
+            Err(e) => {
+                if is_refresh {
+                    // Refresh failure: keep existing cards, go back to selection
+                    log!("Refresh failed: {e}");
+                    tx.send(BackendEvent::AppendCards(Vec::new())).ok();
+                    step_done!(PipelineStep::Generate, Some("failed".to_string()));
+
+                    match rx.recv() {
+                        Ok(WorkerCommand::Refresh) => {
+                            continue;
+                        }
+                        Ok(WorkerCommand::Selection(indices)) => break indices,
+                        Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => {
+                            return Ok(false);
+                        }
+                        _ => bail_err!("Unexpected response during selection"),
+                    }
+                } else {
+                    tx.send(BackendEvent::RunError(format!("{e}"))).ok();
+                    return Err(e);
+                }
+            }
+        };
+
+        if let Some(ref cost) = gen_result.cost {
+            generation_cost += cost.total_cost;
+            tx.send(BackendEvent::CostUpdate {
+                input_tokens: cost.input_tokens,
+                output_tokens: cost.output_tokens,
+                cost: cost.total_cost,
+            })
+            .ok();
+            log!(
+                "Tokens: {} in / {} out | Cost: {}",
+                cost.input_tokens,
+                cost.output_tokens,
+                pricing::format_cost(cost.total_cost)
+            );
+        }
+
+        let candidates = gen_result.cards;
+
+        if candidates.is_empty() && !is_refresh {
+            bail_err!("No cards were generated");
+        }
+
+        step_done!(PipelineStep::Generate, None);
+        log!("Generated {} card(s)", candidates.len());
+        if !candidates.is_empty() && candidates.len() != args.count as usize {
+            log!(
+                "Warning: requested {} cards, received {}",
+                args.count,
+                candidates.len()
+            );
+        }
+
+        // Sanitize and validate
+        step_start!(PipelineStep::Validate, None);
+        log!("Checking for duplicates...");
+
+        let sanitized_pairs: Vec<_> = candidates
+            .into_iter()
+            .map(|c| {
+                let s = sanitize_fields(&c.fields);
+                (c, s)
+            })
+            .collect();
+
+        let validated = validate_cards(
+            sanitized_pairs,
+            &session.frontmatter,
+            first_field_name,
+            &session.anki,
+        )
+        .map_err(|e| {
+            tx.send(BackendEvent::RunError(format!("{e}"))).ok();
+            e
+        })?;
+
+        // Deduplicate against cards already seen in this session
+        let mut new_cards: Vec<ValidatedCard> = Vec::new();
+        for card in validated {
+            let key = card
+                .anki_fields
+                .get(first_field_name)
+                .map(|s| super::selector::strip_html_tags(s).to_lowercase())
+                .unwrap_or_default();
+            if seen_keys.insert(key) {
+                new_cards.push(card);
             }
         }
-        tx.send(BackendEvent::RunDone(
-            "Dry run complete. No cards were imported.".to_string(),
-        ))
-        .ok();
-        return Ok(true);
-    }
 
-    if validated.is_empty() {
-        tx.send(BackendEvent::RunDone(
-            "No cards to select from.".to_string(),
-        ))
-        .ok();
-        return Ok(true);
-    }
+        let dup_count = new_cards.iter().filter(|c| c.is_duplicate).count();
+        step_done!(
+            PipelineStep::Validate,
+            if dup_count > 0 {
+                Some(format!("{dup_count} duplicate(s)"))
+            } else {
+                None
+            }
+        );
+        if dup_count > 0 {
+            log!("Found {dup_count} duplicate(s) (already in Anki)");
+        }
 
-    step_start!(PipelineStep::Select, None);
-    tx.send(BackendEvent::RequestSelection(validated.clone()))
-        .ok();
+        if is_refresh {
+            if new_cards.is_empty() {
+                log!("No new unique cards generated");
+            } else {
+                log!("{} new card(s) added", new_cards.len());
+            }
+            all_validated.extend(new_cards.clone());
+            tx.send(BackendEvent::AppendCards(new_cards)).ok();
+        } else {
+            // Dry-run display
+            if args.dry_run {
+                step_skip!(PipelineStep::Select);
+                step_skip!(PipelineStep::QualityCheck);
+                step_skip!(PipelineStep::Finish);
+                for (i, card) in new_cards.iter().enumerate() {
+                    let dup = if card.is_duplicate {
+                        " (Duplicate)"
+                    } else {
+                        ""
+                    };
+                    log!("Card {}{dup}", i + 1);
+                    for (name, value) in &card.raw_anki_fields {
+                        log!("  {name}: {value}");
+                    }
+                }
+                tx.send(BackendEvent::RunDone(
+                    "Dry run complete. No cards were imported.".to_string(),
+                ))
+                .ok();
+                return Ok(true);
+            }
 
-    let selected_indices = match rx.recv() {
-        Ok(WorkerCommand::Selection(indices)) => indices,
-        Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => return Ok(false),
-        _ => bail_err!("Unexpected response during selection"),
+            if new_cards.is_empty() {
+                tx.send(BackendEvent::RunDone(
+                    "No cards to select from.".to_string(),
+                ))
+                .ok();
+                return Ok(true);
+            }
+
+            all_validated = new_cards;
+            step_start!(PipelineStep::Select, None);
+            tx.send(BackendEvent::RequestSelection(all_validated.clone()))
+                .ok();
+        }
+
+        // Wait for user action: Selection, Refresh, or Cancel
+        match rx.recv() {
+            Ok(WorkerCommand::Refresh) => {
+                is_refresh = true;
+                continue;
+            }
+            Ok(WorkerCommand::Selection(indices)) => break indices,
+            Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => return Ok(false),
+            _ => bail_err!("Unexpected response during selection"),
+        }
     };
 
     if selected_indices.is_empty() {
@@ -407,7 +478,7 @@ fn execute_pipeline_for_term(
 
     let mut selected: Vec<ValidatedCard> = selected_indices
         .iter()
-        .filter_map(|&i| validated.get(i).cloned())
+        .filter_map(|&i| all_validated.get(i).cloned())
         .collect();
 
     step_done!(
@@ -668,6 +739,7 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
             &parsed.body,
             args.count,
             &field_map_keys,
+            None,
             client,
             &runtime.model,
             runtime.temperature,

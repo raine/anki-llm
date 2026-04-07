@@ -36,6 +36,7 @@ pub enum BackendEvent {
         status: StepStatus,
     },
     RequestSelection(Vec<ValidatedCard>),
+    AppendCards(Vec<ValidatedCard>), // refresh: new unique cards to append
     RequestReview(Vec<FlaggedCard>),
     CostUpdate {
         input_tokens: u64,
@@ -49,6 +50,7 @@ pub enum BackendEvent {
 
 pub enum WorkerCommand {
     Start(String), // term to generate cards for
+    Refresh,       // generate more cards for the same term
     Selection(Vec<usize>),
     Review(Vec<bool>), // true = keep, false = discard
     Cancel,            // abandon current run, go back to input
@@ -125,6 +127,8 @@ struct SelectionState {
     detail_scroll: u16,
     /// Tick when card was last copied to clipboard (for flash feedback).
     copied_at: Option<u64>,
+    /// True while a refresh (load more) request is in flight.
+    refresh_in_flight: bool,
 }
 
 impl SelectionState {
@@ -139,6 +143,7 @@ impl SelectionState {
             list_state,
             detail_scroll: 0,
             copied_at: None,
+            refresh_in_flight: false,
         }
     }
 
@@ -510,6 +515,12 @@ impl App {
             BackendEvent::RequestSelection(cards) => {
                 self.mode = AppMode::Selecting(SelectionState::new(cards));
             }
+            BackendEvent::AppendCards(new_cards) => {
+                if let AppMode::Selecting(ref mut state) = self.mode {
+                    state.cards.extend(new_cards);
+                    state.refresh_in_flight = false;
+                }
+            }
             BackendEvent::RequestReview(flagged) => {
                 self.mode = AppMode::Reviewing(ReviewState::new(flagged));
             }
@@ -635,6 +646,10 @@ impl App {
             KeyCode::Char(' ') => state.toggle_current(),
             KeyCode::Char('a') => state.select_all(),
             KeyCode::Char('n') => state.select_none(),
+            KeyCode::Char('r') if !state.refresh_in_flight => {
+                state.refresh_in_flight = true;
+                self.worker_tx.send(WorkerCommand::Refresh).ok();
+            }
             KeyCode::Esc => {
                 self.worker_tx.send(WorkerCommand::Cancel).ok();
                 self.reset_for_new_run();
@@ -645,7 +660,7 @@ impl App {
                 self.should_quit = true;
                 self.user_quit = true;
             }
-            KeyCode::Enter => {
+            KeyCode::Enter if !state.refresh_in_flight => {
                 let AppMode::Selecting(state) = std::mem::replace(&mut self.mode, AppMode::Running)
                 else {
                     return;
@@ -890,6 +905,16 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("n", "None"));
             s.push(footer_pipe());
             s.extend(footer_cmd("c", "Copy"));
+            s.push(footer_pipe());
+            if state.refresh_in_flight {
+                let spinner = SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()];
+                s.push(Span::styled(
+                    format!("{spinner} Loading..."),
+                    Style::default().fg(THEME.info),
+                ));
+            } else {
+                s.extend(footer_cmd("r", "More"));
+            }
             s.push(footer_pipe());
             s.extend(footer_cmd("Enter", "Confirm"));
             s.push(footer_pipe());
