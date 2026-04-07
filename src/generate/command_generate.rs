@@ -271,9 +271,14 @@ fn execute_pipeline_for_term(
     let mut is_refresh = false;
 
     let selected_indices = loop {
-        // Build exclude list from previously seen first-field values
-        let exclude_terms: Vec<String> = seen_keys.iter().cloned().collect();
+        // Build exclude list from previously seen first-field values (sorted for determinism)
+        let mut exclude_terms: Vec<String> = seen_keys.iter().cloned().collect();
+        exclude_terms.sort();
 
+        if is_refresh {
+            // Reset sidebar steps so Select doesn't show as running alongside Generate
+            step_done!(PipelineStep::Select, None);
+        }
         step_start!(PipelineStep::Generate, None);
         if is_refresh {
             log!("Generating {} more card(s) for \"{}\"...", args.count, term,);
@@ -375,16 +380,33 @@ fn execute_pipeline_for_term(
             })
             .collect();
 
-        let validated = validate_cards(
+        let validated = match validate_cards(
             sanitized_pairs,
             &session.frontmatter,
             first_field_name,
             &session.anki,
-        )
-        .map_err(|e| {
-            tx.send(BackendEvent::RunError(format!("{e}"))).ok();
-            e
-        })?;
+        ) {
+            Ok(v) => v,
+            Err(e) => {
+                if is_refresh {
+                    log!("Validation failed during refresh: {e}");
+                    tx.send(BackendEvent::AppendCards(Vec::new())).ok();
+                    step_done!(PipelineStep::Validate, Some("failed".to_string()));
+
+                    match rx.recv() {
+                        Ok(WorkerCommand::Refresh) => continue,
+                        Ok(WorkerCommand::Selection(indices)) => break indices,
+                        Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => {
+                            return Ok(false);
+                        }
+                        _ => bail_err!("Unexpected response during selection"),
+                    }
+                } else {
+                    tx.send(BackendEvent::RunError(format!("{e}"))).ok();
+                    return Err(e);
+                }
+            }
+        };
 
         // Deduplicate against cards already seen in this session
         let mut new_cards: Vec<ValidatedCard> = Vec::new();
@@ -394,7 +416,8 @@ fn execute_pipeline_for_term(
                 .get(first_field_name)
                 .map(|s| super::selector::strip_html_tags(s).to_lowercase())
                 .unwrap_or_default();
-            if seen_keys.insert(key) {
+            // Skip dedup for blank keys — let them through
+            if key.is_empty() || seen_keys.insert(key) {
                 new_cards.push(card);
             }
         }
@@ -418,8 +441,8 @@ fn execute_pipeline_for_term(
             } else {
                 log!("{} new card(s) added", new_cards.len());
             }
-            all_validated.extend(new_cards.clone());
-            tx.send(BackendEvent::AppendCards(new_cards)).ok();
+            tx.send(BackendEvent::AppendCards(new_cards.clone())).ok();
+            all_validated.extend(new_cards);
         } else {
             // Dry-run display
             if args.dry_run {
