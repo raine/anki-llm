@@ -248,6 +248,13 @@ impl ReviewState {
         self.detail_scroll = 0;
     }
 
+    fn move_back(&mut self) {
+        if self.cursor > 0 {
+            self.cursor -= 1;
+            self.detail_scroll = 0;
+        }
+    }
+
     fn is_done(&self) -> bool {
         self.cursor >= self.flagged.len()
     }
@@ -672,10 +679,10 @@ impl App {
                 }
             }
             _ => {
-                if let Some(change) = input.handle_event(&Event::Key(key)) {
-                    if change.value {
-                        self.history.reset_browse();
-                    }
+                if let Some(change) = input.handle_event(&Event::Key(key))
+                    && change.value
+                {
+                    self.history.reset_browse();
                 }
             }
         }
@@ -764,20 +771,29 @@ impl App {
             return;
         };
 
-        match key.code {
-            KeyCode::Char('k') | KeyCode::Char('y') | KeyCode::Enter => {
+        match (key.code, key.modifiers) {
+            (KeyCode::Char('k') | KeyCode::Char('y') | KeyCode::Enter, _) => {
                 state.keep_current();
             }
-            KeyCode::Char('d') | KeyCode::Char('n') => {
+            (KeyCode::Char('d') | KeyCode::Char('n'), KeyModifiers::NONE) => {
                 state.discard_current();
             }
-            KeyCode::Char('a') => {
+            (KeyCode::Char('u') | KeyCode::Backspace | KeyCode::Left, KeyModifiers::NONE) => {
+                state.move_back();
+            }
+            (KeyCode::Char('a'), _) => {
                 state.keep_all();
             }
-            KeyCode::Char('x') => {
+            (KeyCode::Char('x'), _) => {
                 state.discard_all();
             }
-            KeyCode::Char('q') => {
+            (KeyCode::PageUp, _) | (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
+                state.detail_scroll = state.detail_scroll.saturating_sub(10);
+            }
+            (KeyCode::PageDown, _) | (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
+                state.detail_scroll += 10;
+            }
+            (KeyCode::Char('q'), _) => {
                 self.worker_tx.send(WorkerCommand::Quit).ok();
                 self.should_quit = true;
                 self.user_quit = true;
@@ -927,16 +943,16 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
                 Span::raw(&info.model),
             ]),
         ];
-        if let Some(term) = &app.last_term {
-            if has_term {
-                lines.push(Line::from(vec![
-                    Span::styled("Term  ", Style::default().fg(THEME.dimmed)),
-                    Span::styled(
-                        term.clone(),
-                        Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
-                    ),
-                ]));
-            }
+        if let Some(term) = &app.last_term
+            && has_term
+        {
+            lines.push(Line::from(vec![
+                Span::styled("Term  ", Style::default().fg(THEME.dimmed)),
+                Span::styled(
+                    term.clone(),
+                    Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
+                ),
+            ]));
         }
         frame.render_widget(Paragraph::new(lines), chunks[0]);
     }
@@ -1023,6 +1039,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("k", "Keep"));
             s.push(footer_pipe());
             s.extend(footer_cmd("d", "Discard"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("u", "Back"));
             s.push(footer_pipe());
             s.extend(footer_cmd("a", "Keep all"));
             s.push(footer_pipe());

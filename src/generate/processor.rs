@@ -57,14 +57,14 @@ pub fn generate_cards(
     let mut filled_prompt = fill_template(prompt_template, &row)?;
 
     // Append exclusion context so the LLM avoids repeating previous cards
-    if let Some(terms) = exclude_terms {
-        if !terms.is_empty() {
-            filled_prompt.push_str(
-                "\n\nDo not generate cards that cover the same content as these existing cards:\n",
-            );
-            for t in terms {
-                filled_prompt.push_str(&format!("- {t}\n"));
-            }
+    if let Some(terms) = exclude_terms
+        && !terms.is_empty()
+    {
+        filled_prompt.push_str(
+            "\n\nDo not generate cards that cover the same content as these existing cards:\n",
+        );
+        for t in terms {
+            filled_prompt.push_str(&format!("- {t}\n"));
         }
     }
 
