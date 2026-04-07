@@ -425,6 +425,8 @@ struct App {
     should_quit: bool,
     /// True when the user explicitly pressed q/Ctrl-C (as opposed to natural Done/Error exit).
     user_quit: bool,
+    /// Last term submitted, for retry.
+    last_term: Option<String>,
     history: InputHistory,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
@@ -440,6 +442,7 @@ impl App {
             .iter()
             .map(|&s| (s, StepStatus::Pending))
             .collect();
+        let last_term = initial_term.clone();
         let mode = if let Some(term) = initial_term {
             worker_tx.send(WorkerCommand::Start(term)).ok();
             AppMode::Running
@@ -461,6 +464,7 @@ impl App {
             pending_cancels: 0,
             should_quit: false,
             user_quit: false,
+            last_term,
             history: InputHistory::load(),
             backend_rx,
             worker_tx,
@@ -606,6 +610,13 @@ impl App {
                     self.reset_for_new_run();
                     self.mode = AppMode::Input(String::new());
                 }
+                KeyCode::Char('r') => {
+                    if let Some(term) = self.last_term.clone() {
+                        self.reset_for_new_run();
+                        self.mode = AppMode::Running;
+                        self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                    }
+                }
                 KeyCode::Char('q') => {
                     self.worker_tx.send(WorkerCommand::Quit).ok();
                     self.should_quit = true;
@@ -654,6 +665,7 @@ impl App {
                 if !term.is_empty() {
                     self.history.push(&term);
                     self.history.reset_browse();
+                    self.last_term = Some(term.clone());
                     self.mode = AppMode::Running;
                     self.worker_tx.send(WorkerCommand::Start(term)).ok();
                 }
@@ -986,6 +998,10 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         }
         AppMode::Done(_) | AppMode::Error(_) => {
             s.extend(footer_cmd("n", "New term"));
+            if app.last_term.is_some() {
+                s.push(footer_pipe());
+                s.extend(footer_cmd("r", "Retry"));
+            }
             s.push(footer_pipe());
             s.extend(footer_cmd("q", "Quit"));
         }
