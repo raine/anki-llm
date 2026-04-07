@@ -568,10 +568,11 @@ impl App {
                     self.reset_for_new_run();
                     self.mode = AppMode::Input(String::new());
                 }
-                _ => {
+                KeyCode::Char('q') => {
                     self.worker_tx.send(WorkerCommand::Quit).ok();
                     self.should_quit = true;
                 }
+                _ => {}
             },
         }
     }
@@ -588,9 +589,9 @@ impl App {
                 self.user_quit = true;
             }
             KeyCode::Esc => {
-                self.worker_tx.send(WorkerCommand::Quit).ok();
-                self.should_quit = true;
-                self.user_quit = true;
+                if !text.is_empty() {
+                    text.clear();
+                }
             }
             KeyCode::Char(c) => {
                 self.history.reset_browse();
@@ -700,7 +701,7 @@ impl App {
             KeyCode::Char('x') => {
                 state.discard_all();
             }
-            KeyCode::Char('q') | KeyCode::Esc => {
+            KeyCode::Char('q') => {
                 self.worker_tx.send(WorkerCommand::Quit).ok();
                 self.should_quit = true;
                 self.user_quit = true;
@@ -930,7 +931,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         AppMode::Done(_) | AppMode::Error(_) => {
             s.extend(footer_cmd("n", "New term"));
             s.push(footer_pipe());
-            s.extend(footer_cmd("any key", "Quit"));
+            s.extend(footer_cmd("q", "Quit"));
         }
     }
 
