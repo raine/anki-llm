@@ -1020,9 +1020,9 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
             let checkbox = if card.is_duplicate {
                 "  "
             } else if state.selected.contains(&i) {
-                "☑ "
+                "\u{f4a7} "
             } else {
-                "☐ "
+                "\u{f0131} "
             };
 
             let label = card
