@@ -11,6 +11,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
+use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 
 use crate::cli::GenerateArgs;
 use crate::llm::pricing;
@@ -110,7 +112,7 @@ pub enum StepStatus {
 // ---------------------------------------------------------------------------
 
 enum AppMode {
-    Input(String), // term text being typed
+    Input(Input), // term text being typed
     Running,
     Selecting(SelectionState),
     Reviewing(ReviewState),
@@ -448,7 +450,7 @@ impl App {
             worker_tx.send(WorkerCommand::Start(term)).ok();
             AppMode::Running
         } else {
-            AppMode::Input(String::new())
+            AppMode::Input(Input::default())
         };
         App {
             mode,
@@ -568,7 +570,7 @@ impl App {
                     self.worker_tx.send(WorkerCommand::Cancel).ok();
                     self.pending_cancels += 1;
                     self.reset_for_new_run();
-                    self.mode = AppMode::Input(String::new());
+                    self.mode = AppMode::Input(Input::default());
                 }
                 KeyCode::Char('q') => {
                     self.worker_tx.send(WorkerCommand::Quit).ok();
@@ -610,7 +612,7 @@ impl App {
             AppMode::Done(_) | AppMode::Error(_) => match key.code {
                 KeyCode::Char('n') if !self.is_fatal => {
                     self.reset_for_new_run();
-                    self.mode = AppMode::Input(String::new());
+                    self.mode = AppMode::Input(Input::default());
                 }
                 KeyCode::Char('r') if !self.is_fatal => {
                     if let Some(term) = self.last_term.clone() {
@@ -629,7 +631,7 @@ impl App {
     }
 
     fn handle_key_input(&mut self, key: crossterm::event::KeyEvent) {
-        let AppMode::Input(ref mut text) = self.mode else {
+        let AppMode::Input(ref mut input) = self.mode else {
             return;
         };
 
@@ -640,30 +642,27 @@ impl App {
                 self.user_quit = true;
             }
             KeyCode::Esc => {
-                if !text.is_empty() {
-                    text.clear();
+                if !input.value().is_empty() {
+                    input.reset();
+                    self.history.reset_browse();
                 }
             }
-            KeyCode::Char(c) => {
-                self.history.reset_browse();
-                text.push(c);
-            }
-            KeyCode::Backspace => {
-                self.history.reset_browse();
-                text.pop();
-            }
             KeyCode::Up => {
-                if let Some(entry) = self.history.up(text) {
-                    *text = entry.to_string();
+                if let Some(entry) = self.history.up(input.value()) {
+                    let text = entry.to_string();
+                    let len = text.chars().count();
+                    *input = Input::new(text).with_cursor(len);
                 }
             }
             KeyCode::Down => {
                 if let Some(entry) = self.history.down() {
-                    *text = entry.to_string();
+                    let text = entry.to_string();
+                    let len = text.chars().count();
+                    *input = Input::new(text).with_cursor(len);
                 }
             }
             KeyCode::Enter => {
-                let term = text.trim().to_string();
+                let term = input.value().trim().to_string();
                 if !term.is_empty() {
                     self.history.push(&term);
                     self.history.reset_browse();
@@ -672,8 +671,24 @@ impl App {
                     self.worker_tx.send(WorkerCommand::Start(term)).ok();
                 }
             }
-            _ => {}
+            _ => {
+                if let Some(change) = input.handle_event(&Event::Key(key)) {
+                    if change.value {
+                        self.history.reset_browse();
+                    }
+                }
+            }
         }
+    }
+
+    fn handle_paste_input(&mut self, text: String) {
+        let AppMode::Input(ref mut input) = self.mode else {
+            return;
+        };
+        // Normalize newlines for single-line input
+        let cleaned = text.replace(['\r', '\n'], " ");
+        input.handle_event(&Event::Paste(cleaned));
+        self.history.reset_browse();
     }
 
     fn handle_key_selection(&mut self, key: crossterm::event::KeyEvent) {
@@ -698,7 +713,7 @@ impl App {
                     self.pending_cancels += 1;
                 }
                 self.reset_for_new_run();
-                self.mode = AppMode::Input(String::new());
+                self.mode = AppMode::Input(Input::default());
             }
             KeyCode::Char('q') => {
                 self.worker_tx.send(WorkerCommand::Quit).ok();
@@ -806,7 +821,7 @@ fn draw(frame: &mut Frame, app: &App) {
     // Render main content first, then sidebar on top so CJK bleed is covered
     let main_area = cols[1];
     match &app.mode {
-        AppMode::Input(text) => draw_input(frame, text, main_area),
+        AppMode::Input(input) => draw_input(frame, input, main_area),
         AppMode::Running => draw_running(frame, app, main_area),
         AppMode::Selecting(state) => draw_selecting(frame, state, main_area),
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
@@ -951,7 +966,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.push(footer_pipe());
             s.extend(footer_cmd("↑↓", "History"));
             s.push(footer_pipe());
-            s.extend(footer_cmd("q", "Quit"));
+            s.extend(footer_cmd("Ctrl+C", "Quit"));
         }
         AppMode::Running => {
             s.extend(footer_cmd("Esc", "Cancel"));
@@ -1031,7 +1046,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(s)), area);
 }
 
-fn draw_input(frame: &mut Frame, text: &str, area: Rect) {
+fn draw_input(frame: &mut Frame, input: &Input, area: Rect) {
     // Center the input box in the main area
     let max_width = 50u16.min(area.width.saturating_sub(4));
     let h_pad = area.width.saturating_sub(max_width) / 2;
@@ -1059,15 +1074,23 @@ fn draw_input(frame: &mut Frame, text: &str, area: Rect) {
         .split(col);
 
     let input_area = v_chunks[1];
+    let inner_width = input_area.width.saturating_sub(2).max(1) as usize;
+    let scroll = input.visual_scroll(inner_width);
+
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Enter term ")
         .border_style(Style::default().fg(THEME.info));
 
-    let para = Paragraph::new(text).block(block);
+    let para = Paragraph::new(input.value())
+        .block(block)
+        .scroll((0, scroll as u16));
     frame.render_widget(para, input_area);
 
-    frame.set_cursor_position((input_area.x + 1 + text.len() as u16, input_area.y + 1));
+    frame.set_cursor_position((
+        input_area.x + 1 + (input.visual_cursor().saturating_sub(scroll)) as u16,
+        input_area.y + 1,
+    ));
 }
 
 fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
@@ -1325,10 +1348,12 @@ fn run_app(
         }
 
         // Poll for terminal input (50 ms timeout so we don't block backend events)
-        if event::poll(Duration::from_millis(50))?
-            && let Event::Key(key) = event::read()?
-        {
-            app.handle_key(key);
+        if event::poll(Duration::from_millis(50))? {
+            match event::read()? {
+                Event::Key(key) => app.handle_key(key),
+                Event::Paste(text) => app.handle_paste_input(text),
+                _ => {}
+            }
         }
 
         if app.should_quit {
@@ -1358,7 +1383,9 @@ pub fn run_tui(args: GenerateArgs) -> anyhow::Result<()> {
 
     // Run TUI on main thread
     let terminal = ratatui::init();
+    crossterm::execute!(std::io::stdout(), crossterm::event::EnableBracketedPaste).ok();
     let user_quit = run_app(terminal, initial_term, rx_events, tx_cmd).unwrap_or(true);
+    crossterm::execute!(std::io::stdout(), crossterm::event::DisableBracketedPaste).ok();
     ratatui::restore();
 
     if user_quit {
