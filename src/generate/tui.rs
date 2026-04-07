@@ -1091,9 +1091,15 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
         .collect();
 
     let mut list_state = state.list_state;
+    let title = format!(
+        " Cards ({}/{} selected) ",
+        state.selected.len(),
+        state.cards.len()
+    );
     let list = List::new(list_items).block(
         Block::default()
             .borders(Borders::BOTTOM)
+            .title(title)
             .border_style(Style::default().fg(THEME.border)),
     );
     frame.render_stateful_widget(list, chunks[0], &mut list_state);
