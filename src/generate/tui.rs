@@ -826,7 +826,12 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let info_height: u16 = if app.session_info.is_some() { 4 } else { 0 };
+    let has_term = app.last_term.is_some() && !matches!(app.mode, AppMode::Input(_));
+    let info_height: u16 = match (app.session_info.is_some(), has_term) {
+        (true, true) => 5,
+        (true, false) => 4,
+        _ => 0,
+    };
 
     // Build step lines (detail on second indented line)
     let spinner_frame = format!(
@@ -894,7 +899,7 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
 
     // Session info
     if let Some(info) = &app.session_info {
-        let lines = vec![
+        let mut lines = vec![
             Line::from(vec![
                 Span::styled("Deck  ", Style::default().fg(THEME.dimmed)),
                 Span::raw(&info.deck),
@@ -908,6 +913,17 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
                 Span::raw(&info.model),
             ]),
         ];
+        if let Some(term) = &app.last_term {
+            if has_term {
+                lines.push(Line::from(vec![
+                    Span::styled("Term  ", Style::default().fg(THEME.dimmed)),
+                    Span::styled(
+                        term.clone(),
+                        Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
+                    ),
+                ]));
+            }
+        }
         frame.render_widget(Paragraph::new(lines), chunks[0]);
     }
 
