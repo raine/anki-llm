@@ -308,10 +308,11 @@ struct InputHistory {
 
 impl InputHistory {
     fn load() -> Self {
-        let entries = Self::path()
+        let mut entries = Self::path()
             .and_then(|p| fs::read_to_string(p).ok())
             .map(|s| s.lines().rev().map(String::from).collect::<Vec<_>>())
             .unwrap_or_default();
+        entries.truncate(HISTORY_MAX);
         InputHistory {
             entries,
             cursor: None,
@@ -343,11 +344,19 @@ impl InputHistory {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).ok();
         }
-        // Write oldest-first so the file reads chronologically
-        if let Ok(mut f) = fs::File::create(&path) {
+        let tmp = path.with_extension("tmp");
+        let ok = (|| -> std::io::Result<()> {
+            let mut f = std::io::BufWriter::new(fs::File::create(&tmp)?);
             for entry in self.entries.iter().rev() {
-                let _ = writeln!(f, "{entry}");
+                writeln!(f, "{entry}")?;
             }
+            f.flush()?;
+            Ok(())
+        })();
+        if ok.is_ok() {
+            let _ = fs::rename(&tmp, &path);
+        } else {
+            let _ = fs::remove_file(&tmp);
         }
     }
 
@@ -369,17 +378,18 @@ impl InputHistory {
         }
     }
 
-    /// Move down (newer). Returns the text to show (history entry or stashed).
-    fn down(&mut self) -> &str {
+    /// Move down (newer). Returns the history entry, or `None` if not browsing.
+    fn down(&mut self) -> Option<&str> {
         match self.cursor {
-            None | Some(0) => {
+            None => None,
+            Some(0) => {
                 self.cursor = None;
-                &self.stashed
+                Some(&self.stashed)
             }
             Some(i) => {
                 let next = i - 1;
                 self.cursor = Some(next);
-                &self.entries[next]
+                Some(&self.entries[next])
             }
         }
     }
@@ -596,7 +606,9 @@ impl App {
                 }
             }
             KeyCode::Down => {
-                *text = self.history.down().to_string();
+                if let Some(entry) = self.history.down() {
+                    *text = entry.to_string();
+                }
             }
             KeyCode::Enter => {
                 let term = text.trim().to_string();
