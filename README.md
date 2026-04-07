@@ -502,11 +502,11 @@ frontmatter for configuration and a prompt body with instructions for the LLM.
 The frontmatter is a YAML block at the top of the file enclosed by `---`.
 
 - `deck`: The target Anki deck name.
-- `noteType`: The name of the Anki note type (model) to use.
-- `fieldMap`: Maps the keys from the LLM's JSON output to your actual Anki field
+- `note_type`: The name of the Anki note type (model) to use.
+- `field_map`: Maps the keys from the LLM's JSON output to your actual Anki field
   names. The LLM will be instructed to generate JSON with the keys on the left,
   and `anki-llm` will use them to populate the Anki fields on the right.
-- `qualityCheck` (optional): Enables automatic verification of generated cards
+- `quality_check` (optional): Enables automatic verification of generated cards
   using a separate LLM call. The verification criteria is fully customizable via
   a prompt template. Added automatically by `generate-init` when you enable this
   feature.
@@ -534,14 +534,14 @@ reasoning, and you can interactively decide whether to keep or discard them.
 
 **Manual customization (optional):**
 
-The quality check is fully customizable. You can edit the `qualityCheck` section
+The quality check is fully customizable. You can edit the `quality_check` section
 in your generated prompt file to verify any criteria you want (e.g., checking
 formality levels, specific grammar patterns, cultural appropriateness, etc.).
 You can also specify a different (typically cheaper) model for quality checks.
 The section looks like this:
 
 ```yaml
-qualityCheck:
+quality_check:
   field: jp
   model: gpt-4o-mini # Optional: use a cheaper model for checks
   prompt: |
@@ -560,7 +560,7 @@ qualityCheck:
 
 Each selected card requires one additional API call for the quality check. You
 can can use a cheaper model (like `gpt-4o-mini`) for quality checks by adding a
-`model` field to the `qualityCheck` section. If not specified, it will use the
+`model` field to the `quality_check` section. If not specified, it will use the
 same model as card generation.
 
 **Prompt Body**
@@ -572,7 +572,7 @@ The body contains your instructions for the LLM. It must:
 2. Include the `{count}` placeholder, which will be replaced by the number of
    cards requested.
 3. Instruct the LLM to return a JSON array of objects, where each object
-   represents one card and uses the keys defined in `fieldMap`.
+   represents one card and uses the keys defined in `field_map`.
 4. Include a "one-shot" example showing the exact JSON array structure and
    desired formatting (e.g., HTML for bolding or lists).
 5. Encourage the LLM to generate diverse cards that highlight different nuances,
@@ -583,8 +583,8 @@ The body contains your instructions for the LLM. It must:
 ````markdown
 ---
 deck: Japanese::Vocabulary
-noteType: Japanese (recognition)
-fieldMap:
+note_type: Japanese (recognition)
+field_map:
   en: English
   jp: Japanese
   context: Context
@@ -1078,8 +1078,8 @@ The generated file will look something like this:
 ````markdown
 ---
 deck: Japanese::Vocabulary
-noteType: Japanese (recognition)
-fieldMap:
+note_type: Japanese (recognition)
+field_map:
   en: English
   jp: Japanese
   context: Context

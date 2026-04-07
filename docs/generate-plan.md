@@ -57,9 +57,9 @@ configuration and a prompt body with instructions for the LLM.
 The frontmatter is a YAML block enclosed by `---` at the top of the file.
 
 - `deck`: (Required) The target Anki deck name.
-- `noteType`: (Required) The name of the Anki note type (model) to be used.
-- `fieldMap`: (Required) An object mapping the keys from the LLM's JSON output
-  to the actual field names in the specified `noteType`. This provides a direct,
+- `note_type`: (Required) The name of the Anki note type (model) to be used.
+- `field_map`: (Required) An object mapping the keys from the LLM's JSON output
+  to the actual field names in the specified `note_type`. This provides a direct,
   one-to-one translation. Renamed from `map` for clarity.
 
 #### 3.2.2. Prompt Body
@@ -81,8 +81,8 @@ This example instructs the LLM to generate a single string containing an HTML
 ````markdown
 ---
 deck: Japanese::Vocabulary
-noteType: Japanese (recognition)
-fieldMap:
+note_type: Japanese (recognition)
+field_map:
   en: English
   jp: Japanese
   furigana: Furigana
@@ -134,7 +134,7 @@ Return only valid JSON matching this structure.
     Implement robust JSON parsing: strip everything before the first `{` and
     after the last `}`, then `JSON.parse`.
 6.  **Collect & Validate Results:** Parse and validate each response using Zod
-    schema based on the `fieldMap` keys. Collect successful responses into "card
+    schema based on the `field_map` keys. Collect successful responses into "card
     candidates". If all API calls fail, exit with an error showing the failure
     reasons.
 7.  **HTML Sanitization:** Strip `<script>` tags from all HTML field values to
@@ -147,7 +147,7 @@ Return only valid JSON matching this structure.
     interactive checklist (using `inquirer` with paging for >10 items).
 10. **Map and Import:**
     - Once the user confirms their selection, iterate through the chosen cards.
-    - For each selected card, use the `fieldMap` from the frontmatter to
+    - For each selected card, use the `field_map` from the frontmatter to
       transform the JSON object into the final Anki field structure (e.g.,
       `{"English": "...", "Japanese": "..."}`). All values are treated as
       strings and mapped directly.
@@ -219,8 +219,8 @@ anki-llm generate-init [output-file]
 1.  **Frontmatter Parser**
     - [ ] Create `src/utils/parse-frontmatter.ts`
     - [ ] Implement YAML frontmatter parsing (split frontmatter from body)
-    - [ ] Add Zod schema validation for required fields (`deck`, `noteType`,
-          `fieldMap`)
+    - [ ] Add Zod schema validation for required fields (`deck`, `note_type`,
+          `field_map`)
     - [ ] Export types for use by command handlers
     - [ ] Design as reusable utility for potential future use by `process-*`
           commands
@@ -252,7 +252,7 @@ anki-llm generate-init [output-file]
 
 5.  **Card Validation & Deduplication**
     - [ ] Create `src/generation/validator.ts`
-    - [ ] Validate card JSON against `fieldMap` using Zod
+    - [ ] Validate card JSON against `field_map` using Zod
     - [ ] Implement duplicate detection using AnkiConnect `findNotes`
     - [ ] Mark duplicates in results without filtering (let user decide)
 

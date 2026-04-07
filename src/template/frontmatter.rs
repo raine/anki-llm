@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use super::error::TemplateError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct Frontmatter {
     pub deck: String,
     pub note_type: String,
@@ -48,12 +48,12 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
     }
     if frontmatter.note_type.is_empty() {
         return Err(TemplateError::InvalidFrontmatter(
-            "noteType is required".into(),
+            "note_type is required".into(),
         ));
     }
     if frontmatter.field_map.is_empty() {
         return Err(TemplateError::InvalidFrontmatter(
-            "fieldMap must have at least one entry".into(),
+            "field_map must have at least one entry".into(),
         ));
     }
 
@@ -61,7 +61,7 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
         && (qc.field.is_empty() || qc.prompt.is_empty())
     {
         return Err(TemplateError::InvalidFrontmatter(
-            "qualityCheck requires both field and prompt".into(),
+            "quality_check requires both field and prompt".into(),
         ));
     }
 
@@ -76,8 +76,8 @@ mod tests {
     fn parse_valid_frontmatter() {
         let content = "---
 deck: Test
-noteType: Basic
-fieldMap:
+note_type: Basic
+field_map:
   front: Front
   back: Back
 ---
@@ -94,10 +94,10 @@ Hello {term}";
     fn parse_with_quality_check() {
         let content = "---
 deck: Test
-noteType: Basic
-fieldMap:
+note_type: Basic
+field_map:
   front: Front
-qualityCheck:
+quality_check:
   field: front
   prompt: Check {text}
 ---
@@ -119,8 +119,8 @@ body";
     fn empty_field_map() {
         let content = "---
 deck: Test
-noteType: Basic
-fieldMap: {}
+note_type: Basic
+field_map: {}
 ---
 
 body";

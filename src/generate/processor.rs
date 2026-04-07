@@ -33,7 +33,7 @@ pub struct GenerationResult {
 ///
 /// The prompt template must contain `{term}` and `{count}` placeholders.
 /// The response is expected to be a JSON array of objects with keys matching
-/// the fieldMap keys.
+/// the field_map keys.
 #[allow(clippy::too_many_arguments)]
 pub fn generate_cards(
     term: &str,

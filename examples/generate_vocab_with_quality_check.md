@@ -1,12 +1,12 @@
 ---
 deck: Default
-noteType: Basic
-fieldMap:
+note_type: Basic
+field_map:
   front: Front
   kanji: Kanji
   reading: Reading
   explanation: Explanation
-qualityCheck:
+quality_check:
   field: front
   prompt: >
     Does this English definition accurately describe the Japanese word shown in

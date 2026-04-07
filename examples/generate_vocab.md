@@ -1,7 +1,7 @@
 ---
 deck: Default
-noteType: Basic
-fieldMap:
+note_type: Basic
+field_map:
   front: Front
   kanji: Kanji
   reading: Reading

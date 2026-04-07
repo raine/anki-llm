@@ -33,7 +33,7 @@ pub fn validate_anki_assets(
             )
         })?;
 
-    // Validate fieldMap values exist in note type
+    // Validate field_map values exist in note type
     let invalid: Vec<_> = frontmatter
         .field_map
         .values()
