@@ -1071,7 +1071,7 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
 
         let detail = match status {
             StepStatus::Running(Some(d)) | StepStatus::Done(Some(d)) => Some(d.as_str()),
-            StepStatus::Error(e) => Some(e.as_str()),
+            StepStatus::Error(_) => None,
             _ => None,
         };
 
