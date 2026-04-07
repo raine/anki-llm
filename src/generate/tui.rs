@@ -696,7 +696,22 @@ impl App {
                             .map(|s| s.model != model)
                             .unwrap_or(true);
                         if changed {
-                            self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
+                            // In Selecting mode: cancel current run, switch model,
+                            // and re-run with the same term.
+                            if matches!(self.mode, AppMode::Selecting(_)) {
+                                self.worker_tx.send(WorkerCommand::Cancel).ok();
+                                self.pending_cancels += 1;
+                                self.reset_for_new_run();
+                                self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
+                                if let Some(term) = self.last_term.clone() {
+                                    self.mode = AppMode::Running;
+                                    self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                                } else {
+                                    self.mode = AppMode::Input(LineInput::default());
+                                }
+                            } else {
+                                self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
+                            }
                         }
                     }
                     self.model_picker = None;
@@ -877,6 +892,15 @@ impl App {
                 state.refresh_in_flight = true;
                 self.worker_tx.send(WorkerCommand::Refresh).ok();
             }
+            KeyCode::Tab => {
+                let models = available_models();
+                if !models.is_empty() {
+                    let current = self.session_info.as_ref().map(|s| s.model.as_str());
+                    let model_strings: Vec<String> =
+                        models.into_iter().map(|s| s.to_string()).collect();
+                    self.model_picker = Some(ModelPickerState::new(model_strings, current));
+                }
+            }
             KeyCode::Esc => {
                 self.worker_tx.send(WorkerCommand::Cancel).ok();
                 self.pending_cancels += 1;
@@ -1039,6 +1063,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("n", "None"),
             ("c", "Copy"),
             ("r", "More"),
+            ("Tab", "Model"),
             ("Enter", "Confirm"),
             ("Esc", "Back"),
             ("q", "Quit"),
@@ -1345,6 +1370,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             } else {
                 s.extend(footer_cmd("r", "More"));
             }
+            s.push(footer_pipe());
+            s.extend(footer_cmd("Tab", "Model"));
             s.push(footer_pipe());
             s.extend(footer_cmd("Enter", "Confirm"));
             s.push(footer_pipe());
