@@ -8,8 +8,15 @@ default:
     @just --list
 
 # Run all checks
+check: _fix _verify
+
+# Phase 1: auto-fix (parallel)
 [parallel]
-check: format clippy-fix build test clippy
+_fix: format clippy-fix
+
+# Phase 2: verify (parallel)
+[parallel]
+_verify: clippy test
 
 # Run check and fail if there are uncommitted changes (for CI)
 check-ci: check
