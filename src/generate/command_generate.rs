@@ -248,6 +248,16 @@ fn execute_pipeline_for_term(
         };
     }
 
+    macro_rules! step_error {
+        ($step:expr, $detail:expr) => {
+            tx.send(BackendEvent::StepUpdate {
+                step: $step,
+                status: StepStatus::Error($detail),
+            })
+            .ok();
+        };
+    }
+
     macro_rules! bail_err {
         ($($arg:tt)*) => {{
             let msg = format!($($arg)*);
@@ -317,7 +327,7 @@ fn execute_pipeline_for_term(
                     // Refresh failure: keep existing cards, go back to selection
                     log!("Refresh failed: {e}");
                     tx.send(BackendEvent::AppendCards(Vec::new())).ok();
-                    step_done!(PipelineStep::Generate, Some("failed".to_string()));
+                    step_error!(PipelineStep::Generate, format!("{e}"));
 
                     match rx.recv() {
                         Ok(WorkerCommand::Refresh) => {
@@ -330,6 +340,7 @@ fn execute_pipeline_for_term(
                         _ => bail_err!("Unexpected response during selection"),
                     }
                 } else {
+                    step_error!(PipelineStep::Generate, format!("{e}"));
                     tx.send(BackendEvent::RunError(format!("{e}"))).ok();
                     return Err(e);
                 }
@@ -391,7 +402,7 @@ fn execute_pipeline_for_term(
                 if is_refresh {
                     log!("Validation failed during refresh: {e}");
                     tx.send(BackendEvent::AppendCards(Vec::new())).ok();
-                    step_done!(PipelineStep::Validate, Some("failed".to_string()));
+                    step_error!(PipelineStep::Validate, format!("{e}"));
 
                     match rx.recv() {
                         Ok(WorkerCommand::Refresh) => continue,
@@ -402,6 +413,7 @@ fn execute_pipeline_for_term(
                         _ => bail_err!("Unexpected response during selection"),
                     }
                 } else {
+                    step_error!(PipelineStep::Validate, format!("{e}"));
                     tx.send(BackendEvent::RunError(format!("{e}"))).ok();
                     return Err(e);
                 }
@@ -538,6 +550,7 @@ fn execute_pipeline_for_term(
         on_log,
     )
     .map_err(|e| {
+        step_error!(PipelineStep::QualityCheck, format!("{e}"));
         tx.send(BackendEvent::RunError(format!("{e}"))).ok();
         e
     })?;
@@ -594,6 +607,7 @@ fn execute_pipeline_for_term(
 
     if let Some(ref output_path) = args.output {
         export_cards(&final_cards, output_path, on_log).map_err(|e| {
+            step_error!(PipelineStep::Finish, format!("{e}"));
             tx.send(BackendEvent::RunError(format!("{e}"))).ok();
             e
         })?;
@@ -611,6 +625,7 @@ fn execute_pipeline_for_term(
         let result =
             import_cards_to_anki(&final_cards, &session.frontmatter, &session.anki, on_log)
                 .map_err(|e| {
+                    step_error!(PipelineStep::Finish, format!("{e}"));
                     tx.send(BackendEvent::RunError(format!("{e}"))).ok();
                     e
                 })?;

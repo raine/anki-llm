@@ -102,7 +102,6 @@ pub enum StepStatus {
     Running(Option<String>),
     Done(Option<String>),
     Skipped,
-    #[allow(dead_code)]
     Error(String),
 }
 
