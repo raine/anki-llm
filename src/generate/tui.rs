@@ -714,7 +714,22 @@ impl App {
         };
         // Normalize newlines for single-line input
         let cleaned = text.replace(['\r', '\n'], " ");
-        input.handle_event(&Event::Paste(cleaned));
+
+        // tui-input's EventHandler ignores Event::Paste, so insert manually
+        let val = input.value();
+        let cursor_char_idx = input.cursor();
+        let byte_idx = val
+            .char_indices()
+            .nth(cursor_char_idx)
+            .map(|(i, _)| i)
+            .unwrap_or(val.len());
+        let mut new_val = String::with_capacity(val.len() + cleaned.len());
+        new_val.push_str(&val[..byte_idx]);
+        new_val.push_str(&cleaned);
+        new_val.push_str(&val[byte_idx..]);
+        let new_cursor = cursor_char_idx + cleaned.chars().count();
+        *input = Input::new(new_val).with_cursor(new_cursor);
+
         self.history.reset_browse();
     }
 
