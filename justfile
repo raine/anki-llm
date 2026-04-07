@@ -31,15 +31,15 @@ check-ci: check
 
 # Format Rust files
 format:
-    cargo fmt --all
+    @cargo fmt --all
 
 # Run clippy and fail on any warnings
 clippy:
-    cargo clippy -- -D clippy::all
+    @cargo clippy --quiet --color always -- -D clippy::all && echo "clippy: ok"
 
 # Auto-fix clippy warnings
 clippy-fix:
-    cargo clippy --fix --allow-dirty -- -W clippy::all
+    @cargo clippy --quiet --color always --fix --allow-dirty -- -W clippy::all
 
 # Build the project
 build:
@@ -47,7 +47,11 @@ build:
 
 # Run tests
 test:
-    cargo test
+    #!/usr/bin/env bash
+    set -euo pipefail
+    output=$(cargo test --quiet --color always 2>&1) || { echo "$output"; exit 1; }
+    passed=$(grep -oE '[0-9]+ passed' <<< "$output" | awk '{s+=$1} END{print s}')
+    echo "test: ok. ${passed} passed"
 
 # Run integration tests against a disposable Anki Docker container
 test-integration *ARGS:
