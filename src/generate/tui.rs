@@ -17,6 +17,7 @@ use ratatui::{DefaultTerminal, Frame};
 use super::line_input::LineInput;
 
 use crate::cli::GenerateArgs;
+use crate::config::store::read_config;
 use crate::llm::pricing;
 
 use super::cards::ValidatedCard;
@@ -268,6 +269,46 @@ impl ReviewState {
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 // ---------------------------------------------------------------------------
+// Glyph sets (Nerd Font vs plain fallback)
+// ---------------------------------------------------------------------------
+
+struct Glyphs {
+    checkbox_checked: &'static str,
+    checkbox_unchecked: &'static str,
+}
+
+impl Glyphs {
+    fn nerd() -> Self {
+        Self {
+            checkbox_checked: "\u{f4a7} ",
+            checkbox_unchecked: "\u{f0131} ",
+        }
+    }
+
+    fn plain() -> Self {
+        Self {
+            checkbox_checked: "[x] ",
+            checkbox_unchecked: "[ ] ",
+        }
+    }
+
+    fn from_config() -> Self {
+        let nerd_font = read_config()
+            .ok()
+            .and_then(|c| {
+                c.get("nerd_font")
+                    .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s != "false")))
+            })
+            .unwrap_or(true);
+        if nerd_font {
+            Self::nerd()
+        } else {
+            Self::plain()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Theme palette (matches workmux default dark)
 // ---------------------------------------------------------------------------
 
@@ -449,6 +490,7 @@ struct App {
     last_term: Option<String>,
     /// True after a Fatal error — worker is dead, no new runs possible.
     is_fatal: bool,
+    glyphs: Glyphs,
     history: InputHistory,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
@@ -457,6 +499,7 @@ struct App {
 impl App {
     fn new(
         initial_term: Option<String>,
+        glyphs: Glyphs,
         backend_rx: mpsc::Receiver<BackendEvent>,
         worker_tx: mpsc::SyncSender<WorkerCommand>,
     ) -> Self {
@@ -489,6 +532,7 @@ impl App {
             show_help: false,
             last_term,
             is_fatal: false,
+            glyphs,
             history: InputHistory::load(),
             backend_rx,
             worker_tx,
@@ -861,7 +905,7 @@ fn draw(frame: &mut Frame, app: &App) {
     match &app.mode {
         AppMode::Input(input) => draw_input(frame, input, main_area),
         AppMode::Running => draw_running(frame, app, main_area),
-        AppMode::Selecting(state) => draw_selecting(frame, state, main_area),
+        AppMode::Selecting(state) => draw_selecting(frame, state, &app.glyphs, main_area),
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
         AppMode::Done(msg) => draw_done(frame, app, msg, main_area),
         AppMode::Error(msg) => draw_error(frame, msg, main_area),
@@ -1281,7 +1325,7 @@ fn draw_log_panel(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(log_para, area);
 }
 
-fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
+fn draw_selecting(frame: &mut Frame, state: &SelectionState, glyphs: &Glyphs, area: Rect) {
     // Split: card list on top, detail below
     let list_height = (state.cards.len() as u16 + 2).min(area.height / 2); // +2 for border
     let chunks = Layout::default()
@@ -1298,9 +1342,9 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, area: Rect) {
             let checkbox = if card.is_duplicate {
                 "  "
             } else if state.selected.contains(&i) {
-                "\u{f4a7} "
+                glyphs.checkbox_checked
             } else {
-                "\u{f0131} "
+                glyphs.checkbox_unchecked
             };
 
             let label = card
@@ -1479,10 +1523,11 @@ fn draw_error(frame: &mut Frame, msg: &str, area: Rect) {
 fn run_app(
     mut terminal: DefaultTerminal,
     initial_term: Option<String>,
+    glyphs: Glyphs,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
 ) -> anyhow::Result<bool> {
-    let mut app = App::new(initial_term, backend_rx, worker_tx);
+    let mut app = App::new(initial_term, glyphs, backend_rx, worker_tx);
 
     loop {
         app.tick = app.tick.wrapping_add(1);
@@ -1541,9 +1586,10 @@ pub fn run_tui(args: GenerateArgs) -> anyhow::Result<()> {
         std::thread::spawn(move || super::command_generate::run_pipeline(args, tx_events, rx_cmd));
 
     // Run TUI on main thread
+    let glyphs = Glyphs::from_config();
     let terminal = ratatui::init();
     crossterm::execute!(std::io::stdout(), crossterm::event::EnableBracketedPaste).ok();
-    let user_quit = run_app(terminal, initial_term, rx_events, tx_cmd).unwrap_or(true);
+    let user_quit = run_app(terminal, initial_term, glyphs, rx_events, tx_cmd).unwrap_or(true);
     crossterm::execute!(std::io::stdout(), crossterm::event::DisableBracketedPaste).ok();
     ratatui::restore();
 
