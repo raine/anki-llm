@@ -1354,8 +1354,6 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("↑↓", "History"));
             s.push(footer_pipe());
             s.extend(footer_cmd("Ctrl+C", "Quit"));
-            s.push(footer_pipe());
-            s.extend(footer_cmd("?", "Help"));
         }
         AppMode::Running => {
             s.extend(footer_cmd("Esc", "Cancel"));
