@@ -801,7 +801,9 @@ impl App {
             AppMode::Selecting(_) => self.handle_key_selection(key),
             AppMode::Reviewing(_) => self.handle_key_review(key),
             AppMode::Done(_) | AppMode::Error(_) => match key.code {
-                KeyCode::Tab if !self.is_fatal => {
+                KeyCode::Char('m')
+                    if key.modifiers.contains(KeyModifiers::CONTROL) && !self.is_fatal =>
+                {
                     self.open_model_picker();
                 }
                 KeyCode::Char('n') if !self.is_fatal => {
@@ -855,7 +857,7 @@ impl App {
                     *input = LineInput::new(text).with_cursor(len);
                 }
             }
-            KeyCode::Tab => {
+            KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.open_model_picker();
             }
             KeyCode::Enter => {
@@ -900,7 +902,7 @@ impl App {
                 state.refresh_in_flight = true;
                 self.worker_tx.send(WorkerCommand::Refresh).ok();
             }
-            KeyCode::Tab => {
+            KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.open_model_picker();
             }
             KeyCode::Esc => {
@@ -1054,7 +1056,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
     let shortcuts: Vec<(&str, &str)> = match &app.mode {
         AppMode::Input(_) => vec![
             ("Enter", "Generate"),
-            ("Tab", "Model"),
+            ("Ctrl+O", "Model"),
             ("↑ / ↓", "History"),
             ("Esc", "Clear"),
             ("Ctrl+C", "Quit"),
@@ -1071,7 +1073,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("n", "None"),
             ("c", "Copy"),
             ("r", "More"),
-            ("Tab", "Model"),
+            ("Ctrl+O", "Model"),
             ("Enter", "Confirm"),
             ("Esc", "Back"),
             ("q", "Quit"),
@@ -1089,7 +1091,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             vec![
                 ("n", "New term"),
                 ("r", "Retry"),
-                ("Tab", "Model"),
+                ("Ctrl+O", "Model"),
                 ("q", "Quit"),
             ]
         }
@@ -1349,7 +1351,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         AppMode::Input(_) => {
             s.extend(footer_cmd("Enter", "Generate"));
             s.push(footer_pipe());
-            s.extend(footer_cmd("Tab", "Model"));
+            s.extend(footer_cmd("Ctrl+O", "Model"));
             s.push(footer_pipe());
             s.extend(footer_cmd("↑↓", "History"));
             s.push(footer_pipe());
@@ -1382,7 +1384,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                 s.extend(footer_cmd("r", "More"));
             }
             s.push(footer_pipe());
-            s.extend(footer_cmd("Tab", "Model"));
+            s.extend(footer_cmd("Ctrl+O", "Model"));
             s.push(footer_pipe());
             s.extend(footer_cmd("Enter", "Confirm"));
             s.push(footer_pipe());
@@ -1435,7 +1437,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                     s.extend(footer_cmd("r", "Retry"));
                 }
                 s.push(footer_pipe());
-                s.extend(footer_cmd("Tab", "Model"));
+                s.extend(footer_cmd("Ctrl+O", "Model"));
                 s.push(footer_pipe());
             }
             s.extend(footer_cmd("q", "Quit"));
