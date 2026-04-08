@@ -38,6 +38,11 @@ pub fn run(args: GenerateArgs) -> Result<()> {
     }
 }
 
+/// Resolve `args.prompt` to a concrete path for non-interactive use (legacy mode, worker thread).
+fn require_prompt_path(prompt: &Option<std::path::PathBuf>) -> Result<std::path::PathBuf> {
+    crate::workspace::resolver::resolve_prompt_path(prompt.clone())
+}
+
 // ---------------------------------------------------------------------------
 // Session state — prepared once, reused across terms
 // ---------------------------------------------------------------------------
@@ -92,7 +97,12 @@ pub fn run_pipeline(
     // --- Session setup (done once) ---
 
     step_start!(PipelineStep::LoadPrompt, None);
-    let content = std::fs::read_to_string(&args.prompt).map_err(|e| {
+    let prompt_path = require_prompt_path(&args.prompt).map_err(|e| {
+        tx.send(BackendEvent::Fatal(format!("{e}"))).ok();
+        e
+    })?;
+    crate::workspace::resolver::save_last_prompt(&prompt_path);
+    let content = std::fs::read_to_string(&prompt_path).map_err(|e| {
         tx.send(BackendEvent::Fatal(format!("{e}"))).ok();
         e
     })?;
@@ -739,7 +749,9 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
     })?;
 
     // 1. Load and parse prompt file
-    let content = std::fs::read_to_string(&args.prompt)?;
+    let prompt_path = require_prompt_path(&args.prompt)?;
+    crate::workspace::resolver::save_last_prompt(&prompt_path);
+    let content = std::fs::read_to_string(&prompt_path)?;
     let parsed = parse_prompt_file(&content)?;
     let frontmatter = parsed.frontmatter;
 

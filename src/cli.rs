@@ -84,9 +84,9 @@ pub struct ProcessFileArgs {
     /// Input file path (CSV or YAML)
     pub input: PathBuf,
 
-    /// Path to prompt template file
+    /// Path to prompt template file (auto-resolved from prompts_dir if omitted)
     #[arg(long, short = 'p')]
-    pub prompt: PathBuf,
+    pub prompt: Option<PathBuf>,
 
     /// Output file path (CSV or YAML)
     #[arg(long, short = 'o')]
@@ -156,9 +156,9 @@ pub struct ProcessDeckArgs {
     /// Deck name to process
     pub deck: String,
 
-    /// Path to prompt template file
+    /// Path to prompt template file (auto-resolved from prompts_dir if omitted)
     #[arg(long, short = 'p')]
-    pub prompt: PathBuf,
+    pub prompt: Option<PathBuf>,
 
     /// Field name to update with LLM response (mutually exclusive with --json)
     #[arg(long)]
@@ -252,9 +252,9 @@ pub struct GenerateArgs {
     /// Term to generate cards for (omit to enter interactively in TUI)
     pub term: Option<String>,
 
-    /// Path to prompt template file with frontmatter
+    /// Path to prompt template file with frontmatter (auto-resolved from prompts_dir if omitted)
     #[arg(long, short = 'p')]
-    pub prompt: PathBuf,
+    pub prompt: Option<PathBuf>,
 
     /// Number of card examples to generate
     #[arg(long, short = 'c', default_value = "3")]

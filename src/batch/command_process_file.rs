@@ -39,9 +39,12 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         all_ids.push(id);
     }
 
+    // Resolve prompt path
+    let prompt_path = crate::workspace::resolver::resolve_prompt_path(args.prompt)?;
+
     // Read prompt template
-    let prompt_template = fs::read_to_string(&args.prompt)
-        .with_context(|| format!("failed to read prompt file: {}", args.prompt.display()))?;
+    let prompt_template = fs::read_to_string(&prompt_path)
+        .with_context(|| format!("failed to read prompt file: {}", prompt_path.display()))?;
 
     // Build runtime config
     let runtime = build_runtime_config(RuntimeConfigArgs {

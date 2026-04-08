@@ -16,6 +16,7 @@ use anki_llm::generate;
 use anki_llm::llm;
 use anki_llm::style;
 use anki_llm::template;
+use anki_llm::workspace;
 
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
