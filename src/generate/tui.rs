@@ -21,7 +21,7 @@ use crate::config::store::read_config;
 use crate::llm::pricing;
 
 use super::cards::ValidatedCard;
-use super::quality::FlaggedCard;
+use super::process::FlaggedCard;
 
 // ---------------------------------------------------------------------------
 // Events / responses
@@ -1573,6 +1573,11 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, glyphs: &Glyphs, ar
                 .map(|v| super::selector::strip_html_tags(v))
                 .unwrap_or_default();
             let dup_note = if card.is_duplicate { " [dup]" } else { "" };
+            let flag_note = if !card.flags.is_empty() {
+                " [flagged]"
+            } else {
+                ""
+            };
 
             let style = if i == state.cursor {
                 Style::default()
@@ -1595,10 +1600,19 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, glyphs: &Glyphs, ar
             } else {
                 style
             };
-            ListItem::new(Line::from(vec![
+            let mut spans = vec![
                 Span::styled(checkbox, checkbox_style),
                 Span::styled(format!("{label}{dup_note}"), style),
-            ]))
+            ];
+            if !flag_note.is_empty() {
+                spans.push(Span::styled(
+                    flag_note,
+                    Style::default()
+                        .fg(THEME.warning)
+                        .add_modifier(Modifier::DIM),
+                ));
+            }
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
@@ -1625,6 +1639,18 @@ fn draw_selecting(frame: &mut Frame, state: &SelectionState, glyphs: &Glyphs, ar
                 "  ⚠ Already exists in Anki",
                 Style::default().fg(THEME.warning),
             )));
+            lines.push(Line::from(""));
+        }
+
+        if !card.flags.is_empty() {
+            for flag in &card.flags {
+                lines.push(Line::from(Span::styled(
+                    format!("  ⚠ {flag}"),
+                    Style::default()
+                        .fg(THEME.warning)
+                        .add_modifier(Modifier::DIM),
+                )));
+            }
             lines.push(Line::from(""));
         }
 

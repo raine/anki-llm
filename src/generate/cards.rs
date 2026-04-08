@@ -18,6 +18,8 @@ pub struct ValidatedCard {
     pub raw_anki_fields: IndexMap<String, String>,
     /// Whether this card already exists in Anki.
     pub is_duplicate: bool,
+    /// Informational flags from pre-select check steps.
+    pub flags: Vec<String>,
 }
 
 /// Map card fields from LLM keys to Anki field names.
@@ -93,6 +95,7 @@ pub fn validate_cards(
             anki_fields,
             raw_anki_fields,
             is_duplicate,
+            flags: Vec::new(),
         });
     }
     Ok(validated)

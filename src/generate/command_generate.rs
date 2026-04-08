@@ -16,12 +16,11 @@ use crate::template::frontmatter::{Frontmatter, parse_prompt_file};
 use crate::style::style;
 
 use super::anki_import::{import_cards_to_anki, report_import_result};
-use super::cards::{ValidatedCard, validate_cards};
+use super::cards::{ValidatedCard, map_fields_to_anki, validate_cards};
 use super::exporter::export_cards;
 use super::manual::get_llm_response_manually;
-use super::post_process::run_post_process;
+use super::process::run_processors;
 use super::processor::{CardCandidate, generate_cards};
-use super::quality::run_quality_checks;
 use super::sanitize::sanitize_fields;
 use super::selector::{display_cards, select_cards_legacy};
 use super::tui::{BackendEvent, PipelineStep, SessionInfo, StepStatus, WorkerCommand};
@@ -425,12 +424,21 @@ fn execute_pipeline_for_term(
             );
         }
 
-        // Post-process (rewrite fields via sub-LLM calls)
-        if !session.frontmatter.post_process.is_empty() && !candidates.is_empty() {
+        // Pre-select processing (transforms + checks before card selection)
+        let pre_select_steps = session
+            .frontmatter
+            .processing
+            .as_ref()
+            .map(|p| p.pre_select.as_slice())
+            .unwrap_or_default();
+
+        let mut pre_select_flags: Vec<super::process::CardFlag> = Vec::new();
+
+        if !pre_select_steps.is_empty() && !candidates.is_empty() {
             step_start!(PipelineStep::PostProcess, None);
-            let pp_result = run_post_process(
+            let proc_result = run_processors(
+                pre_select_steps,
                 candidates,
-                &session.frontmatter.post_process,
                 &session.field_map_keys,
                 &session.client,
                 &session.runtime.model,
@@ -444,15 +452,22 @@ fn execute_pipeline_for_term(
                 tx.send(BackendEvent::RunError(format!("{e}"))).ok();
                 e
             })?;
-            candidates = pp_result.cards;
-            generation_cost += pp_result.cost;
-            if pp_result.cost > 0.0 {
+            candidates = proc_result.cards;
+            pre_select_flags = proc_result.flags;
+            generation_cost += proc_result.cost;
+            if proc_result.cost > 0.0 {
                 tx.send(BackendEvent::CostUpdate {
-                    input_tokens: pp_result.input_tokens,
-                    output_tokens: pp_result.output_tokens,
-                    cost: pp_result.cost,
+                    input_tokens: proc_result.input_tokens,
+                    output_tokens: proc_result.output_tokens,
+                    cost: proc_result.cost,
                 })
                 .ok();
+            }
+            if proc_result.rejected_count > 0 {
+                log!(
+                    "{} card(s) rejected by pre-select checks",
+                    proc_result.rejected_count
+                );
             }
             step_done!(PipelineStep::PostProcess, None);
         } else {
@@ -499,6 +514,14 @@ fn execute_pipeline_for_term(
                 }
             }
         };
+
+        // Attach pre-select flags to validated cards (indices match candidates order)
+        let mut validated = validated;
+        for flag in &pre_select_flags {
+            if let Some(card) = validated.get_mut(flag.card_index) {
+                card.flags.push(flag.reason.clone());
+            }
+        }
 
         // Deduplicate against cards already seen in this session
         let mut new_cards: Vec<ValidatedCard> = Vec::new();
@@ -616,66 +639,195 @@ fn execute_pipeline_for_term(
         return Ok(true);
     }
 
-    // Quality check
-    step_start!(PipelineStep::QualityCheck, None);
-    let qc_result = run_quality_checks(
-        selected,
-        session.frontmatter.quality_check.as_ref(),
-        &session.client,
-        &session.runtime.model,
-        session.runtime.temperature,
-        session.runtime.max_tokens,
-        session.runtime.retries,
-        Some(&session.logger),
-        on_log,
-    )
-    .map_err(|e| {
-        step_error!(PipelineStep::QualityCheck, format!("{e}"));
-        tx.send(BackendEvent::RunError(format!("{e}"))).ok();
-        e
-    })?;
+    // Post-select processing (transforms + checks after card selection)
+    let post_select_steps = session
+        .frontmatter
+        .processing
+        .as_ref()
+        .map(|p| p.post_select.as_slice())
+        .unwrap_or_default();
 
-    if qc_result.cost > 0.0 {
-        tx.send(BackendEvent::CostUpdate {
-            input_tokens: qc_result.input_tokens,
-            output_tokens: qc_result.output_tokens,
-            cost: qc_result.cost,
-        })
-        .ok();
-    }
+    let mut post_select_cost = 0.0;
 
-    // If there are flagged cards, ask the TUI to review them
-    let mut final_cards = qc_result.passed;
+    let mut final_cards: Vec<ValidatedCard> = selected;
 
-    if !qc_result.flagged.is_empty() {
-        let flagged_count = qc_result.flagged.len();
-        log!("{flagged_count} card(s) flagged by quality check. Please review.");
+    if !post_select_steps.is_empty() {
+        step_start!(PipelineStep::QualityCheck, None);
 
-        let flagged_clone = qc_result.flagged.clone();
-        tx.send(BackendEvent::RequestReview(flagged_clone)).ok();
+        // Convert ValidatedCards back to CardCandidates for processing
+        let candidates: Vec<CardCandidate> = final_cards
+            .iter()
+            .map(|vc| CardCandidate {
+                fields: vc
+                    .fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+                    .collect(),
+            })
+            .collect();
 
-        let decisions = match rx.recv() {
-            Ok(WorkerCommand::Review(d)) => d,
-            Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => return Ok(false),
-            _ => bail_err!("Unexpected response during review"),
-        };
+        let proc_result = run_processors(
+            post_select_steps,
+            candidates,
+            &session.field_map_keys,
+            &session.client,
+            &session.runtime.model,
+            session.runtime.temperature,
+            session.runtime.max_tokens,
+            session.runtime.retries,
+            Some(&session.logger),
+            on_log,
+        )
+        .map_err(|e| {
+            step_error!(PipelineStep::QualityCheck, format!("{e}"));
+            tx.send(BackendEvent::RunError(format!("{e}"))).ok();
+            e
+        })?;
 
-        for (flagged, keep) in qc_result.flagged.into_iter().zip(decisions.iter()) {
-            if *keep {
-                final_cards.push(flagged.card);
+        post_select_cost = proc_result.cost;
+        if proc_result.cost > 0.0 {
+            tx.send(BackendEvent::CostUpdate {
+                input_tokens: proc_result.input_tokens,
+                output_tokens: proc_result.output_tokens,
+                cost: proc_result.cost,
+            })
+            .ok();
+        }
+
+        // Check if any post-select transform writes to the identity field
+        let first_field_key = session.field_map_keys.first().map(|s| s.as_str());
+        let needs_revalidation = first_field_key
+            .map(|fk| {
+                post_select_steps.iter().any(|s| {
+                    s.kind == crate::template::frontmatter::ProcessorKind::Transform
+                        && s.write_fields().contains(&fk)
+                })
+            })
+            .unwrap_or(false);
+
+        let post_flags = proc_result.flags;
+        let post_rejected_count = proc_result.rejected_count;
+
+        final_cards = proc_result
+            .cards
+            .into_iter()
+            .map(|c| {
+                let sanitized = sanitize_fields(&c.fields);
+
+                let anki_fields =
+                    map_fields_to_anki(&sanitized, &session.frontmatter.field_map).unwrap();
+                let raw_strings: std::collections::HashMap<String, String> = c
+                    .fields
+                    .iter()
+                    .map(|(k, v)| {
+                        let s = match v {
+                            serde_json::Value::String(s) => s.clone(),
+                            other => other.to_string(),
+                        };
+                        (k.clone(), s)
+                    })
+                    .collect();
+                let raw_anki_fields =
+                    map_fields_to_anki(&raw_strings, &session.frontmatter.field_map).unwrap();
+
+                ValidatedCard {
+                    fields: sanitized,
+                    anki_fields,
+                    raw_anki_fields,
+                    is_duplicate: false,
+                    flags: Vec::new(),
+                }
+            })
+            .collect();
+
+        // Re-check duplicates if identity field may have changed
+        if needs_revalidation {
+            let first_field_name = &session.validation.note_type_fields[0];
+            for card in &mut final_cards {
+                if let Some(val) = card
+                    .anki_fields
+                    .get(first_field_name)
+                    .filter(|v| !v.is_empty())
+                {
+                    let escaped = val
+                        .replace('\\', "\\\\")
+                        .replace('"', "\\\"")
+                        .replace('*', "\\*")
+                        .replace('_', "\\_");
+                    let query = format!(
+                        "\"note:{}\" \"deck:{}\" \"{escaped}\"",
+                        session.frontmatter.note_type, session.frontmatter.deck
+                    );
+                    card.is_duplicate = session
+                        .anki
+                        .find_notes(&query)
+                        .map(|ids| !ids.is_empty())
+                        .unwrap_or(false);
+                }
+            }
+            final_cards.retain(|c| !c.is_duplicate);
+        }
+
+        // Handle flagged cards from post-select checks (trigger review)
+        let mut passed = Vec::new();
+        let mut flagged: Vec<super::process::FlaggedCard> = Vec::new();
+
+        for (i, card) in final_cards.into_iter().enumerate() {
+            let card_flags: Vec<&super::process::CardFlag> =
+                post_flags.iter().filter(|f| f.card_index == i).collect();
+            if card_flags.is_empty() {
+                passed.push(card);
+            } else {
+                let reason = card_flags
+                    .iter()
+                    .map(|f| f.reason.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                flagged.push(super::process::FlaggedCard { card, reason });
             }
         }
+
+        final_cards = passed;
+
+        if !flagged.is_empty() {
+            let flagged_count = flagged.len();
+            log!("{flagged_count} card(s) flagged by post-select check. Please review.");
+
+            let flagged_clone = flagged.clone();
+            tx.send(BackendEvent::RequestReview(flagged_clone)).ok();
+
+            let decisions = match rx.recv() {
+                Ok(WorkerCommand::Review(d)) => d,
+                Ok(WorkerCommand::Cancel) | Ok(WorkerCommand::Quit) | Err(_) => return Ok(false),
+                _ => bail_err!("Unexpected response during review"),
+            };
+
+            for (flagged_card, keep) in flagged.into_iter().zip(decisions.iter()) {
+                if *keep {
+                    final_cards.push(flagged_card.card);
+                }
+            }
+        }
+
+        if post_rejected_count > 0 {
+            log!(
+                "{} card(s) rejected by post-select checks",
+                post_rejected_count
+            );
+        }
+    } else {
+        step_skip!(PipelineStep::QualityCheck);
     }
 
     if final_cards.is_empty() {
         tx.send(BackendEvent::RunDone(
-            "No cards remaining after quality check.".to_string(),
+            "No cards remaining after processing.".to_string(),
         ))
         .ok();
         return Ok(true);
     }
 
-    let total_cost = generation_cost + qc_result.cost;
+    let total_cost = generation_cost + post_select_cost;
     if total_cost > 0.0 {
         log!("Total cost: {}", pricing::format_cost(total_cost));
     }
@@ -761,8 +913,13 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
     if !parsed.body.contains("{count}") {
         anyhow::bail!("Prompt is missing required placeholder: {{count}}");
     }
-    if args.copy && !frontmatter.post_process.is_empty() {
-        anyhow::bail!("post_process is not supported in --copy mode");
+    let has_processing = frontmatter
+        .processing
+        .as_ref()
+        .map(|p| !p.pre_select.is_empty() || !p.post_select.is_empty())
+        .unwrap_or(false);
+    if args.copy && has_processing {
+        anyhow::bail!("processing is not supported in --copy mode");
     }
 
     let s = style();
@@ -919,14 +1076,20 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         }
     }
 
-    // 5b. Post-process
-    if !frontmatter.post_process.is_empty() && !candidates.is_empty() {
+    // 5b. Pre-select processing
+    let pre_select_steps = frontmatter
+        .processing
+        .as_ref()
+        .map(|p| p.pre_select.as_slice())
+        .unwrap_or_default();
+
+    if !pre_select_steps.is_empty() && !candidates.is_empty() {
         let client_ref = client.as_ref().unwrap();
         let rt = runtime.as_ref().unwrap();
-        let spinner = crate::spinner::llm_spinner("Running post-process...".to_string());
-        let pp_result = run_post_process(
+        let spinner = crate::spinner::llm_spinner("Running pre-select processing...".to_string());
+        let proc_result = run_processors(
+            pre_select_steps,
             candidates,
-            &frontmatter.post_process,
             &field_map_keys,
             client_ref,
             &rt.model,
@@ -938,14 +1101,14 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         )?;
         spinner.finish_and_clear();
 
-        candidates = pp_result.cards;
-        if pp_result.cost > 0.0 {
-            generation_cost += pp_result.cost;
+        candidates = proc_result.cards;
+        if proc_result.cost > 0.0 {
+            generation_cost += proc_result.cost;
             eprintln!(
-                "  Post-process tokens: {} in / {} out | Cost: {}",
-                pp_result.input_tokens,
-                pp_result.output_tokens,
-                pricing::format_cost(pp_result.cost)
+                "  Processing tokens: {} in / {} out | Cost: {}",
+                proc_result.input_tokens,
+                proc_result.output_tokens,
+                pricing::format_cost(proc_result.cost)
             );
         }
     }
@@ -1007,100 +1170,130 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         return Ok(());
     }
 
-    // 7. Quality check
-    let qc_result = if let (Some(client), Some(rt)) = (client.as_ref(), runtime.as_ref()) {
-        // If the QC config specifies a different model, build a dedicated client
-        // for it so the correct provider base URL and API key are used.
-        let qc_runtime;
-        let (qc_client_storage, qc_model, qc_temp, qc_max_tokens, qc_retries) = if let Some(m) =
-            frontmatter
-                .quality_check
-                .as_ref()
-                .and_then(|qc| qc.model.as_deref())
-        {
-            qc_runtime = build_runtime_config(RuntimeConfigArgs {
-                model: Some(m),
-                batch_size: None,
-                max_tokens: rt.max_tokens,
-                temperature: rt.temperature,
-                retries: rt.retries,
-                dry_run: false,
-            })?;
-            (
-                Some(LlmClient::from_config(&qc_runtime)),
-                qc_runtime.model.as_str(),
-                qc_runtime.temperature,
-                qc_runtime.max_tokens,
-                qc_runtime.retries,
-            )
-        } else {
-            (
-                None,
-                rt.model.as_str(),
-                rt.temperature,
-                rt.max_tokens,
-                rt.retries,
-            )
-        };
-        let effective_client = qc_client_storage.as_ref().unwrap_or(client);
+    // 7. Post-select processing
+    let post_select_steps = frontmatter
+        .processing
+        .as_ref()
+        .map(|p| p.post_select.as_slice())
+        .unwrap_or_default();
 
-        let spinner = crate::spinner::llm_spinner(format!("Quality check using {}...", qc_model));
+    let mut final_cards = selected;
+    let mut post_select_cost = 0.0;
 
-        let result = run_quality_checks(
-            selected,
-            frontmatter.quality_check.as_ref(),
-            effective_client,
-            qc_model,
-            qc_temp,
-            qc_max_tokens,
-            qc_retries,
+    if !post_select_steps.is_empty()
+        && let (Some(client_ref), Some(rt)) = (client.as_ref(), runtime.as_ref())
+    {
+        let spinner = crate::spinner::llm_spinner("Running post-select processing...".to_string());
+
+        // Convert ValidatedCards to CardCandidates for processing
+        let post_candidates: Vec<CardCandidate> = final_cards
+            .iter()
+            .map(|vc| CardCandidate {
+                fields: vc
+                    .fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+                    .collect(),
+            })
+            .collect();
+
+        let proc_result = run_processors(
+            post_select_steps,
+            post_candidates,
+            &field_map_keys,
+            client_ref,
+            &rt.model,
+            rt.temperature,
+            rt.max_tokens,
+            rt.retries,
             Some(&logger),
             on_log,
         )?;
 
         spinner.finish_and_clear();
-        result
-    } else {
-        super::quality::QualityRunResult {
-            passed: selected,
-            flagged: vec![],
-            cost: 0.0,
-            input_tokens: 0,
-            output_tokens: 0,
-        }
-    };
+        post_select_cost = proc_result.cost;
 
-    // Interactive review of flagged cards (legacy mode)
-    let mut final_cards = qc_result.passed;
+        // Rebuild ValidatedCards
+        let post_flags = proc_result.flags;
+        final_cards = proc_result
+            .cards
+            .into_iter()
+            .map(|c| {
+                let sanitized = sanitize_fields(&c.fields);
+                let anki_fields = map_fields_to_anki(&sanitized, &frontmatter.field_map).unwrap();
+                let raw_strings: std::collections::HashMap<String, String> = c
+                    .fields
+                    .iter()
+                    .map(|(k, v)| {
+                        let s = match v {
+                            serde_json::Value::String(s) => s.clone(),
+                            other => other.to_string(),
+                        };
+                        (k.clone(), s)
+                    })
+                    .collect();
+                let raw_anki_fields =
+                    map_fields_to_anki(&raw_strings, &frontmatter.field_map).unwrap();
 
-    if !qc_result.flagged.is_empty() {
-        let flagged_count = qc_result.flagged.len();
-        eprintln!("\n{flagged_count} card(s) were flagged. Please review:");
+                ValidatedCard {
+                    fields: sanitized,
+                    anki_fields,
+                    raw_anki_fields,
+                    is_duplicate: false,
+                    flags: Vec::new(),
+                }
+            })
+            .collect();
 
-        for (i, flagged) in qc_result.flagged.into_iter().enumerate() {
-            eprintln!("\n--- Flagged Card {}/{} ---", i + 1, flagged_count);
-            for (key, value) in &flagged.card.fields {
-                eprintln!("{key}: {value}");
+        // Interactive review of flagged cards
+        let mut passed = Vec::new();
+        let mut flagged_cards = Vec::new();
+
+        for (i, card) in final_cards.into_iter().enumerate() {
+            let card_flags: Vec<_> = post_flags.iter().filter(|f| f.card_index == i).collect();
+            if card_flags.is_empty() {
+                passed.push(card);
+            } else {
+                let reason = card_flags
+                    .iter()
+                    .map(|f| f.reason.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                flagged_cards.push((card, reason));
             }
-            eprintln!("\nReason: {}", flagged.reason);
+        }
 
-            let keep = inquire::Confirm::new("Keep this card anyway?")
-                .with_default(false)
-                .prompt()
-                .unwrap_or(false);
+        final_cards = passed;
 
-            if keep {
-                final_cards.push(flagged.card);
+        if !flagged_cards.is_empty() {
+            let flagged_count = flagged_cards.len();
+            eprintln!("\n{flagged_count} card(s) were flagged. Please review:");
+
+            for (i, (card, reason)) in flagged_cards.into_iter().enumerate() {
+                eprintln!("\n--- Flagged Card {}/{} ---", i + 1, flagged_count);
+                for (key, value) in &card.fields {
+                    eprintln!("{key}: {value}");
+                }
+                eprintln!("\nReason: {reason}");
+
+                let keep = inquire::Confirm::new("Keep this card anyway?")
+                    .with_default(false)
+                    .prompt()
+                    .unwrap_or(false);
+
+                if keep {
+                    final_cards.push(card);
+                }
             }
         }
     }
 
     if final_cards.is_empty() {
-        eprintln!("\nNo cards remaining after quality check. Exiting.");
+        eprintln!("\nNo cards remaining after processing. Exiting.");
         return Ok(());
     }
 
-    let total_cost = generation_cost + qc_result.cost;
+    let total_cost = generation_cost + post_select_cost;
     if total_cost > 0.0 {
         eprintln!(
             "\n  {}  {}",

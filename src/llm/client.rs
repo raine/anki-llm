@@ -6,6 +6,20 @@ use crate::llm::runtime::RuntimeConfig;
 const DEFAULT_OPENAI_BASE: &str = "https://api.openai.com/v1";
 const TIMEOUT_SECS: u64 = 90;
 
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonSchema {
+    pub name: String,
+    pub schema: serde_json::Value,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub strict: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ResponseFormat {
+    JsonSchema { json_schema: JsonSchema },
+}
+
 #[derive(Debug, Serialize)]
 struct ChatRequest<'a> {
     model: &'a str,
@@ -14,6 +28,8 @@ struct ChatRequest<'a> {
     temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<&'a ResponseFormat>,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,16 +103,39 @@ impl LlmClient {
         temperature: Option<f64>,
         max_tokens: Option<u64>,
     ) -> Result<ChatCompletionResult, LlmError> {
+        self.chat_completion_structured(model, None, prompt, temperature, max_tokens, None)
+    }
+
+    /// Send a chat completion request with optional system message and structured output.
+    pub fn chat_completion_structured(
+        &self,
+        model: &str,
+        system_prompt: Option<&str>,
+        user_prompt: &str,
+        temperature: Option<f64>,
+        max_tokens: Option<u64>,
+        response_format: Option<&ResponseFormat>,
+    ) -> Result<ChatCompletionResult, LlmError> {
         let url = format!("{}/chat/completions", self.base_url);
+
+        let mut messages = Vec::new();
+        if let Some(sys) = system_prompt {
+            messages.push(ChatMessage {
+                role: "system",
+                content: sys,
+            });
+        }
+        messages.push(ChatMessage {
+            role: "user",
+            content: user_prompt,
+        });
 
         let body = ChatRequest {
             model,
-            messages: vec![ChatMessage {
-                role: "user",
-                content: prompt,
-            }],
+            messages,
             temperature,
             max_tokens,
+            response_format,
         };
 
         let mut response = self
