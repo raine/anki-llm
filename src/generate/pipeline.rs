@@ -1,0 +1,658 @@
+use std::collections::HashSet;
+
+use anyhow::Result;
+
+use crate::anki::client::AnkiClient;
+use crate::llm::client::LlmClient;
+use crate::llm::logger::LlmLogger;
+use crate::llm::pricing;
+use crate::template::frontmatter::Frontmatter;
+
+use super::anki_import::import_cards_to_anki;
+use super::cards::{ValidatedCard, map_fields_to_anki, validate_cards};
+use super::exporter::export_cards;
+use super::process::{CardFlag, FlaggedCard, run_processors};
+use super::processor::{CardCandidate, generate_cards};
+use super::sanitize::sanitize_fields;
+use super::selector::strip_html_tags;
+use super::validate::ValidationResult;
+
+// ---------------------------------------------------------------------------
+// Pipeline step identifiers
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PipelineStep {
+    LoadPrompt,
+    ValidateAnki,
+    Generate,
+    PostProcess,
+    Validate,
+    Select,
+    QualityCheck,
+    Finish,
+}
+
+impl PipelineStep {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::LoadPrompt => "Load prompt",
+            Self::ValidateAnki => "Validate Anki",
+            Self::Generate => "Generate cards",
+            Self::PostProcess => "Pre-select processing",
+            Self::Validate => "Check duplicates",
+            Self::Select => "Select cards",
+            Self::QualityCheck => "Post-select processing",
+            Self::Finish => "Import / export",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Traits
+// ---------------------------------------------------------------------------
+
+pub trait PipelineProgress: Send + Sync {
+    fn log(&self, msg: &str);
+    fn step_start(&self, step: PipelineStep, detail: Option<&str>);
+    fn step_done(&self, step: PipelineStep, detail: Option<String>);
+    fn step_skip(&self, step: PipelineStep);
+    fn step_error(&self, step: PipelineStep, detail: &str);
+    fn cost_update(&self, input_tokens: u64, output_tokens: u64, cost: f64);
+}
+
+pub enum SelectionAction {
+    Selected(Vec<usize>),
+    Refresh,
+    Cancel,
+    Quit,
+}
+
+pub enum ReviewResult {
+    Reviewed(Vec<bool>),
+    Cancel,
+}
+
+pub trait PipelineInteraction {
+    fn begin_selection(&self, cards: Vec<ValidatedCard>);
+    fn append_selection(&self, cards: Vec<ValidatedCard>);
+    fn wait_selection(&self) -> SelectionAction;
+    fn request_review(&self, flagged: Vec<FlaggedCard>) -> ReviewResult;
+}
+
+// ---------------------------------------------------------------------------
+// Config and outcome
+// ---------------------------------------------------------------------------
+
+pub struct PipelineConfig<'a> {
+    pub frontmatter: &'a Frontmatter,
+    pub prompt_body: &'a str,
+    pub field_map_keys: &'a [String],
+    pub validation: &'a ValidationResult,
+    pub client: &'a LlmClient,
+    pub anki: &'a AnkiClient,
+    pub logger: &'a LlmLogger,
+    pub model: &'a str,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u64>,
+    pub retries: u32,
+    pub count: u32,
+    pub dry_run: bool,
+    pub output: Option<&'a std::path::Path>,
+}
+
+pub enum PipelineOutcome {
+    Success { message: String },
+    Cancelled,
+    Quit,
+}
+
+// ---------------------------------------------------------------------------
+// Core pipeline
+// ---------------------------------------------------------------------------
+
+#[allow(clippy::too_many_lines)]
+pub fn run_pipeline_for_term(
+    config: &PipelineConfig,
+    interaction: &dyn PipelineInteraction,
+    progress: &dyn PipelineProgress,
+    term: &str,
+    exclude_terms: &[String],
+) -> Result<PipelineOutcome> {
+    let first_field_name = &config.validation.note_type_fields[0];
+    let on_log: &(dyn Fn(&str) + Send + Sync) = &|msg: &str| {
+        progress.log(msg);
+    };
+
+    let mut generation_cost = 0.0;
+    let mut all_validated: Vec<ValidatedCard> = Vec::new();
+    let mut seen_keys: HashSet<String> = HashSet::new();
+    let mut is_refresh = false;
+
+    // --- Generate / validate / select loop (supports refresh) ---
+
+    let selected_indices = loop {
+        let mut exclude: Vec<String> = seen_keys.iter().cloned().collect();
+        exclude.sort();
+        exclude.extend_from_slice(exclude_terms);
+
+        if is_refresh {
+            progress.step_done(PipelineStep::Select, None);
+        }
+        progress.step_start(PipelineStep::Generate, None);
+        if is_refresh {
+            progress.log(&format!(
+                "Generating {} more card(s) for \"{}\"...",
+                config.count, term,
+            ));
+        } else {
+            progress.log(&format!(
+                "Generating {} card(s) for \"{}\" using {}...",
+                config.count, term, config.model
+            ));
+        }
+
+        let gen_result = generate_cards(
+            term,
+            config.prompt_body,
+            config.count,
+            config.field_map_keys,
+            if exclude.is_empty() {
+                None
+            } else {
+                Some(&exclude)
+            },
+            config.client,
+            config.model,
+            config.temperature,
+            config.max_tokens,
+            config.retries,
+            Some(config.logger),
+            on_log,
+        );
+
+        let gen_result = match gen_result {
+            Ok(r) => r,
+            Err(e) => {
+                if is_refresh {
+                    progress.log(&format!("Refresh failed: {e}"));
+                    interaction.append_selection(Vec::new());
+                    progress.step_error(PipelineStep::Generate, &format!("{e}"));
+
+                    match interaction.wait_selection() {
+                        SelectionAction::Refresh => continue,
+                        SelectionAction::Selected(indices) => break indices,
+                        SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
+                        SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
+                    }
+                } else {
+                    progress.step_error(PipelineStep::Generate, &format!("{e}"));
+                    return Err(e);
+                }
+            }
+        };
+
+        if let Some(ref cost) = gen_result.cost {
+            generation_cost += cost.total_cost;
+            progress.cost_update(cost.input_tokens, cost.output_tokens, cost.total_cost);
+            progress.log(&format!(
+                "Tokens: {} in / {} out | Cost: {}",
+                cost.input_tokens,
+                cost.output_tokens,
+                pricing::format_cost(cost.total_cost)
+            ));
+        }
+
+        let mut candidates = gen_result.cards;
+
+        if candidates.is_empty() && !is_refresh {
+            return Err(anyhow::anyhow!("No cards were generated"));
+        }
+
+        progress.step_done(PipelineStep::Generate, None);
+        progress.log(&format!("Generated {} card(s)", candidates.len()));
+        if !candidates.is_empty() && candidates.len() != config.count as usize {
+            progress.log(&format!(
+                "Warning: requested {} cards, received {}",
+                config.count,
+                candidates.len()
+            ));
+        }
+
+        // Pre-select processing
+        let pre_select_steps = config
+            .frontmatter
+            .processing
+            .as_ref()
+            .map(|p| p.pre_select.as_slice())
+            .unwrap_or_default();
+
+        let mut pre_select_flags: Vec<CardFlag> = Vec::new();
+
+        if !pre_select_steps.is_empty() && !candidates.is_empty() {
+            progress.step_start(PipelineStep::PostProcess, None);
+            let proc_result = run_processors(
+                pre_select_steps,
+                candidates,
+                config.field_map_keys,
+                config.client,
+                config.model,
+                config.temperature,
+                config.max_tokens,
+                config.retries,
+                Some(config.logger),
+                on_log,
+            )?;
+            candidates = proc_result.cards;
+            pre_select_flags = proc_result.flags;
+            generation_cost += proc_result.cost;
+            if proc_result.cost > 0.0 {
+                progress.cost_update(
+                    proc_result.input_tokens,
+                    proc_result.output_tokens,
+                    proc_result.cost,
+                );
+            }
+            if proc_result.rejected_count > 0 {
+                progress.log(&format!(
+                    "{} card(s) rejected by pre-select checks",
+                    proc_result.rejected_count
+                ));
+            }
+            progress.step_done(PipelineStep::PostProcess, None);
+        } else {
+            progress.step_skip(PipelineStep::PostProcess);
+        }
+
+        // Sanitize and validate
+        progress.step_start(PipelineStep::Validate, None);
+        progress.log("Checking for duplicates...");
+
+        let sanitized_pairs: Vec<_> = candidates
+            .into_iter()
+            .map(|c| {
+                let s = sanitize_fields(&c.fields);
+                (c, s)
+            })
+            .collect();
+
+        let validated = match validate_cards(
+            sanitized_pairs,
+            config.frontmatter,
+            first_field_name,
+            config.anki,
+        ) {
+            Ok(v) => v,
+            Err(e) => {
+                if is_refresh {
+                    progress.log(&format!("Validation failed during refresh: {e}"));
+                    interaction.append_selection(Vec::new());
+                    progress.step_error(PipelineStep::Validate, &format!("{e}"));
+
+                    match interaction.wait_selection() {
+                        SelectionAction::Refresh => continue,
+                        SelectionAction::Selected(indices) => break indices,
+                        SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
+                        SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
+                    }
+                } else {
+                    progress.step_error(PipelineStep::Validate, &format!("{e}"));
+                    return Err(e);
+                }
+            }
+        };
+
+        // Attach pre-select flags
+        let mut validated = validated;
+        for flag in &pre_select_flags {
+            if let Some(card) = validated.get_mut(flag.card_index) {
+                card.flags.push(flag.reason.clone());
+            }
+        }
+
+        // Deduplicate against cards already seen in this session
+        let mut new_cards: Vec<ValidatedCard> = Vec::new();
+        for card in validated {
+            let key = card
+                .anki_fields
+                .get(first_field_name)
+                .map(|s| strip_html_tags(s).to_lowercase())
+                .unwrap_or_default();
+            if key.is_empty() || seen_keys.insert(key) {
+                new_cards.push(card);
+            }
+        }
+
+        let dup_count = new_cards.iter().filter(|c| c.is_duplicate).count();
+        progress.step_done(
+            PipelineStep::Validate,
+            if dup_count > 0 {
+                Some(format!("{dup_count} duplicate(s)"))
+            } else {
+                None
+            },
+        );
+        if dup_count > 0 {
+            progress.log(&format!("Found {dup_count} duplicate(s) (already in Anki)"));
+        }
+
+        if is_refresh {
+            if new_cards.is_empty() {
+                progress.log("No new unique cards generated");
+            } else {
+                progress.log(&format!("{} new card(s) added", new_cards.len()));
+            }
+            interaction.append_selection(new_cards.clone());
+            all_validated.extend(new_cards);
+        } else {
+            // Dry-run display
+            if config.dry_run {
+                progress.step_skip(PipelineStep::Select);
+                progress.step_skip(PipelineStep::QualityCheck);
+                progress.step_skip(PipelineStep::Finish);
+                for (i, card) in new_cards.iter().enumerate() {
+                    let dup = if card.is_duplicate {
+                        " (Duplicate)"
+                    } else {
+                        ""
+                    };
+                    progress.log(&format!("Card {}{dup}", i + 1));
+                    for (name, value) in &card.raw_anki_fields {
+                        progress.log(&format!("  {name}: {value}"));
+                    }
+                }
+                return Ok(PipelineOutcome::Success {
+                    message: "Dry run complete. No cards were imported.".to_string(),
+                });
+            }
+
+            if new_cards.is_empty() {
+                return Ok(PipelineOutcome::Success {
+                    message: "No cards to select from.".to_string(),
+                });
+            }
+
+            all_validated = new_cards;
+            progress.step_start(PipelineStep::Select, None);
+            interaction.begin_selection(all_validated.clone());
+        }
+
+        // Wait for user action
+        match interaction.wait_selection() {
+            SelectionAction::Refresh => {
+                is_refresh = true;
+                continue;
+            }
+            SelectionAction::Selected(indices) => break indices,
+            SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
+            SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
+        }
+    };
+
+    if selected_indices.is_empty() {
+        return Ok(PipelineOutcome::Success {
+            message: "No cards selected.".to_string(),
+        });
+    }
+
+    let mut selected: Vec<ValidatedCard> = selected_indices
+        .iter()
+        .filter_map(|&i| all_validated.get(i).cloned())
+        .collect();
+
+    progress.step_done(
+        PipelineStep::Select,
+        Some(format!("{} card(s) selected", selected.len())),
+    );
+
+    // Filter out duplicates
+    let dup_selected = selected.iter().filter(|c| c.is_duplicate).count();
+    if dup_selected > 0 {
+        progress.log(&format!(
+            "Skipping {dup_selected} duplicate(s) — already exist in Anki."
+        ));
+        selected.retain(|c| !c.is_duplicate);
+    }
+
+    if selected.is_empty() {
+        return Ok(PipelineOutcome::Success {
+            message: "No non-duplicate cards selected.".to_string(),
+        });
+    }
+
+    // Post-select processing
+    let post_select_steps = config
+        .frontmatter
+        .processing
+        .as_ref()
+        .map(|p| p.post_select.as_slice())
+        .unwrap_or_default();
+
+    let mut post_select_cost = 0.0;
+    let mut post_errors: Vec<String> = Vec::new();
+    let mut final_cards: Vec<ValidatedCard> = selected;
+
+    if !post_select_steps.is_empty() {
+        progress.step_start(PipelineStep::QualityCheck, None);
+
+        let candidates: Vec<CardCandidate> = final_cards
+            .iter()
+            .map(|vc| CardCandidate {
+                fields: vc
+                    .fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+                    .collect(),
+            })
+            .collect();
+
+        let proc_result = run_processors(
+            post_select_steps,
+            candidates,
+            config.field_map_keys,
+            config.client,
+            config.model,
+            config.temperature,
+            config.max_tokens,
+            config.retries,
+            Some(config.logger),
+            on_log,
+        )?;
+
+        post_select_cost = proc_result.cost;
+        if proc_result.cost > 0.0 {
+            progress.cost_update(
+                proc_result.input_tokens,
+                proc_result.output_tokens,
+                proc_result.cost,
+            );
+        }
+
+        // Check if any post-select transform writes to the identity field
+        let first_field_key = config.field_map_keys.first().map(|s| s.as_str());
+        let needs_revalidation = first_field_key
+            .map(|fk| {
+                post_select_steps.iter().any(|s| {
+                    s.kind == crate::template::frontmatter::ProcessorKind::Transform
+                        && s.write_fields().contains(&fk)
+                })
+            })
+            .unwrap_or(false);
+
+        let post_flags = proc_result.flags;
+        let post_rejected_count = proc_result.rejected_count;
+        post_errors = proc_result.errors;
+
+        final_cards = proc_result
+            .cards
+            .into_iter()
+            .map(|c| {
+                let sanitized = sanitize_fields(&c.fields);
+                let anki_fields =
+                    map_fields_to_anki(&sanitized, &config.frontmatter.field_map).unwrap();
+                let raw_strings: std::collections::HashMap<String, String> = c
+                    .fields
+                    .iter()
+                    .map(|(k, v)| {
+                        let s = match v {
+                            serde_json::Value::String(s) => s.clone(),
+                            other => other.to_string(),
+                        };
+                        (k.clone(), s)
+                    })
+                    .collect();
+                let raw_anki_fields =
+                    map_fields_to_anki(&raw_strings, &config.frontmatter.field_map).unwrap();
+
+                ValidatedCard {
+                    fields: sanitized,
+                    anki_fields,
+                    raw_anki_fields,
+                    is_duplicate: false,
+                    flags: Vec::new(),
+                }
+            })
+            .collect();
+
+        // Re-check duplicates if identity field may have changed
+        if needs_revalidation {
+            for card in &mut final_cards {
+                if let Some(val) = card
+                    .anki_fields
+                    .get(first_field_name)
+                    .filter(|v| !v.is_empty())
+                {
+                    let escaped = val
+                        .replace('\\', "\\\\")
+                        .replace('"', "\\\"")
+                        .replace('*', "\\*")
+                        .replace('_', "\\_");
+                    let query = format!(
+                        "\"note:{}\" \"deck:{}\" \"{escaped}\"",
+                        config.frontmatter.note_type, config.frontmatter.deck
+                    );
+                    card.is_duplicate = config
+                        .anki
+                        .find_notes(&query)
+                        .map(|ids| !ids.is_empty())
+                        .unwrap_or(false);
+                }
+            }
+            final_cards.retain(|c| !c.is_duplicate);
+        }
+
+        // Handle flagged cards
+        let mut passed = Vec::new();
+        let mut flagged: Vec<FlaggedCard> = Vec::new();
+
+        for (i, card) in final_cards.into_iter().enumerate() {
+            let card_flags: Vec<&CardFlag> =
+                post_flags.iter().filter(|f| f.card_index == i).collect();
+            if card_flags.is_empty() {
+                passed.push(card);
+            } else {
+                let reason = card_flags
+                    .iter()
+                    .map(|f| f.reason.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                flagged.push(FlaggedCard { card, reason });
+            }
+        }
+
+        final_cards = passed;
+
+        if !flagged.is_empty() {
+            let flagged_count = flagged.len();
+            progress.log(&format!(
+                "{flagged_count} card(s) flagged by post-select check. Please review."
+            ));
+
+            let flagged_clone = flagged.clone();
+            match interaction.request_review(flagged_clone) {
+                ReviewResult::Reviewed(decisions) => {
+                    for (flagged_card, keep) in flagged.into_iter().zip(decisions.iter()) {
+                        if *keep {
+                            final_cards.push(flagged_card.card);
+                        }
+                    }
+                }
+                ReviewResult::Cancel => return Ok(PipelineOutcome::Cancelled),
+            }
+        }
+
+        if post_rejected_count > 0 {
+            progress.log(&format!(
+                "{} card(s) rejected by post-select checks",
+                post_rejected_count
+            ));
+        }
+    } else {
+        progress.step_skip(PipelineStep::QualityCheck);
+    }
+
+    if final_cards.is_empty() {
+        let mut msg = "No cards remaining after processing.".to_string();
+        if !post_errors.is_empty() {
+            msg.push_str("\n\nErrors:\n");
+            for e in &post_errors {
+                msg.push_str(&format!("  • {e}\n"));
+            }
+        }
+        return Ok(PipelineOutcome::Success { message: msg });
+    }
+
+    let total_cost = generation_cost + post_select_cost;
+    if total_cost > 0.0 {
+        progress.log(&format!("Total cost: {}", pricing::format_cost(total_cost)));
+    }
+
+    progress.step_done(PipelineStep::QualityCheck, Some("done".to_string()));
+
+    // Export or import
+    progress.step_start(PipelineStep::Finish, None);
+
+    if let Some(output_path) = config.output {
+        export_cards(&final_cards, output_path, on_log)?;
+        progress.step_done(
+            PipelineStep::Finish,
+            Some(format!("exported to {}", output_path.display())),
+        );
+        Ok(PipelineOutcome::Success {
+            message: format!(
+                "Exported {} card(s) to {}",
+                final_cards.len(),
+                output_path.display()
+            ),
+        })
+    } else {
+        let result = import_cards_to_anki(&final_cards, config.frontmatter, config.anki, on_log)?;
+
+        if result.failures > 0 {
+            progress.step_done(
+                PipelineStep::Finish,
+                Some(format!(
+                    "{} added, {} failed",
+                    result.successes, result.failures
+                )),
+            );
+            Ok(PipelineOutcome::Success {
+                message: format!(
+                    "Import completed with errors: {} added, {} failed.",
+                    result.successes, result.failures
+                ),
+            })
+        } else {
+            progress.step_done(
+                PipelineStep::Finish,
+                Some(format!("{} card(s) added", result.successes)),
+            );
+            Ok(PipelineOutcome::Success {
+                message: format!(
+                    "Successfully added {} new note(s) to \"{}\"",
+                    result.successes, config.frontmatter.deck
+                ),
+            })
+        }
+    }
+}

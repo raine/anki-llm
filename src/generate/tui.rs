@@ -65,36 +65,8 @@ pub enum WorkerCommand {
     Quit,
 }
 
-// ---------------------------------------------------------------------------
-// Pipeline steps
-// ---------------------------------------------------------------------------
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum PipelineStep {
-    LoadPrompt,
-    ValidateAnki,
-    Generate,
-    PostProcess,
-    Validate,
-    Select,
-    QualityCheck,
-    Finish,
-}
-
-impl PipelineStep {
-    pub fn label(self) -> &'static str {
-        match self {
-            PipelineStep::LoadPrompt => "Load prompt",
-            PipelineStep::ValidateAnki => "Validate Anki",
-            PipelineStep::Generate => "Generate cards",
-            PipelineStep::PostProcess => "Pre-select processing",
-            PipelineStep::Validate => "Check duplicates",
-            PipelineStep::Select => "Select cards",
-            PipelineStep::QualityCheck => "Post-select processing",
-            PipelineStep::Finish => "Import / export",
-        }
-    }
-}
+// Re-export PipelineStep from the shared pipeline module
+pub use super::pipeline::PipelineStep;
 
 const ALL_STEPS: &[PipelineStep] = &[
     PipelineStep::LoadPrompt,

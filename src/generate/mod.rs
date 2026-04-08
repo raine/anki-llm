@@ -5,6 +5,7 @@ pub mod exporter;
 pub mod init;
 pub mod line_input;
 pub mod manual;
+pub mod pipeline;
 pub mod process;
 pub mod processor;
 pub mod sanitize;
