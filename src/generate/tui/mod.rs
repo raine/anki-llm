@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -14,10 +13,13 @@ use ratatui::{DefaultTerminal, Frame};
 mod events;
 mod history;
 mod prompt_picker;
+mod screens;
 mod theme;
 
 pub use events::{BackendEvent, SessionInfo, StepStatus, WorkerCommand};
 use history::InputHistory;
+use screens::review::{draw_reviewing, ReviewState};
+use screens::selection::{draw_selecting, SelectionState};
 use theme::{footer_cmd, footer_pipe, Glyphs, SPINNER_FRAMES, THEME};
 
 use super::line_input::LineInput;
@@ -27,7 +29,6 @@ use crate::cli::GenerateArgs;
 use crate::llm::pricing;
 
 use super::cards::ValidatedCard;
-use super::process::FlaggedCard;
 
 // Re-export PipelineStep from the shared pipeline module
 pub use super::pipeline::PipelineStep;
@@ -64,143 +65,6 @@ enum AppMode {
         note_ids: Vec<i64>,
     },
     Error(String),
-}
-
-struct SelectionState {
-    cards: Vec<ValidatedCard>,
-    cursor: usize,
-    selected: BTreeSet<usize>,
-    list_state: ListState,
-    detail_scroll: u16,
-    /// True while a refresh (load more) request is in flight.
-    refresh_in_flight: bool,
-}
-
-impl SelectionState {
-    fn new(cards: Vec<ValidatedCard>) -> Self {
-        let mut list_state = ListState::default();
-        list_state.select(Some(0));
-        let selected = BTreeSet::new();
-        Self {
-            cards,
-            cursor: 0,
-            selected,
-            list_state,
-            detail_scroll: 0,
-            refresh_in_flight: false,
-        }
-    }
-
-    fn move_up(&mut self) {
-        if self.cursor > 0 {
-            self.cursor -= 1;
-            self.list_state.select(Some(self.cursor));
-            self.detail_scroll = 0;
-        }
-    }
-
-    fn move_down(&mut self) {
-        if self.cursor + 1 < self.cards.len() {
-            self.cursor += 1;
-            self.list_state.select(Some(self.cursor));
-            self.detail_scroll = 0;
-        }
-    }
-
-    fn toggle_current(&mut self) {
-        if self
-            .cards
-            .get(self.cursor)
-            .map(|c| c.is_duplicate)
-            .unwrap_or(false)
-        {
-            return; // Duplicates cannot be selected
-        }
-        if self.selected.contains(&self.cursor) {
-            self.selected.remove(&self.cursor);
-        } else {
-            self.selected.insert(self.cursor);
-        }
-    }
-
-    fn select_all(&mut self) {
-        for (i, c) in self.cards.iter().enumerate() {
-            if !c.is_duplicate {
-                self.selected.insert(i);
-            }
-        }
-    }
-
-    fn select_none(&mut self) {
-        self.selected.clear();
-    }
-}
-
-struct ReviewState {
-    flagged: Vec<FlaggedCard>,
-    cursor: usize,        // which flagged card we're reviewing
-    decisions: Vec<bool>, // true = keep, false = discard
-    detail_scroll: u16,
-}
-
-impl ReviewState {
-    fn new(flagged: Vec<FlaggedCard>) -> Self {
-        let len = flagged.len();
-        Self {
-            flagged,
-            cursor: 0,
-            decisions: vec![false; len],
-            detail_scroll: 0,
-        }
-    }
-
-    fn current(&self) -> Option<&FlaggedCard> {
-        self.flagged.get(self.cursor)
-    }
-
-    fn keep_current(&mut self) {
-        if self.cursor < self.decisions.len() {
-            self.decisions[self.cursor] = true;
-        }
-        self.advance();
-    }
-
-    fn discard_current(&mut self) {
-        if self.cursor < self.decisions.len() {
-            self.decisions[self.cursor] = false;
-        }
-        self.advance();
-    }
-
-    fn keep_all(&mut self) {
-        for d in &mut self.decisions {
-            *d = true;
-        }
-        self.cursor = self.flagged.len(); // done
-    }
-
-    fn discard_all(&mut self) {
-        for d in &mut self.decisions {
-            *d = false;
-        }
-        self.cursor = self.flagged.len(); // done
-    }
-
-    fn advance(&mut self) {
-        self.cursor += 1;
-        self.detail_scroll = 0;
-    }
-
-    fn move_back(&mut self) {
-        if self.cursor > 0 {
-            self.cursor -= 1;
-            self.detail_scroll = 0;
-        }
-    }
-
-    fn is_done(&self) -> bool {
-        self.cursor >= self.flagged.len()
-    }
 }
 
 struct ModelPickerState {
@@ -1504,173 +1368,6 @@ fn draw_log_panel(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(log_para, area);
 }
 
-fn draw_selecting(frame: &mut Frame, state: &SelectionState, glyphs: &Glyphs, area: Rect) {
-    // Split: card list on top, detail below
-    let list_height = (state.cards.len() as u16 + 2).min(area.height / 2); // +2 for border
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(list_height), Constraint::Min(0)])
-        .split(area);
-
-    // Card list
-    let list_items: Vec<ListItem> = state
-        .cards
-        .iter()
-        .enumerate()
-        .map(|(i, card)| {
-            let checkbox = if card.is_duplicate {
-                "  "
-            } else if state.selected.contains(&i) {
-                glyphs.checkbox_checked
-            } else {
-                glyphs.checkbox_unchecked
-            };
-
-            let label = card
-                .anki_fields
-                .values()
-                .next()
-                .map(|v| super::selector::strip_html_tags(v))
-                .unwrap_or_default();
-            let dup_note = if card.is_duplicate { " [dup]" } else { "" };
-            let flag_note = if !card.flags.is_empty() {
-                " [flagged]"
-            } else {
-                ""
-            };
-
-            let style = if i == state.cursor {
-                Style::default()
-                    .fg(THEME.highlight_fg)
-                    .bg(THEME.highlight_bg)
-                    .add_modifier(Modifier::BOLD)
-            } else if card.is_duplicate {
-                Style::default().fg(THEME.dimmed)
-            } else if state.selected.contains(&i) {
-                Style::default().fg(THEME.success)
-            } else {
-                Style::default()
-            };
-
-            // Keep checkbox un-bolded so Nerd Font glyphs render at correct size
-            let checkbox_style = if i == state.cursor {
-                Style::default()
-                    .fg(THEME.highlight_fg)
-                    .bg(THEME.highlight_bg)
-            } else {
-                style
-            };
-            let mut spans = vec![
-                Span::styled(checkbox, checkbox_style),
-                Span::styled(format!("{label}{dup_note}"), style),
-            ];
-            if !flag_note.is_empty() {
-                spans.push(Span::styled(
-                    flag_note,
-                    Style::default()
-                        .fg(THEME.warning)
-                        .add_modifier(Modifier::DIM),
-                ));
-            }
-            ListItem::new(Line::from(spans))
-        })
-        .collect();
-
-    let mut list_state = state.list_state;
-    let title = format!(
-        " Cards ({}/{} selected) ",
-        state.selected.len(),
-        state.cards.len()
-    );
-    let list = List::new(list_items).block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .title(title)
-            .border_style(Style::default().fg(THEME.border)),
-    );
-    frame.render_stateful_widget(list, chunks[0], &mut list_state);
-
-    // Detail pane for focused card
-    if let Some(card) = state.cards.get(state.cursor) {
-        let mut lines: Vec<Line> = Vec::new();
-
-        if card.is_duplicate {
-            lines.push(Line::from(Span::styled(
-                "  ⚠ Already exists in Anki",
-                Style::default().fg(THEME.warning),
-            )));
-            lines.push(Line::from(""));
-        }
-
-        if !card.flags.is_empty() {
-            for flag in &card.flags {
-                lines.push(Line::from(Span::styled(
-                    format!("  ⚠ {flag}"),
-                    Style::default()
-                        .fg(THEME.warning)
-                        .add_modifier(Modifier::DIM),
-                )));
-            }
-            lines.push(Line::from(""));
-        }
-
-        for (name, value) in &card.raw_anki_fields {
-            lines.push(Line::from(Span::styled(
-                name.clone(),
-                Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
-            )));
-            lines.extend(super::selector::markdown_to_lines(value, "  "));
-            lines.push(Line::from(""));
-        }
-
-        let detail_para = Paragraph::new(Text::from(lines))
-            .wrap(Wrap { trim: false })
-            .scroll((state.detail_scroll, 0));
-        frame.render_widget(detail_para, chunks[1]);
-    }
-}
-
-fn draw_reviewing(frame: &mut Frame, state: &ReviewState, area: Rect) {
-    if let Some(flagged) = state.current() {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(5)])
-            .split(area);
-
-        // Reason
-        let reason_para = Paragraph::new(flagged.reason.as_str())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Reason ")
-                    .border_style(Style::default().fg(THEME.warning)),
-            )
-            .wrap(Wrap { trim: false });
-        frame.render_widget(reason_para, chunks[0]);
-
-        // Card detail
-        let mut lines: Vec<Line> = Vec::new();
-        for (name, value) in &flagged.card.raw_anki_fields {
-            lines.push(Line::from(Span::styled(
-                name.clone(),
-                Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
-            )));
-            lines.extend(super::selector::markdown_to_lines(value, "  "));
-            lines.push(Line::from(""));
-        }
-
-        let detail_para = Paragraph::new(Text::from(lines))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Card ")
-                    .border_style(Style::default().fg(THEME.border)),
-            )
-            .wrap(Wrap { trim: false })
-            .scroll((state.detail_scroll, 0));
-        frame.render_widget(detail_para, chunks[1]);
-    }
-}
 
 fn draw_done(frame: &mut Frame, app: &App, msg: &str, cards: &[ValidatedCard], area: Rect) {
     let mut summary_lines = vec![
