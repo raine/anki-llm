@@ -89,9 +89,16 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
     let yaml = serde_yaml::to_string(&frontmatter)?;
     let content = format!("---\n{yaml}---\n\n{}\n", draft.body.trim());
 
-    let output_path: PathBuf = args
-        .output
-        .unwrap_or_else(|| PathBuf::from(format!("{}-prompt.md", slugify_deck_name(&deck))));
+    let output_path: PathBuf = args.output.unwrap_or_else(|| {
+        let filename = format!("{}-prompt.md", slugify_deck_name(&deck));
+        // Default into prompts_dir if available
+        if let Some(dir) = crate::workspace::resolver::prompts_dir()
+            && (dir.is_dir() || std::fs::create_dir_all(&dir).is_ok())
+        {
+            return dir.join(&filename);
+        }
+        PathBuf::from(filename)
+    });
 
     std::fs::write(&output_path, &content)?;
 

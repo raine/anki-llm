@@ -1854,10 +1854,10 @@ fn run_prompt_picker(
     let mut list_state = ListState::default();
 
     // Pre-select last-used prompt if it matches one of the entries
-    if let Some(last) = last_prompt() {
-        if let Some(idx) = prompts.iter().position(|p| p.path == last) {
-            cursor = idx;
-        }
+    if let Some(last) = last_prompt()
+        && let Some(idx) = prompts.iter().position(|p| p.path == last)
+    {
+        cursor = idx;
     }
     list_state.select(Some(cursor));
 
@@ -1866,32 +1866,32 @@ fn run_prompt_picker(
             .draw(|f| draw_prompt_picker(f, prompts, cursor, &mut list_state, glyphs))
             .ok();
 
-        if event::poll(Duration::from_millis(50)).unwrap_or(false) {
-            if let Ok(Event::Key(key)) = event::read() {
-                match key.code {
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        if cursor > 0 {
-                            cursor -= 1;
-                            list_state.select(Some(cursor));
-                        }
+        if event::poll(Duration::from_millis(50)).unwrap_or(false)
+            && let Ok(Event::Key(key)) = event::read()
+        {
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if cursor > 0 {
+                        cursor -= 1;
+                        list_state.select(Some(cursor));
                     }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        if cursor + 1 < prompts.len() {
-                            cursor += 1;
-                            list_state.select(Some(cursor));
-                        }
-                    }
-                    KeyCode::Enter => {
-                        return Some(prompts[cursor].path.clone());
-                    }
-                    KeyCode::Esc | KeyCode::Char('q') => {
-                        return None;
-                    }
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        return None;
-                    }
-                    _ => {}
                 }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if cursor + 1 < prompts.len() {
+                        cursor += 1;
+                        list_state.select(Some(cursor));
+                    }
+                }
+                KeyCode::Enter => {
+                    return Some(prompts[cursor].path.clone());
+                }
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    return None;
+                }
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    return None;
+                }
+                _ => {}
             }
         }
     }
