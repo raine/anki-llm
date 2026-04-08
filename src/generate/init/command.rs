@@ -9,7 +9,7 @@ use crate::cli::GenerateInitArgs;
 use crate::data::slug::slugify_deck_name;
 use crate::llm::client::LlmClient;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
-use crate::template::frontmatter::{Frontmatter, QualityCheckConfig};
+use crate::template::frontmatter::{Frontmatter, ProcessingConfig, ProcessorKind, ProcessorStep};
 
 use super::interactive::{
     FieldMap, configure_field_mapping, map_inquire_err, select_deck, select_note_type,
@@ -74,7 +74,7 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
         }
     };
 
-    let quality_check = configure_quality_check(&draft.final_field_map)?;
+    let processing = configure_quality_check(&draft.final_field_map)?;
 
     let frontmatter = Frontmatter {
         title: None,
@@ -82,9 +82,7 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
         deck: deck.clone(),
         note_type,
         field_map: draft.final_field_map,
-        quality_check,
-        post_process: vec![],
-        processing: None,
+        processing,
     };
 
     let yaml = serde_yaml::to_string(&frontmatter)?;
@@ -112,7 +110,7 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
     Ok(())
 }
 
-fn configure_quality_check(field_map: &FieldMap) -> Result<Option<QualityCheckConfig>> {
+fn configure_quality_check(field_map: &FieldMap) -> Result<Option<ProcessingConfig>> {
     let want_qc = Confirm::new("Add a quality check step?")
         .with_default(false)
         .with_help_message("Quality checks use an LLM to review generated cards before importing")
@@ -134,12 +132,17 @@ fn configure_quality_check(field_map: &FieldMap) -> Result<Option<QualityCheckCo
         .map(|(k, _)| k.clone())
         .unwrap_or(selected_anki_name);
 
-    let prompt = "Review this flashcard field for accuracy and quality.\nContent: {text}\nRespond with JSON only: {\"is_valid\": true, \"reason\": \"brief explanation\"}".to_string();
+    let prompt = format!("Review this flashcard for accuracy and quality.\nContent: {{{field}}}");
 
-    Ok(Some(QualityCheckConfig {
-        field,
-        prompt,
-        model: None,
+    Ok(Some(ProcessingConfig {
+        pre_select: vec![],
+        post_select: vec![ProcessorStep {
+            kind: ProcessorKind::Check,
+            target: None,
+            writes: Vec::new(),
+            prompt,
+            model: None,
+        }],
     }))
 }
 

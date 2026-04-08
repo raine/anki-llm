@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use super::error::TemplateError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Frontmatter {
     /// Human-readable title for prompt picker (falls back to filename).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -14,10 +15,6 @@ pub struct Frontmatter {
     pub deck: String,
     pub note_type: String,
     pub field_map: IndexMap<String, String>,
-    #[serde(default)]
-    pub quality_check: Option<QualityCheckConfig>,
-    #[serde(default)]
-    pub post_process: Vec<PostProcessConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub processing: Option<ProcessingConfig>,
 }
@@ -63,74 +60,7 @@ pub struct ProcessingConfig {
     pub post_select: Vec<ProcessorStep>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QualityCheckConfig {
-    pub field: String,
-    pub prompt: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostProcessConfig {
-    /// Target field to update. If set, accepts plain text or `{"value": "..."}`.
-    /// If omitted, expects a JSON object whose keys are merged into the card.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub target: Option<String>,
-    pub prompt: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-}
-
-impl Frontmatter {
-    /// Migrate legacy `post_process` and `quality_check` into `processing` config.
-    pub fn normalize(&mut self) {
-        if self.processing.is_some() {
-            return;
-        }
-
-        let has_legacy_pp = !self.post_process.is_empty();
-        let has_legacy_qc = self.quality_check.is_some();
-
-        if !has_legacy_pp && !has_legacy_qc {
-            return;
-        }
-
-        let mut processing = ProcessingConfig::default();
-
-        if has_legacy_pp {
-            eprintln!(
-                "Warning: `post_process` is deprecated. Use `processing.pre_select` instead."
-            );
-            for pp in &self.post_process {
-                processing.pre_select.push(ProcessorStep {
-                    kind: ProcessorKind::Transform,
-                    target: pp.target.clone(),
-                    writes: Vec::new(),
-                    prompt: pp.prompt.clone(),
-                    model: pp.model.clone(),
-                });
-            }
-        }
-
-        if has_legacy_qc {
-            eprintln!(
-                "Warning: `quality_check` is deprecated. Use `processing.post_select` instead."
-            );
-            let qc = self.quality_check.as_ref().unwrap();
-            processing.post_select.push(ProcessorStep {
-                kind: ProcessorKind::Check,
-                target: None,
-                writes: Vec::new(),
-                prompt: qc.prompt.clone(),
-                model: qc.model.clone(),
-            });
-        }
-
-        self.processing = Some(processing);
-    }
-}
-
+#[derive(Debug)]
 pub struct ParsedPromptFile {
     pub frontmatter: Frontmatter,
     pub body: String,
@@ -148,7 +78,7 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
     let yaml_text = &caps[1];
     let body = caps[2].trim().to_string();
 
-    let mut frontmatter: Frontmatter = serde_yaml::from_str(yaml_text).map_err(|e| {
+    let frontmatter: Frontmatter = serde_yaml::from_str(yaml_text).map_err(|e| {
         TemplateError::InvalidFrontmatter(format!("Failed to parse frontmatter: {e}"))
     })?;
 
@@ -165,34 +95,6 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
         return Err(TemplateError::InvalidFrontmatter(
             "field_map must have at least one entry".into(),
         ));
-    }
-
-    if let Some(ref qc) = frontmatter.quality_check
-        && (qc.field.is_empty() || qc.prompt.is_empty())
-    {
-        return Err(TemplateError::InvalidFrontmatter(
-            "quality_check requires both field and prompt".into(),
-        ));
-    }
-
-    for task in &frontmatter.post_process {
-        if task.prompt.is_empty() {
-            return Err(TemplateError::InvalidFrontmatter(
-                "each post_process entry requires a prompt".into(),
-            ));
-        }
-        if let Some(ref target) = task.target {
-            if target.is_empty() {
-                return Err(TemplateError::InvalidFrontmatter(
-                    "post_process target must not be empty".into(),
-                ));
-            }
-            if !frontmatter.field_map.contains_key(target) {
-                return Err(TemplateError::InvalidFrontmatter(format!(
-                    "post_process target '{target}' must be a key in field_map",
-                )));
-            }
-        }
     }
 
     // Validate processing config
@@ -234,9 +136,6 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
         }
     }
 
-    // Auto-migrate legacy config
-    frontmatter.normalize();
-
     Ok(ParsedPromptFile { frontmatter, body })
 }
 
@@ -263,98 +162,8 @@ Hello {term}";
     }
 
     #[test]
-    fn parse_with_quality_check() {
-        let content = "---
-deck: Test
-note_type: Basic
-field_map:
-  front: Front
-quality_check:
-  field: front
-  prompt: Check {text}
----
-
-body";
-        let parsed = parse_prompt_file(content).unwrap();
-        assert!(parsed.frontmatter.quality_check.is_some());
-        let qc = parsed.frontmatter.quality_check.unwrap();
-        assert_eq!(qc.field, "front");
-    }
-
-    #[test]
     fn missing_frontmatter_markers() {
         let content = "no frontmatter here";
-        assert!(parse_prompt_file(content).is_err());
-    }
-
-    #[test]
-    fn parse_with_post_process_target() {
-        let content = "---
-deck: Test
-note_type: Basic
-field_map:
-  front: Front
-  read: Reading
-post_process:
-  - target: read
-    prompt: Fix {front}
----
-
-body";
-        let parsed = parse_prompt_file(content).unwrap();
-        assert_eq!(parsed.frontmatter.post_process.len(), 1);
-        let task = &parsed.frontmatter.post_process[0];
-        assert_eq!(task.target.as_deref(), Some("read"));
-        assert_eq!(task.prompt, "Fix {front}");
-    }
-
-    #[test]
-    fn parse_with_post_process_no_target() {
-        let content = "---
-deck: Test
-note_type: Basic
-field_map:
-  front: Front
-  read: Reading
-post_process:
-  - prompt: Return JSON with read and front
----
-
-body";
-        let parsed = parse_prompt_file(content).unwrap();
-        assert_eq!(parsed.frontmatter.post_process.len(), 1);
-        assert!(parsed.frontmatter.post_process[0].target.is_none());
-    }
-
-    #[test]
-    fn post_process_unknown_target() {
-        let content = "---
-deck: Test
-note_type: Basic
-field_map:
-  front: Front
-post_process:
-  - target: nonexistent
-    prompt: Fix it
----
-
-body";
-        assert!(parse_prompt_file(content).is_err());
-    }
-
-    #[test]
-    fn post_process_empty_prompt() {
-        let content = "---
-deck: Test
-note_type: Basic
-field_map:
-  front: Front
-post_process:
-  - target: front
-    prompt: ''
----
-
-body";
         assert!(parse_prompt_file(content).is_err());
     }
 
@@ -439,46 +248,6 @@ body";
     }
 
     #[test]
-    fn legacy_post_process_migrates_to_processing() {
-        let content = "---
-deck: Test
-note_type: Basic
-field_map:
-  front: Front
-  read: Reading
-post_process:
-  - target: read
-    prompt: Fix {front}
----
-
-body";
-        let parsed = parse_prompt_file(content).unwrap();
-        let processing = parsed.frontmatter.processing.unwrap();
-        assert_eq!(processing.pre_select.len(), 1);
-        assert_eq!(processing.pre_select[0].kind, ProcessorKind::Transform);
-        assert_eq!(processing.pre_select[0].target.as_deref(), Some("read"));
-    }
-
-    #[test]
-    fn legacy_quality_check_migrates_to_processing() {
-        let content = "---
-deck: Test
-note_type: Basic
-field_map:
-  front: Front
-quality_check:
-  field: front
-  prompt: Check {text}
----
-
-body";
-        let parsed = parse_prompt_file(content).unwrap();
-        let processing = parsed.frontmatter.processing.unwrap();
-        assert_eq!(processing.post_select.len(), 1);
-        assert_eq!(processing.post_select[0].kind, ProcessorKind::Check);
-    }
-
-    #[test]
     fn processing_field_must_be_in_field_map() {
         let content = "---
 deck: Test
@@ -494,5 +263,45 @@ processing:
 
 body";
         assert!(parse_prompt_file(content).is_err());
+    }
+
+    #[test]
+    fn legacy_post_process_rejected() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+post_process:
+  - target: front
+    prompt: Fix it
+---
+
+body";
+        let err = parse_prompt_file(content).unwrap_err();
+        assert!(
+            err.to_string().contains("unknown field"),
+            "expected unknown field error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn legacy_quality_check_rejected() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+quality_check:
+  field: front
+  prompt: Check {text}
+---
+
+body";
+        let err = parse_prompt_file(content).unwrap_err();
+        assert!(
+            err.to_string().contains("unknown field"),
+            "expected unknown field error, got: {err}"
+        );
     }
 }
