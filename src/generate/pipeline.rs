@@ -102,7 +102,11 @@ pub struct PipelineConfig<'a> {
 }
 
 pub enum PipelineOutcome {
-    Success { message: String },
+    Success {
+        message: String,
+        cards: Vec<ValidatedCard>,
+        note_ids: Vec<i64>,
+    },
     Cancelled,
     Quit,
 }
@@ -363,12 +367,16 @@ pub fn run_pipeline_for_term(
                 }
                 return Ok(PipelineOutcome::Success {
                     message: "Dry run complete. No cards were imported.".to_string(),
+                    cards: Vec::new(),
+                    note_ids: Vec::new(),
                 });
             }
 
             if new_cards.is_empty() {
                 return Ok(PipelineOutcome::Success {
                     message: "No cards to select from.".to_string(),
+                    cards: Vec::new(),
+                    note_ids: Vec::new(),
                 });
             }
 
@@ -392,6 +400,8 @@ pub fn run_pipeline_for_term(
     if selected_indices.is_empty() {
         return Ok(PipelineOutcome::Success {
             message: "No cards selected.".to_string(),
+            cards: Vec::new(),
+            note_ids: Vec::new(),
         });
     }
 
@@ -417,6 +427,8 @@ pub fn run_pipeline_for_term(
     if selected.is_empty() {
         return Ok(PipelineOutcome::Success {
             message: "No non-duplicate cards selected.".to_string(),
+            cards: Vec::new(),
+            note_ids: Vec::new(),
         });
     }
 
@@ -599,7 +611,11 @@ pub fn run_pipeline_for_term(
                 msg.push_str(&format!("  • {e}\n"));
             }
         }
-        return Ok(PipelineOutcome::Success { message: msg });
+        return Ok(PipelineOutcome::Success {
+            message: msg,
+            cards: Vec::new(),
+            note_ids: Vec::new(),
+        });
     }
 
     let total_cost = generation_cost + post_select_cost;
@@ -624,9 +640,12 @@ pub fn run_pipeline_for_term(
                 final_cards.len(),
                 output_path.display()
             ),
+            cards: final_cards,
+            note_ids: Vec::new(),
         })
     } else {
         let result = import_cards_to_anki(&final_cards, config.frontmatter, config.anki, on_log)?;
+        let note_ids = result.note_ids.clone();
 
         if result.failures > 0 {
             progress.step_done(
@@ -641,6 +660,8 @@ pub fn run_pipeline_for_term(
                     "Import completed with errors: {} added, {} failed.",
                     result.successes, result.failures
                 ),
+                cards: final_cards,
+                note_ids,
             })
         } else {
             progress.step_done(
@@ -652,6 +673,8 @@ pub fn run_pipeline_for_term(
                     "Successfully added {} new note(s) to \"{}\"",
                     result.successes, config.frontmatter.deck
                 ),
+                cards: final_cards,
+                note_ids,
             })
         }
     }

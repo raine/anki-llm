@@ -16,6 +16,7 @@ use ratatui::{DefaultTerminal, Frame};
 
 use super::line_input::LineInput;
 
+use crate::anki::client::AnkiClient;
 use crate::cli::GenerateArgs;
 use crate::config::store::read_config;
 use crate::llm::pricing;
@@ -52,6 +53,8 @@ pub enum BackendEvent {
     RunDone {
         message: String,
         cards: Vec<ValidatedCard>,
+        /// Anki note IDs of imported cards (empty for exports/dry runs).
+        note_ids: Vec<i64>,
     },
     RunError(String),         // single run failed (can retry with new term)
     ModelChangeError(String), // model switch failed
@@ -109,6 +112,7 @@ enum AppMode {
     Done {
         message: String,
         cards: Vec<ValidatedCard>,
+        note_ids: Vec<i64>,
     },
     Error(String),
 }
@@ -683,8 +687,16 @@ impl App {
                 self.run_output_tokens += output_tokens;
                 self.run_cost += cost;
             }
-            BackendEvent::RunDone { message, cards } => {
-                self.mode = AppMode::Done { message, cards };
+            BackendEvent::RunDone {
+                message,
+                cards,
+                note_ids,
+            } => {
+                self.mode = AppMode::Done {
+                    message,
+                    cards,
+                    note_ids,
+                };
                 self.current_step_idx = None;
             }
             BackendEvent::RunError(msg) => {
@@ -870,6 +882,36 @@ impl App {
                     if self.browse_step.is_some() {
                         self.browse_step = None;
                         self.browse_scroll = 0;
+                    }
+                }
+                KeyCode::Char('d') => {
+                    if let AppMode::Done {
+                        ref mut note_ids,
+                        ref mut cards,
+                        ref mut message,
+                        ..
+                    } = self.mode
+                        && !note_ids.is_empty()
+                    {
+                        let anki = AnkiClient::new();
+                        match anki.delete_notes(note_ids) {
+                            Ok(()) => {
+                                let count = note_ids.len();
+                                note_ids.clear();
+                                cards.clear();
+                                *message = format!("Deleted {count} note(s) from Anki.");
+                                self.toast = Some(Toast {
+                                    message: format!("Deleted {count} note(s)"),
+                                    tick: self.tick,
+                                });
+                            }
+                            Err(e) => {
+                                self.toast = Some(Toast {
+                                    message: format!("Delete failed: {e}"),
+                                    tick: self.tick,
+                                });
+                            }
+                        }
                     }
                 }
                 _ => {}
@@ -1095,7 +1137,7 @@ fn draw(frame: &mut Frame, app: &App) {
         AppMode::Running => draw_running(frame, app, main_area),
         AppMode::Selecting(state) => draw_selecting(frame, state, &app.glyphs, main_area),
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
-        AppMode::Done { message, cards } => {
+        AppMode::Done { message, cards, .. } => {
             if let Some(step_idx) = app.browse_step {
                 draw_step_logs(frame, app, step_idx, main_area);
             } else {
@@ -1181,7 +1223,22 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("u", "Back"),
             ("q", "Quit"),
         ],
-        AppMode::Done { .. } | AppMode::Error(_) => {
+        AppMode::Done { note_ids, .. } => {
+            let mut v = vec![
+                ("j / k", "Browse steps"),
+                ("PgUp/PgDn", "Scroll logs"),
+                ("Esc", "Back to summary"),
+                ("n", "New term"),
+                ("r", "Retry"),
+                ("Ctrl+O", "Model"),
+            ];
+            if !note_ids.is_empty() {
+                v.push(("d", "Delete from Anki"));
+            }
+            v.push(("q", "Quit"));
+            v
+        }
+        AppMode::Error(_) => {
             vec![
                 ("j / k", "Browse steps"),
                 ("PgUp/PgDn", "Scroll logs"),
@@ -1562,7 +1619,28 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.push(footer_pipe());
             s.extend(footer_cmd("?", "Help"));
         }
-        AppMode::Done { .. } | AppMode::Error(_) => {
+        AppMode::Done { note_ids, .. } => {
+            s.extend(footer_cmd("j/k", "Steps"));
+            s.push(footer_pipe());
+            if !app.is_fatal {
+                s.extend(footer_cmd("n", "New term"));
+                if app.last_term.is_some() {
+                    s.push(footer_pipe());
+                    s.extend(footer_cmd("r", "Retry"));
+                }
+                s.push(footer_pipe());
+                s.extend(footer_cmd("Ctrl+O", "Model"));
+                if !note_ids.is_empty() {
+                    s.push(footer_pipe());
+                    s.extend(footer_cmd("d", "Delete"));
+                }
+                s.push(footer_pipe());
+            }
+            s.extend(footer_cmd("q", "Quit"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("?", "Help"));
+        }
+        AppMode::Error(_) => {
             s.extend(footer_cmd("j/k", "Steps"));
             s.push(footer_pipe());
             if !app.is_fatal {

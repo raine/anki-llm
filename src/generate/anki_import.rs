@@ -8,6 +8,8 @@ use super::cards::ValidatedCard;
 pub struct ImportResult {
     pub successes: usize,
     pub failures: usize,
+    /// Note IDs of successfully added notes.
+    pub note_ids: Vec<i64>,
 }
 
 /// Add cards to Anki as new notes.
@@ -21,6 +23,7 @@ pub fn import_cards_to_anki(
         return Ok(ImportResult {
             successes: 0,
             failures: 0,
+            note_ids: Vec::new(),
         });
     }
 
@@ -37,12 +40,14 @@ pub fn import_cards_to_anki(
         .collect();
 
     let results = anki.add_notes(&notes)?;
-    let successes = results.iter().filter(|r| r.is_some()).count();
+    let note_ids: Vec<i64> = results.iter().filter_map(|r| *r).collect();
+    let successes = note_ids.len();
     let failures = results.len() - successes;
 
     Ok(ImportResult {
         successes,
         failures,
+        note_ids,
     })
 }
 

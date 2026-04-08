@@ -323,12 +323,26 @@ pub fn run_pipeline(
                     &term,
                     &[],
                 ) {
-                    Ok(PipelineOutcome::Success { message, cards, note_ids }) => {
-                        tx.send(BackendEvent::RunDone { message, cards, note_ids }).ok();
+                    Ok(PipelineOutcome::Success {
+                        message,
+                        cards,
+                        note_ids,
+                    }) => {
+                        tx.send(BackendEvent::RunDone {
+                            message,
+                            cards,
+                            note_ids,
+                        })
+                        .ok();
                     }
                     Ok(PipelineOutcome::Cancelled) | Ok(PipelineOutcome::Quit) => {
                         // Send RunDone so the TUI can clear its pending_cancels counter
-                        tx.send(BackendEvent::RunDone { message: String::new(), cards: Vec::new(), note_ids: Vec::new() }).ok();
+                        tx.send(BackendEvent::RunDone {
+                            message: String::new(),
+                            cards: Vec::new(),
+                            note_ids: Vec::new(),
+                        })
+                        .ok();
                     }
                     Err(e) => {
                         tx.send(BackendEvent::RunError(format!("{e}"))).ok();
@@ -643,7 +657,7 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
     };
 
     match super::pipeline::run_pipeline_for_term(&config, &interaction, &progress, &term, &[])? {
-        PipelineOutcome::Success { message } => {
+        PipelineOutcome::Success { message, .. } => {
             if !message.is_empty() {
                 eprintln!("\n  {}", s.green(&message));
             }
