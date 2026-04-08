@@ -648,6 +648,7 @@ fn execute_pipeline_for_term(
         .unwrap_or_default();
 
     let mut post_select_cost = 0.0;
+    let mut post_errors: Vec<String> = Vec::new();
 
     let mut final_cards: Vec<ValidatedCard> = selected;
 
@@ -707,6 +708,7 @@ fn execute_pipeline_for_term(
 
         let post_flags = proc_result.flags;
         let post_rejected_count = proc_result.rejected_count;
+        post_errors = proc_result.errors;
 
         final_cards = proc_result
             .cards
@@ -820,10 +822,14 @@ fn execute_pipeline_for_term(
     }
 
     if final_cards.is_empty() {
-        tx.send(BackendEvent::RunDone(
-            "No cards remaining after processing.".to_string(),
-        ))
-        .ok();
+        let mut msg = "No cards remaining after processing.".to_string();
+        if !post_errors.is_empty() {
+            msg.push_str("\n\nErrors:\n");
+            for e in &post_errors {
+                msg.push_str(&format!("  • {e}\n"));
+            }
+        }
+        tx.send(BackendEvent::RunDone(msg)).ok();
         return Ok(true);
     }
 
@@ -1212,6 +1218,12 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
 
         spinner.finish_and_clear();
         post_select_cost = proc_result.cost;
+
+        if !proc_result.errors.is_empty() {
+            for e in &proc_result.errors {
+                eprintln!("  Error: {e}");
+            }
+        }
 
         // Rebuild ValidatedCards
         let post_flags = proc_result.flags;

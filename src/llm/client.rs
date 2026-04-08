@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::error::LlmError;
+use crate::llm::provider;
 use crate::llm::runtime::RuntimeConfig;
 
 const DEFAULT_OPENAI_BASE: &str = "https://api.openai.com/v1";
@@ -93,6 +94,27 @@ impl LlmClient {
             api_key: config.api_key.clone(),
             agent,
         }
+    }
+
+    /// Create a client for a specific model, resolving the correct provider
+    /// base URL and API key. Returns `None` if no API key is available.
+    pub fn for_model(model: &str) -> Option<Self> {
+        let config = provider::provider_config(model);
+        let api_key = provider::api_key_for_model(model)?;
+        let base_url = config
+            .base_url
+            .unwrap_or_else(|| DEFAULT_OPENAI_BASE.to_string());
+
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(std::time::Duration::from_secs(TIMEOUT_SECS)))
+            .build()
+            .into();
+
+        Some(Self {
+            base_url,
+            api_key,
+            agent,
+        })
     }
 
     /// Send a chat completion request with a single user message.

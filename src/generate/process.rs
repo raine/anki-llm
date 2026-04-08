@@ -26,6 +26,8 @@ pub struct ProcessResult {
     pub flags: Vec<CardFlag>,
     /// Number of cards rejected by check steps (already removed from cards vec).
     pub rejected_count: usize,
+    /// Error messages from failed processing steps (for UI display).
+    pub errors: Vec<String>,
     pub cost: f64,
     pub input_tokens: u64,
     pub output_tokens: u64,
@@ -70,12 +72,21 @@ pub fn run_processors(
     let mut total_input_tokens = 0u64;
     let mut total_output_tokens = 0u64;
     let mut total_rejected = 0usize;
+    let mut all_errors: Vec<String> = Vec::new();
     // flags track (original index in final cards vec, reason)
     let mut all_flags: Vec<CardFlag> = Vec::new();
 
     for (step_idx, step) in steps.iter().enumerate() {
         let model = step.model.as_deref().unwrap_or(default_model);
         let total_cards = current_cards.len();
+
+        // If the step overrides the model, we may need a different provider client
+        let step_client = if step.model.is_some() {
+            LlmClient::for_model(model)
+        } else {
+            None
+        };
+        let effective_client = step_client.as_ref().unwrap_or(client);
 
         if total_cards == 0 {
             break;
@@ -140,7 +151,7 @@ pub fn run_processors(
                         }
 
                         let outcome = run_single_step(
-                            client,
+                            effective_client,
                             model,
                             system_prompt,
                             &prompts[idx],
@@ -208,10 +219,9 @@ pub fn run_processors(
                 }
                 Err(e) => {
                     total_rejected += 1;
-                    on_progress(&format!(
-                        "  Processing failed for card {}: {e}. Discarding.",
-                        idx + 1
-                    ));
+                    let msg = format!("Processing failed for card {}: {e}", idx + 1);
+                    on_progress(&format!("  {msg}. Discarding."));
+                    all_errors.push(msg);
                 }
             }
         }
@@ -230,6 +240,7 @@ pub fn run_processors(
         cards: current_cards,
         flags: all_flags,
         rejected_count: total_rejected,
+        errors: all_errors,
         cost: total_cost,
         input_tokens: total_input_tokens,
         output_tokens: total_output_tokens,
