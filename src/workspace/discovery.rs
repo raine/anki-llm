@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 use regex::Regex;
 
-/// Metadata extracted from a prompt file's frontmatter for display in the picker.
+/// Metadata extracted from a generate prompt file's frontmatter for display in the picker.
+/// Only files with both `deck` and `note_type` in frontmatter are included.
 #[derive(Debug, Clone)]
 pub struct PromptEntry {
     /// Absolute path to the prompt file.
@@ -13,9 +14,9 @@ pub struct PromptEntry {
     /// Optional description from frontmatter.
     pub description: Option<String>,
     /// Deck name from frontmatter.
-    pub deck: Option<String>,
+    pub deck: String,
     /// Note type from frontmatter.
-    pub note_type: Option<String>,
+    pub note_type: String,
 }
 
 /// Quick frontmatter-only metadata extracted without full validation.
@@ -64,11 +65,8 @@ pub fn discover_prompts(dir: &Path) -> Vec<PromptEntry> {
             }
         };
 
+        // Skip files without frontmatter silently (may be process prompts)
         let Some(caps) = re.captures(&content) else {
-            eprintln!(
-                "Warning: skipping {} (no frontmatter found)",
-                path.display()
-            );
             continue;
         };
 
@@ -84,6 +82,11 @@ pub fn discover_prompts(dir: &Path) -> Vec<PromptEntry> {
             }
         };
 
+        // Only include generate-style prompts (must have deck + note_type)
+        let (Some(deck), Some(note_type)) = (meta.deck, meta.note_type) else {
+            continue;
+        };
+
         let title = meta.title.unwrap_or_else(|| {
             path.file_stem()
                 .and_then(|s| s.to_str())
@@ -95,8 +98,8 @@ pub fn discover_prompts(dir: &Path) -> Vec<PromptEntry> {
             path: path.canonicalize().unwrap_or(path),
             title,
             description: meta.description,
-            deck: meta.deck,
-            note_type: meta.note_type,
+            deck,
+            note_type,
         });
     }
 
@@ -123,7 +126,7 @@ mod tests {
         let entries = discover_prompts(tmp.path());
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].title, "My Prompt");
-        assert_eq!(entries[0].deck.as_deref(), Some("Test"));
+        assert_eq!(entries[0].deck, "Test");
     }
 
     #[test]
@@ -161,5 +164,32 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let entries = discover_prompts(tmp.path());
         assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn skips_process_prompts_without_deck_note_type() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Process-style prompt: has frontmatter but no deck/note_type
+        fs::write(
+            tmp.path().join("process.md"),
+            "---\ntitle: Translate\n---\n\nTranslate {Japanese} to English",
+        )
+        .unwrap();
+        // Plain text prompt (no frontmatter at all)
+        fs::write(
+            tmp.path().join("plain.md"),
+            "Translate {Japanese} to English",
+        )
+        .unwrap();
+        // Generate prompt: has deck + note_type
+        fs::write(
+            tmp.path().join("generate.md"),
+            "---\ndeck: Test\nnote_type: Basic\n---\n\nbody",
+        )
+        .unwrap();
+
+        let entries = discover_prompts(tmp.path());
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].title, "generate");
     }
 }

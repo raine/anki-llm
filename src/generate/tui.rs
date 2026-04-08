@@ -1926,7 +1926,7 @@ fn draw_prompt_picker(
             } else {
                 Style::default().fg(THEME.text)
             };
-            let deck_info = p.deck.as_deref().unwrap_or("?");
+            let deck_info = &p.deck;
             ListItem::new(Line::from(vec![
                 Span::styled(&p.title, style),
                 Span::styled(format!("  {deck_info}"), Style::default().fg(THEME.dimmed)),
@@ -1962,17 +1962,11 @@ fn draw_prompt_picker(
         ]),
         Line::from(vec![
             Span::styled("Deck: ", Style::default().fg(THEME.dimmed)),
-            Span::styled(
-                selected.deck.as_deref().unwrap_or("—"),
-                Style::default().fg(THEME.text),
-            ),
+            Span::styled(selected.deck.as_str(), Style::default().fg(THEME.text)),
         ]),
         Line::from(vec![
             Span::styled("Note type: ", Style::default().fg(THEME.dimmed)),
-            Span::styled(
-                selected.note_type.as_deref().unwrap_or("—"),
-                Style::default().fg(THEME.text),
-            ),
+            Span::styled(selected.note_type.as_str(), Style::default().fg(THEME.text)),
         ]),
     ];
     if let Some(ref desc) = selected.description {
