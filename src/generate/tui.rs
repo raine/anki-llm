@@ -1199,7 +1199,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
 fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
     let row_count = picker.models.len() as u16;
     let height = (row_count + 2).min(20); // borders
-    let width: u16 = 32;
+    let width: u16 = 48;
 
     let area = frame.area();
     let rect = Rect::new(
@@ -1230,10 +1230,23 @@ fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
             Span::styled(" cancel ", Style::default().fg(THEME.help_muted)),
         ]));
 
+    // Inner width: total width - 2 borders - 2 highlight symbol
+    let inner_w = width.saturating_sub(4) as usize;
+
     let items: Vec<ListItem> = picker
         .models
         .iter()
-        .map(|m| ListItem::new(Span::styled(m.as_str(), Style::default().fg(THEME.text))))
+        .map(|m| {
+            let price = pricing::model_pricing(m)
+                .map(|p| format_model_price(p.input_cost_per_million, p.output_cost_per_million))
+                .unwrap_or_default();
+            let pad = inner_w.saturating_sub(m.len() + price.len());
+            ListItem::new(Line::from(vec![
+                Span::styled(m.as_str(), Style::default().fg(THEME.text)),
+                Span::raw(" ".repeat(pad)),
+                Span::styled(price, Style::default().fg(THEME.dimmed)),
+            ]))
+        })
         .collect();
 
     let list = List::new(items)
@@ -1250,6 +1263,20 @@ fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
 
     frame.render_widget(Clear, rect);
     frame.render_stateful_widget(list, rect, &mut list_state);
+}
+
+/// Format pricing as compact "$in/$out" per million tokens.
+fn format_model_price(input: f64, output: f64) -> String {
+    fn fmt(v: f64) -> String {
+        if v == (v as u64) as f64 {
+            format!("${}", v as u64)
+        } else if v * 10.0 == (v * 10.0).round() {
+            format!("${:.1}", v)
+        } else {
+            format!("${:.2}", v)
+        }
+    }
+    format!("{}/{}", fmt(input), fmt(output))
 }
 
 fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
