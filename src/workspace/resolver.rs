@@ -65,25 +65,32 @@ pub fn resolve_prompt(explicit: Option<PathBuf>) -> Result<ResolvedPrompt> {
         );
     }
 
-    if prompts.len() == 1 {
-        return Ok(ResolvedPrompt::Resolved(
-            prompts.into_iter().next().unwrap().path,
-        ));
-    }
-
     let is_interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
 
-    // Multiple prompts — show picker in interactive mode
+    // Interactive: use last-used if still valid, otherwise show picker
     if is_interactive {
+        let state = read_state().unwrap_or_default();
+        if let Some(ref last) = state.last_prompt
+            && last.exists()
+            && prompts.iter().any(|p| p.path == *last)
+        {
+            return Ok(ResolvedPrompt::Resolved(last.clone()));
+        }
         return Ok(ResolvedPrompt::ShowPicker(prompts));
     }
 
-    // Non-interactive: try last-used prompt
+    // Non-interactive: try last-used, then single prompt, then error
     let state = read_state().unwrap_or_default();
     if let Some(ref last) = state.last_prompt
         && last.exists()
     {
         return Ok(ResolvedPrompt::Resolved(last.clone()));
+    }
+
+    if prompts.len() == 1 {
+        return Ok(ResolvedPrompt::Resolved(
+            prompts.into_iter().next().unwrap().path,
+        ));
     }
 
     let names: Vec<_> = prompts.iter().map(|p| format!("  - {}", p.title)).collect();
