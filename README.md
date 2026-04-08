@@ -586,117 +586,81 @@ The frontmatter is a YAML block at the top of the file enclosed by `---`.
 - `field_map`: Maps the keys from the LLM's JSON output to your actual Anki field
   names. The LLM will be instructed to generate JSON with the keys on the left,
   and `anki-llm` will use them to populate the Anki fields on the right.
-- `quality_check` (optional): Enables automatic verification of generated cards
-  using a separate LLM call. The verification criteria is fully customizable via
-  a prompt template. Added automatically by `generate-init` when you enable this
-  feature.
-- `post_process` (optional): Runs focused sub-LLM calls to rewrite or fix
-  specific fields after generation. Useful for tasks like formatting Japanese
-  furigana readings that are hard to get right in the main prompt.
+- `processing` (optional): Runs LLM processing steps before and/or after card
+  selection. Supports two step types: `transform` (rewrite fields) and `check`
+  (quality verification with pass/flag/reject verdicts).
 
-##### Optional: Quality Check
+##### Optional: Processing Steps
 
-When running `generate-init`, the wizard will ask if you want to enable
-automatic quality verification. If enabled, after you select cards, the tool
-will verify each one using an additional LLM call and flag any that fail
-validation for your review. You can then decide whether to keep or discard
-flagged cards.
+The `processing` config lets you run LLM steps in two phases:
 
-**Setup (automatic):**
+- **`pre_select`**: Runs after generation, before you choose cards. Useful for
+  fixing field formatting or filtering out bad cards early.
+- **`post_select`**: Runs after selection. Useful for quality checks or final
+  polishing before import.
 
-The `generate-init` wizard will:
+Each step is either a **transform** (rewrites card fields) or a **check**
+(evaluates card quality).
 
-1. Ask if you want to enable the quality check
-2. Let you choose which field to verify
-3. Automatically include a generic prompt that works for any language (no
-   customization needed)
+**Transform — single field:**
 
-After you select cards during generation, each one is verified via an additional
-API call. Any cards that fail validation are shown for review with the LLM's
-reasoning, and you can interactively decide whether to keep or discard them.
-
-**Manual customization (optional):**
-
-The quality check is fully customizable. You can edit the `quality_check` section
-in your generated prompt file to verify any criteria you want (e.g., checking
-formality levels, specific grammar patterns, cultural appropriateness, etc.).
-You can also specify a different (typically cheaper) model for quality checks.
-The section looks like this:
+Use `target` to rewrite one field:
 
 ```yaml
-quality_check:
-  field: jp
-  model: gpt-4o-mini # Optional: use a cheaper model for checks
-  prompt: |
-    You are an expert native speaker. Evaluate if the following text sounds natural and well-written in its language.
-    Text: {text}
-
-    Consider grammar, syntax, word choice, and common phrasing.
-
-    Respond with JSON only, with no additional text or explanations outside the JSON structure.
-    Your response must be a JSON object with two keys:
-    - "is_valid": a boolean (true if the text passes your criteria, false otherwise).
-    - "reason": a brief, one-sentence explanation for your decision.
+processing:
+  pre_select:
+    - type: transform
+      target: read
+      model: gpt-4o-mini # Optional: use a different model
+      prompt: |
+        Segment this sentence with correct bunsetsu spacing and Kanji[reading] annotations.
+        Sentence: {kanji}
+        English meaning: {front}
 ```
 
-**Cost considerations:**
+**Transform — multiple fields:**
 
-Each selected card requires one additional API call for the quality check. You
-can can use a cheaper model (like `gpt-4o-mini`) for quality checks by adding a
-`model` field to the `quality_check` section. If not specified, it will use the
-same model as card generation.
-
-##### Optional: Post-Processing
-
-You can add a `post_process` section to your prompt file frontmatter to run
-focused sub-LLM calls on generated cards. This is useful when a specific field
-requires precise formatting that's hard to get right in the main generation
-prompt.
-
-Post-processing runs after card generation but before duplicate checking and
-card selection, so you see corrected fields when choosing which cards to keep.
-
-**Single-field mode:**
-
-Use `target` to rewrite one field. The LLM response is used as the new field
-value directly (plain text).
+Use `writes` to update several fields in one LLM call:
 
 ```yaml
-post_process:
-  - target: read
-    model: gpt-4o-mini # Optional: use a different model
-    prompt: |
-      You are a Japanese linguistics expert.
-      Segment this sentence with correct bunsetsu spacing and Kanji[reading] annotations.
-      Sentence: {kanji}
-      English meaning: {front}
-      Output only the formatted reading, nothing else.
+processing:
+  pre_select:
+    - type: transform
+      writes: [read, context]
+      prompt: |
+        Given this Japanese sentence: {kanji}
+        Provide the reading with furigana and a brief context note.
 ```
 
-**Multi-field mode:**
+**Check — quality verification:**
 
-Omit `target` to update multiple fields in one LLM call. The response must be a
-JSON object — its keys are merged into the card as a partial patch. Only the
-returned keys are updated; other fields stay unchanged.
+Check steps evaluate cards and return `pass`, `flag`, or `reject`:
+
+- **pass**: card continues normally
+- **flag**: card is kept but shown with a warning (pre-select flags are
+  informational in the selection UI; post-select flags trigger a review screen)
+- **reject**: card is discarded
 
 ```yaml
-post_process:
-  - prompt: |
-      Given this Japanese sentence: {kanji}
-      Return a JSON object with:
-      - "read": the sentence with furigana and bunsetsu spacing
-      - "context": who would say this and when
-      Respond with JSON only: {"read": "...", "context": "..."}
+processing:
+  post_select:
+    - type: check
+      prompt: |
+        Evaluate if the following text sounds natural in Japanese.
+        Text: {kanji}
 ```
+
+You don't need to specify the response format — the system automatically
+instructs the LLM to return structured JSON with `result` and `reason` fields.
 
 **Key details:**
 
-- All card fields are available as `{placeholders}` in the prompt (e.g.
-  `{kanji}`, `{front}`, `{read}`, `{expl}`, `{context}`).
-- Multiple post-process entries run in order. Later entries see results from
-  earlier ones.
-- Cards that fail a post-process step are discarded.
-- Each entry can specify its own `model`.
+- All card fields are available as `{placeholders}` in the prompt.
+- Steps within a phase run in order. Later steps see results from earlier ones.
+- Cards within each step are processed concurrently.
+- Transform steps must declare which fields they write (`target` or `writes`).
+  Check steps must not have `target`/`writes`.
+- Each step can specify its own `model`.
 - Not supported in `--copy` mode.
 
 **Prompt Body**
