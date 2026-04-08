@@ -1224,6 +1224,7 @@ fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
 }
 
 fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
+    frame.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::RIGHT)
         .border_style(Style::default().fg(THEME.border));
