@@ -88,6 +88,12 @@ pub enum StepStatus {
     Error(String),
 }
 
+struct StepRecord {
+    step: PipelineStep,
+    status: StepStatus,
+    logs: Vec<String>,
+}
+
 // ---------------------------------------------------------------------------
 // App state
 // ---------------------------------------------------------------------------
@@ -479,7 +485,9 @@ struct App {
     mode: AppMode,
     session_info: Option<SessionInfo>,
     logs: Vec<String>,
-    steps: Vec<(PipelineStep, StepStatus)>,
+    steps: Vec<StepRecord>,
+    /// Index of the currently-running step (for bucketing logs).
+    current_step_idx: Option<usize>,
     /// Cost for the current run.
     run_cost: f64,
     run_input_tokens: u64,
@@ -506,6 +514,9 @@ struct App {
     glyphs: Glyphs,
     history: InputHistory,
     toast: Option<Toast>,
+    /// In Done/Error mode: selected step index for log browsing, None = summary.
+    browse_step: Option<usize>,
+    browse_scroll: u16,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
 }
@@ -524,7 +535,11 @@ impl App {
     ) -> Self {
         let steps = ALL_STEPS
             .iter()
-            .map(|&s| (s, StepStatus::Pending))
+            .map(|&s| StepRecord {
+                step: s,
+                status: StepStatus::Pending,
+                logs: Vec::new(),
+            })
             .collect();
         let last_term = initial_term.clone();
         let mode = if let Some(term) = initial_term {
@@ -538,6 +553,7 @@ impl App {
             session_info: None,
             logs: Vec::new(),
             steps,
+            current_step_idx: None,
             run_cost: 0.0,
             run_input_tokens: 0,
             run_output_tokens: 0,
@@ -556,6 +572,8 @@ impl App {
             glyphs,
             history: InputHistory::load(),
             toast: None,
+            browse_step: None,
+            browse_scroll: 0,
             backend_rx,
             worker_tx,
         }
@@ -569,9 +587,13 @@ impl App {
         self.run_cost = 0.0;
         self.run_input_tokens = 0;
         self.run_output_tokens = 0;
-        for (_, status) in &mut self.steps {
-            *status = StepStatus::Pending;
+        for record in &mut self.steps {
+            record.status = StepStatus::Pending;
+            record.logs.clear();
         }
+        self.current_step_idx = None;
+        self.browse_step = None;
+        self.browse_scroll = 0;
     }
 
     fn open_model_picker(&mut self) {
@@ -585,11 +607,15 @@ impl App {
         }
     }
 
+    fn step_index(&self, step: PipelineStep) -> Option<usize> {
+        self.steps.iter().position(|r| r.step == step)
+    }
+
     fn step_status_mut(&mut self, step: PipelineStep) -> Option<&mut StepStatus> {
         self.steps
             .iter_mut()
-            .find(|(s, _)| *s == step)
-            .map(|(_, st)| st)
+            .find(|r| r.step == step)
+            .map(|r| &mut r.status)
     }
 
     fn handle_backend_event(&mut self, event: BackendEvent) {
@@ -611,12 +637,18 @@ impl App {
         match event {
             BackendEvent::SessionReady(_) => unreachable!(),
             BackendEvent::Log(msg) => {
+                if let Some(idx) = self.current_step_idx {
+                    self.steps[idx].logs.push(msg.clone());
+                }
                 self.logs.push(msg);
                 if self.log_auto_scroll {
                     self.log_scroll = self.logs.len().saturating_sub(1) as u16;
                 }
             }
             BackendEvent::StepUpdate { step, status } => {
+                if matches!(status, StepStatus::Running(_)) {
+                    self.current_step_idx = self.step_index(step);
+                }
                 if let Some(st) = self.step_status_mut(step) {
                     *st = status;
                 }
@@ -654,9 +686,9 @@ impl App {
             BackendEvent::Fatal(msg) => {
                 // Mark the currently-running step as failed so the spinner
                 // is replaced with the ✗ icon.
-                for (_, status) in &mut self.steps {
-                    if matches!(status, StepStatus::Running(_)) {
-                        *status = StepStatus::Error(msg.clone());
+                for record in &mut self.steps {
+                    if matches!(record.status, StepStatus::Running(_)) {
+                        record.status = StepStatus::Error(msg.clone());
                         break;
                     }
                 }
@@ -793,6 +825,42 @@ impl App {
                 KeyCode::Char('q') => {
                     self.worker_tx.send(WorkerCommand::Quit).ok();
                     self.should_quit = true;
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let Some(idx) = self.browse_step {
+                        if idx > 0 {
+                            self.browse_step = Some(idx - 1);
+                            self.browse_scroll = 0;
+                        } else {
+                            self.browse_step = None;
+                            self.browse_scroll = 0;
+                        }
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => match self.browse_step {
+                    None => {
+                        self.browse_step = Some(0);
+                        self.browse_scroll = 0;
+                    }
+                    Some(idx) if idx + 1 < self.steps.len() => {
+                        self.browse_step = Some(idx + 1);
+                        self.browse_scroll = 0;
+                    }
+                    _ => {}
+                },
+                KeyCode::PageUp => {
+                    self.browse_scroll = self.browse_scroll.saturating_sub(10);
+                }
+                KeyCode::PageDown => {
+                    if self.browse_step.is_some() {
+                        self.browse_scroll += 10;
+                    }
+                }
+                KeyCode::Esc => {
+                    if self.browse_step.is_some() {
+                        self.browse_step = None;
+                        self.browse_scroll = 0;
+                    }
                 }
                 _ => {}
             },
@@ -1017,8 +1085,20 @@ fn draw(frame: &mut Frame, app: &App) {
         AppMode::Running => draw_running(frame, app, main_area),
         AppMode::Selecting(state) => draw_selecting(frame, state, &app.glyphs, main_area),
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
-        AppMode::Done(msg) => draw_done(frame, app, msg, main_area),
-        AppMode::Error(msg) => draw_error(frame, msg, main_area),
+        AppMode::Done(msg) => {
+            if let Some(step_idx) = app.browse_step {
+                draw_step_logs(frame, app, step_idx, main_area);
+            } else {
+                draw_done(frame, app, msg, main_area);
+            }
+        }
+        AppMode::Error(msg) => {
+            if let Some(step_idx) = app.browse_step {
+                draw_step_logs(frame, app, step_idx, main_area);
+            } else {
+                draw_error(frame, msg, main_area);
+            }
+        }
     }
 
     draw_sidebar(frame, app, cols[0]);
@@ -1093,6 +1173,9 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
         ],
         AppMode::Done(_) | AppMode::Error(_) => {
             vec![
+                ("j / k", "Browse steps"),
+                ("PgUp/PgDn", "Scroll logs"),
+                ("Esc", "Back to summary"),
                 ("n", "New term"),
                 ("r", "Retry"),
                 ("Ctrl+O", "Model"),
@@ -1272,10 +1355,14 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
         SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()]
     );
 
+    let is_browsing = matches!(app.mode, AppMode::Done(_) | AppMode::Error(_));
+
     let mut step_lines: Vec<Line> = Vec::new();
-    for (step, status) in &app.steps {
+    for (i, record) in app.steps.iter().enumerate() {
+        let step = &record.step;
+        let status = &record.status;
         let is_interactive = matches!(step, PipelineStep::Select | PipelineStep::QualityCheck);
-        let (icon, style): (&str, Style) = match status {
+        let (icon, mut style): (&str, Style) = match status {
             StepStatus::Pending => ("  ", Style::default().fg(THEME.dimmed)),
             StepStatus::Running(_) if is_interactive => ("▸ ", Style::default().fg(THEME.info)),
             StepStatus::Running(_) => (&spinner_frame, Style::default().fg(THEME.info)),
@@ -1283,6 +1370,12 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
             StepStatus::Skipped => ("- ", Style::default().fg(THEME.dimmed)),
             StepStatus::Error(_) => ("✗ ", Style::default().fg(THEME.danger)),
         };
+
+        // Highlight selected step in browse mode
+        let is_selected = is_browsing && app.browse_step == Some(i);
+        if is_selected {
+            style = style.bg(THEME.highlight_bg);
+        }
 
         let detail = match status {
             StepStatus::Running(Some(d)) | StepStatus::Done(Some(d)) => Some(d.as_str()),
@@ -1298,7 +1391,14 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
                 step_lines.push(Line::from(vec![
                     Span::styled(icon, style),
                     Span::styled(step.label(), style),
-                    Span::styled(format!("  {d}"), Style::default().fg(THEME.dimmed)),
+                    Span::styled(
+                        format!("  {d}"),
+                        Style::default().fg(THEME.dimmed).bg(if is_selected {
+                            THEME.highlight_bg
+                        } else {
+                            Color::Reset
+                        }),
+                    ),
                 ]));
             } else {
                 step_lines.push(Line::from(vec![
@@ -1453,6 +1553,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("?", "Help"));
         }
         AppMode::Done(_) | AppMode::Error(_) => {
+            s.extend(footer_cmd("j/k", "Steps"));
+            s.push(footer_pipe());
             if !app.is_fatal {
                 s.extend(footer_cmd("n", "New term"));
                 if app.last_term.is_some() {
@@ -1777,6 +1879,48 @@ fn draw_error(frame: &mut Frame, msg: &str, area: Rect) {
 
     let para = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
     frame.render_widget(para, area);
+}
+
+fn draw_step_logs(frame: &mut Frame, app: &App, step_idx: usize, area: Rect) {
+    let record = &app.steps[step_idx];
+    let title = format!(" {} ", record.step.label());
+
+    if record.logs.is_empty() {
+        let lines = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  No log entries for this step.",
+                Style::default().fg(THEME.dimmed),
+            )),
+        ];
+        let para = Paragraph::new(Text::from(lines))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL.difference(Borders::LEFT))
+                    .title(title)
+                    .border_style(Style::default().fg(THEME.border)),
+            )
+            .wrap(Wrap { trim: false });
+        frame.render_widget(para, area);
+        return;
+    }
+
+    let log_text: Text = record
+        .logs
+        .iter()
+        .map(|l| Line::from(l.as_str()))
+        .collect::<Vec<_>>()
+        .into();
+
+    let log_block = Block::default()
+        .borders(Borders::ALL.difference(Borders::LEFT))
+        .title(title)
+        .border_style(Style::default().fg(THEME.border));
+    let log_para = Paragraph::new(log_text)
+        .block(log_block)
+        .wrap(Wrap { trim: false })
+        .scroll((app.browse_scroll, 0));
+    frame.render_widget(log_para, area);
 }
 
 // ---------------------------------------------------------------------------
