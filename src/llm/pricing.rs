@@ -22,7 +22,6 @@ pub fn model_pricing(model: &str) -> Option<ModelPricing> {
         "gpt-5.2" => (1.75, 14.0),
         "gpt-5.3" => (1.75, 14.0),
         "gpt-5.4" => (2.5, 15.0),
-        "gpt-5.4-pro" => (30.0, 180.0),
         "gpt-5.4-mini" => (0.75, 4.5),
         "gpt-5.4-nano" => (0.2, 1.25),
         // Gemini family
@@ -79,7 +78,6 @@ pub const SUPPORTED_MODELS: &[&str] = &[
     "gpt-5.2",
     "gpt-5.3",
     "gpt-5.4",
-    "gpt-5.4-pro",
     "gpt-5.4-mini",
     "gpt-5.4-nano",
     "gemini-2.0-flash",

@@ -118,7 +118,6 @@ The tool supports two API providers:
 | `gpt-5.2`                | $1.75/M | $14.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.2)                     |
 | `gpt-5.3`                | $1.75/M | $14.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.3)                     |
 | `gpt-5.4`                | $2.50/M | $15.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.4)                     |
-| `gpt-5.4-pro`            | $30.00/M | $180.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.4-pro)               |
 | `gpt-5.4-mini`           | $0.75/M | $4.50/M  | [🔗](https://platform.openai.com/docs/models/gpt-5.4-mini)                |
 | `gpt-5.4-nano`           | $0.20/M | $1.25/M  | [🔗](https://platform.openai.com/docs/models/gpt-5.4-nano)                |
 | **Google Gemini models** |
