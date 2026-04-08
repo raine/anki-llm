@@ -1804,11 +1804,12 @@ fn run_app(
 pub fn run_tui(mut args: GenerateArgs) -> anyhow::Result<()> {
     use crate::workspace::resolver::{ResolvedPrompt, resolve_prompt, save_last_prompt};
 
+    let mut force_picker = false;
     loop {
         // Resolve prompt before entering the TUI. If multiple prompts are
         // available and none was specified, show an interactive picker.
         if args.prompt.is_none() {
-            match resolve_prompt(None)? {
+            match resolve_prompt(None, force_picker)? {
                 ResolvedPrompt::Resolved(path) => {
                     save_last_prompt(&path);
                     args.prompt = Some(path);
@@ -1863,8 +1864,8 @@ pub fn run_tui(mut args: GenerateArgs) -> anyhow::Result<()> {
 
         match exit {
             ExitReason::SwitchPrompt => {
-                // Clear prompt so the picker is shown on next iteration
                 args.prompt = None;
+                force_picker = true;
                 continue;
             }
             ExitReason::UserQuit => {

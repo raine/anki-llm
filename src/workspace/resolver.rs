@@ -39,7 +39,7 @@ fn effective_prompts_dir() -> Result<PathBuf> {
 /// - Otherwise, look up prompts_dir (config override or `~/.config/anki-llm/prompts`).
 /// - In interactive mode with multiple prompts, returns `ShowPicker`.
 /// - In non-interactive mode, falls back to last-used or single-prompt.
-pub fn resolve_prompt(explicit: Option<PathBuf>) -> Result<ResolvedPrompt> {
+pub fn resolve_prompt(explicit: Option<PathBuf>, force_picker: bool) -> Result<ResolvedPrompt> {
     if let Some(path) = explicit {
         return Ok(ResolvedPrompt::Resolved(path));
     }
@@ -69,12 +69,14 @@ pub fn resolve_prompt(explicit: Option<PathBuf>) -> Result<ResolvedPrompt> {
 
     // Interactive: use last-used if still valid, otherwise show picker
     if is_interactive {
-        let state = read_state().unwrap_or_default();
-        if let Some(ref last) = state.last_prompt
-            && last.exists()
-            && prompts.iter().any(|p| p.path == *last)
-        {
-            return Ok(ResolvedPrompt::Resolved(last.clone()));
+        if !force_picker {
+            let state = read_state().unwrap_or_default();
+            if let Some(ref last) = state.last_prompt
+                && last.exists()
+                && prompts.iter().any(|p| p.path == *last)
+            {
+                return Ok(ResolvedPrompt::Resolved(last.clone()));
+            }
         }
         return Ok(ResolvedPrompt::ShowPicker(prompts));
     }
