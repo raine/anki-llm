@@ -323,12 +323,12 @@ pub fn run_pipeline(
                     &term,
                     &[],
                 ) {
-                    Ok(PipelineOutcome::Success { message }) => {
-                        tx.send(BackendEvent::RunDone(message)).ok();
+                    Ok(PipelineOutcome::Success { message, cards, note_ids }) => {
+                        tx.send(BackendEvent::RunDone { message, cards, note_ids }).ok();
                     }
                     Ok(PipelineOutcome::Cancelled) | Ok(PipelineOutcome::Quit) => {
                         // Send RunDone so the TUI can clear its pending_cancels counter
-                        tx.send(BackendEvent::RunDone(String::new())).ok();
+                        tx.send(BackendEvent::RunDone { message: String::new(), cards: Vec::new(), note_ids: Vec::new() }).ok();
                     }
                     Err(e) => {
                         tx.send(BackendEvent::RunError(format!("{e}"))).ok();

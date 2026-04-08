@@ -49,7 +49,10 @@ pub enum BackendEvent {
         output_tokens: u64,
         cost: f64,
     },
-    RunDone(String),          // single run finished successfully
+    RunDone {
+        message: String,
+        cards: Vec<ValidatedCard>,
+    },
     RunError(String),         // single run failed (can retry with new term)
     ModelChangeError(String), // model switch failed
     Fatal(String),            // session-level error (must exit)
@@ -103,7 +106,10 @@ enum AppMode {
     Running,
     Selecting(SelectionState),
     Reviewing(ReviewState),
-    Done(String),
+    Done {
+        message: String,
+        cards: Vec<ValidatedCard>,
+    },
     Error(String),
 }
 
@@ -628,7 +634,10 @@ impl App {
         // Discard events from abandoned runs. Each cancelled run will eventually
         // produce a RunDone or RunError; decrement the counter when that arrives.
         if self.pending_cancels > 0 {
-            if matches!(event, BackendEvent::RunDone(_) | BackendEvent::RunError(_)) {
+            if matches!(
+                event,
+                BackendEvent::RunDone { .. } | BackendEvent::RunError(_)
+            ) {
                 self.pending_cancels -= 1;
             }
             return;
@@ -674,8 +683,9 @@ impl App {
                 self.run_output_tokens += output_tokens;
                 self.run_cost += cost;
             }
-            BackendEvent::RunDone(msg) => {
-                self.mode = AppMode::Done(msg);
+            BackendEvent::RunDone { message, cards } => {
+                self.mode = AppMode::Done { message, cards };
+                self.current_step_idx = None;
             }
             BackendEvent::RunError(msg) => {
                 self.mode = AppMode::Error(msg);
@@ -805,7 +815,7 @@ impl App {
             },
             AppMode::Selecting(_) => self.handle_key_selection(key),
             AppMode::Reviewing(_) => self.handle_key_review(key),
-            AppMode::Done(_) | AppMode::Error(_) => match key.code {
+            AppMode::Done { .. } | AppMode::Error(_) => match key.code {
                 KeyCode::Char('m')
                     if key.modifiers.contains(KeyModifiers::CONTROL) && !self.is_fatal =>
                 {
@@ -1085,11 +1095,11 @@ fn draw(frame: &mut Frame, app: &App) {
         AppMode::Running => draw_running(frame, app, main_area),
         AppMode::Selecting(state) => draw_selecting(frame, state, &app.glyphs, main_area),
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
-        AppMode::Done(msg) => {
+        AppMode::Done { message, cards } => {
             if let Some(step_idx) = app.browse_step {
                 draw_step_logs(frame, app, step_idx, main_area);
             } else {
-                draw_done(frame, app, msg, main_area);
+                draw_done(frame, app, message, cards, main_area);
             }
         }
         AppMode::Error(msg) => {
@@ -1171,7 +1181,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("u", "Back"),
             ("q", "Quit"),
         ],
-        AppMode::Done(_) | AppMode::Error(_) => {
+        AppMode::Done { .. } | AppMode::Error(_) => {
             vec![
                 ("j / k", "Browse steps"),
                 ("PgUp/PgDn", "Scroll logs"),
@@ -1201,7 +1211,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
         AppMode::Running => "Running",
         AppMode::Selecting(_) => "Select",
         AppMode::Reviewing(_) => "Review",
-        AppMode::Done(_) => "Done",
+        AppMode::Done { .. } => "Done",
         AppMode::Error(_) => "Error",
     };
 
@@ -1355,7 +1365,7 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
         SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()]
     );
 
-    let is_browsing = matches!(app.mode, AppMode::Done(_) | AppMode::Error(_));
+    let is_browsing = matches!(app.mode, AppMode::Done { .. } | AppMode::Error(_));
 
     let mut step_lines: Vec<Line> = Vec::new();
     for (i, record) in app.steps.iter().enumerate() {
@@ -1552,7 +1562,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.push(footer_pipe());
             s.extend(footer_cmd("?", "Help"));
         }
-        AppMode::Done(_) | AppMode::Error(_) => {
+        AppMode::Done { .. } | AppMode::Error(_) => {
             s.extend(footer_cmd("j/k", "Steps"));
             s.push(footer_pipe());
             if !app.is_fatal {
@@ -1833,8 +1843,8 @@ fn draw_reviewing(frame: &mut Frame, state: &ReviewState, area: Rect) {
     }
 }
 
-fn draw_done(frame: &mut Frame, app: &App, msg: &str, area: Rect) {
-    let mut lines = vec![
+fn draw_done(frame: &mut Frame, app: &App, msg: &str, cards: &[ValidatedCard], area: Rect) {
+    let mut summary_lines = vec![
         Line::from(Span::styled(
             "✓ Done",
             Style::default()
@@ -1846,23 +1856,64 @@ fn draw_done(frame: &mut Frame, app: &App, msg: &str, area: Rect) {
     ];
 
     if app.run_cost > 0.0 {
-        lines.push(Line::from(""));
-        lines.push(Line::from(format!(
+        summary_lines.push(Line::from(""));
+        summary_lines.push(Line::from(format!(
             "Tokens: {} in / {} out  |  Cost: {}",
             app.run_input_tokens,
             app.run_output_tokens,
             pricing::format_cost(app.run_cost)
         )));
         if app.session_cost > 0.0 {
-            lines.push(Line::from(format!(
+            summary_lines.push(Line::from(format!(
                 "Session total: {}",
                 pricing::format_cost(app.session_cost + app.run_cost)
             )));
         }
     }
 
-    let para = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
-    frame.render_widget(para, area);
+    if cards.is_empty() {
+        let para = Paragraph::new(Text::from(summary_lines)).wrap(Wrap { trim: false });
+        frame.render_widget(para, area);
+        return;
+    }
+
+    let summary_height = summary_lines.len() as u16 + 1; // +1 for spacing
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(summary_height), Constraint::Min(0)])
+        .split(area);
+
+    let para = Paragraph::new(Text::from(summary_lines)).wrap(Wrap { trim: false });
+    frame.render_widget(para, chunks[0]);
+
+    // Show final cards
+    let mut card_lines: Vec<Line> = Vec::new();
+    for (i, card) in cards.iter().enumerate() {
+        if i > 0 {
+            card_lines.push(Line::from(Span::styled(
+                "─".repeat(40),
+                Style::default().fg(THEME.border),
+            )));
+        }
+        for (name, value) in &card.raw_anki_fields {
+            card_lines.push(Line::from(Span::styled(
+                name.clone(),
+                Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
+            )));
+            card_lines.extend(super::selector::markdown_to_lines(value, "  "));
+            card_lines.push(Line::from(""));
+        }
+    }
+
+    let card_block = Block::default()
+        .borders(Borders::ALL.difference(Borders::LEFT))
+        .title(format!(" Cards ({}) ", cards.len()))
+        .border_style(Style::default().fg(THEME.border));
+    let card_para = Paragraph::new(Text::from(card_lines))
+        .block(card_block)
+        .wrap(Wrap { trim: false })
+        .scroll((app.browse_scroll, 0));
+    frame.render_widget(card_para, chunks[1]);
 }
 
 fn draw_error(frame: &mut Frame, msg: &str, area: Rect) {
@@ -1952,7 +2003,7 @@ fn run_app(
                 Ok(ev) => app.handle_backend_event(ev),
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    if !matches!(app.mode, AppMode::Done(_) | AppMode::Error(_)) {
+                    if !matches!(app.mode, AppMode::Done { .. } | AppMode::Error(_)) {
                         app.mode = AppMode::Error("Worker thread exited unexpectedly".to_string());
                     }
                     break;
