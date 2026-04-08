@@ -135,8 +135,6 @@ struct SelectionState {
     selected: BTreeSet<usize>,
     list_state: ListState,
     detail_scroll: u16,
-    /// Tick when card was last copied to clipboard (for flash feedback).
-    copied_at: Option<u64>,
     /// True while a refresh (load more) request is in flight.
     refresh_in_flight: bool,
 }
@@ -152,7 +150,6 @@ impl SelectionState {
             selected,
             list_state,
             detail_scroll: 0,
-            copied_at: None,
             refresh_in_flight: false,
         }
     }
@@ -536,8 +533,14 @@ struct App {
     is_fatal: bool,
     glyphs: Glyphs,
     history: InputHistory,
+    toast: Option<Toast>,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
+}
+
+struct Toast {
+    message: String,
+    tick: u64,
 }
 
 impl App {
@@ -580,6 +583,7 @@ impl App {
             is_fatal: false,
             glyphs,
             history: InputHistory::load(),
+            toast: None,
             backend_rx,
             worker_tx,
         }
@@ -940,7 +944,10 @@ impl App {
                     if let Ok(mut cb) = arboard::Clipboard::new() {
                         cb.set_text(text).ok();
                     }
-                    state.copied_at = Some(self.tick);
+                    self.toast = Some(Toast {
+                        message: "Copied!".into(),
+                        tick: self.tick,
+                    });
                 }
             }
             KeyCode::PageUp => {
@@ -1044,6 +1051,28 @@ fn draw(frame: &mut Frame, app: &App) {
 
     draw_sidebar(frame, app, cols[0]);
     draw_footer(frame, app, rows[1]);
+
+    // Toast notification (e.g. "Copied!")
+    if let Some(ref toast) = app.toast
+        && app.tick.wrapping_sub(toast.tick) < 20
+    {
+        let text = &toast.message;
+        let width = (text.len() as u16) + 2; // 1 padding each side
+        let toast_area = Rect {
+            x: main_area.x + 1,
+            y: main_area.y + main_area.height.saturating_sub(2),
+            width: width.min(main_area.width),
+            height: 1,
+        };
+        let para = Paragraph::new(Span::styled(
+            format!(" {text} "),
+            Style::default()
+                .fg(THEME.success)
+                .add_modifier(Modifier::BOLD),
+        ));
+        frame.render_widget(Clear, toast_area);
+        frame.render_widget(para, toast_area);
+    }
 
     if app.show_help {
         draw_help_overlay(frame, app);
@@ -1401,15 +1430,6 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                 format!("  ({n} selected)"),
                 Style::default().fg(THEME.dimmed),
             ));
-            let copied = state
-                .copied_at
-                .is_some_and(|t| app.tick.wrapping_sub(t) < 20);
-            if copied {
-                s.push(Span::styled(
-                    "  Copied!",
-                    Style::default().fg(THEME.success),
-                ));
-            }
         }
         AppMode::Reviewing(state) => {
             let cur = (state.cursor + 1).min(state.flagged.len());
