@@ -526,6 +526,8 @@ struct App {
     should_quit: bool,
     /// True when the user explicitly pressed q/Ctrl-C (as opposed to natural Done/Error exit).
     user_quit: bool,
+    /// True when the user pressed Ctrl+P to switch prompt.
+    switch_prompt: bool,
     show_help: bool,
     model_picker: Option<ModelPickerState>,
     /// Last term submitted, for retry.
@@ -571,6 +573,7 @@ impl App {
             pending_cancels: 0,
             should_quit: false,
             user_quit: false,
+            switch_prompt: false,
             show_help: false,
             model_picker: None,
             last_term,
@@ -826,6 +829,11 @@ impl App {
         };
 
         match key.code {
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.worker_tx.send(WorkerCommand::Quit).ok();
+                self.should_quit = true;
+                self.switch_prompt = true;
+            }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.worker_tx.send(WorkerCommand::Quit).ok();
                 self.should_quit = true;
@@ -1052,6 +1060,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("Enter", "Generate"),
             ("Ctrl+O", "Model"),
             ("↑ / ↓", "History"),
+            ("Ctrl+P", "Switch prompt"),
             ("Esc", "Clear"),
             ("Ctrl+C", "Quit"),
         ],
@@ -1728,14 +1737,19 @@ fn draw_error(frame: &mut Frame, msg: &str, area: Rect) {
 // Main event loop
 // ---------------------------------------------------------------------------
 
-/// Returns `true` if the user explicitly quit (q / Ctrl-C), `false` for natural Done/Error exit.
+enum ExitReason {
+    UserQuit,
+    NaturalExit,
+    SwitchPrompt,
+}
+
 fn run_app(
     mut terminal: DefaultTerminal,
     initial_term: Option<String>,
     glyphs: Glyphs,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<ExitReason> {
     let mut app = App::new(initial_term, glyphs, backend_rx, worker_tx);
 
     loop {
@@ -1774,8 +1788,13 @@ fn run_app(
         }
     }
 
-    let user_quit = app.user_quit;
-    Ok(user_quit)
+    if app.switch_prompt {
+        Ok(ExitReason::SwitchPrompt)
+    } else if app.user_quit {
+        Ok(ExitReason::UserQuit)
+    } else {
+        Ok(ExitReason::NaturalExit)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1783,60 +1802,81 @@ fn run_app(
 // ---------------------------------------------------------------------------
 
 pub fn run_tui(mut args: GenerateArgs) -> anyhow::Result<()> {
-    // Resolve prompt before entering the TUI. If multiple prompts are available
-    // and none was specified, show an interactive picker.
     use crate::workspace::resolver::{ResolvedPrompt, resolve_prompt, save_last_prompt};
 
-    if args.prompt.is_none() {
-        match resolve_prompt(args.prompt.clone())? {
-            ResolvedPrompt::Resolved(path) => {
-                save_last_prompt(&path);
-                args.prompt = Some(path);
-            }
-            ResolvedPrompt::ShowPicker(prompts) => {
-                let terminal = ratatui::init();
-                let glyphs = Glyphs::from_config();
-                let result = run_prompt_picker(terminal, &prompts, &glyphs);
-                ratatui::restore();
-                match result {
-                    Some(path) => {
-                        save_last_prompt(&path);
-                        args.prompt = Some(path);
+    loop {
+        // Resolve prompt before entering the TUI. If multiple prompts are
+        // available and none was specified, show an interactive picker.
+        if args.prompt.is_none() {
+            match resolve_prompt(None)? {
+                ResolvedPrompt::Resolved(path) => {
+                    save_last_prompt(&path);
+                    args.prompt = Some(path);
+                }
+                ResolvedPrompt::ShowPicker(prompts) => {
+                    let terminal = ratatui::init();
+                    let glyphs = Glyphs::from_config();
+                    let result = run_prompt_picker(terminal, &prompts, &glyphs);
+                    ratatui::restore();
+                    match result {
+                        Some(path) => {
+                            save_last_prompt(&path);
+                            args.prompt = Some(path);
+                        }
+                        None => return Ok(()), // user cancelled
                     }
-                    None => return Ok(()), // user cancelled
                 }
             }
         }
+
+        let initial_term = args.term.take(); // only use CLI term on first iteration
+
+        let (tx_events, rx_events) = mpsc::channel::<BackendEvent>();
+        let (tx_cmd, rx_cmd) = mpsc::sync_channel::<WorkerCommand>(10);
+
+        let pipeline_args = GenerateArgs {
+            prompt: args.prompt.clone(),
+            term: initial_term.clone(),
+            count: args.count,
+            model: args.model.clone(),
+            dry_run: args.dry_run,
+            retries: args.retries,
+            max_tokens: args.max_tokens,
+            temperature: args.temperature,
+            output: args.output.clone(),
+            copy: args.copy,
+            log: args.log.clone(),
+            very_verbose: args.very_verbose,
+        };
+
+        let worker_handle = std::thread::spawn(move || {
+            super::command_generate::run_pipeline(pipeline_args, tx_events, rx_cmd)
+        });
+
+        let glyphs = Glyphs::from_config();
+        let terminal = ratatui::init();
+        crossterm::execute!(std::io::stdout(), crossterm::event::EnableBracketedPaste).ok();
+        let exit = run_app(terminal, initial_term, glyphs, rx_events, tx_cmd)
+            .unwrap_or(ExitReason::UserQuit);
+        crossterm::execute!(std::io::stdout(), crossterm::event::DisableBracketedPaste).ok();
+        ratatui::restore();
+
+        match exit {
+            ExitReason::SwitchPrompt => {
+                // Clear prompt so the picker is shown on next iteration
+                args.prompt = None;
+                continue;
+            }
+            ExitReason::UserQuit => {
+                std::process::exit(0);
+            }
+            ExitReason::NaturalExit => {
+                return worker_handle
+                    .join()
+                    .unwrap_or_else(|_| Err(anyhow::anyhow!("Worker thread panicked")));
+            }
+        }
     }
-
-    let initial_term = args.term.clone();
-
-    let (tx_events, rx_events) = mpsc::channel::<BackendEvent>();
-    // Capacity 10 so the TUI can send Start/Quit without blocking even when
-    // the worker isn't currently waiting on the command channel.
-    let (tx_cmd, rx_cmd) = mpsc::sync_channel::<WorkerCommand>(10);
-
-    // Spawn worker thread
-    let worker_handle =
-        std::thread::spawn(move || super::command_generate::run_pipeline(args, tx_events, rx_cmd));
-
-    // Run TUI on main thread
-    let glyphs = Glyphs::from_config();
-    let terminal = ratatui::init();
-    crossterm::execute!(std::io::stdout(), crossterm::event::EnableBracketedPaste).ok();
-    let user_quit = run_app(terminal, initial_term, glyphs, rx_events, tx_cmd).unwrap_or(true);
-    crossterm::execute!(std::io::stdout(), crossterm::event::DisableBracketedPaste).ok();
-    ratatui::restore();
-
-    if user_quit {
-        // Worker may be blocked on an LLM call — don't hang waiting for it.
-        std::process::exit(0);
-    }
-
-    // Natural finish: propagate any worker error to the process exit code.
-    worker_handle
-        .join()
-        .unwrap_or_else(|_| Err(anyhow::anyhow!("Worker thread panicked")))
 }
 
 // ---------------------------------------------------------------------------
