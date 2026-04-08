@@ -127,6 +127,7 @@ The tool supports two API providers:
 | `gemini-2.5-flash-lite`  | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-lite)  |
 | `gemini-2.5-pro`         | $1.25/M | $10.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)         |
 | `gemini-3-flash-preview` | $0.50/M | $3.00/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3-flash-preview) |
+| `gemini-3.1-flash-lite-preview` | $0.25/M | $1.50/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-flash-lite-preview) |
 | `gemini-3.1-pro-preview` | $2.00/M | $12.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-pro-preview) |
 
 Pricing is per million tokens (M). Check the latest prices on the provider's

@@ -31,6 +31,7 @@ pub fn model_pricing(model: &str) -> Option<ModelPricing> {
         "gemini-2.5-flash-lite" => (0.1, 0.4),
         "gemini-2.5-pro" => (1.25, 10.0),
         "gemini-3-flash-preview" => (0.5, 3.0),
+        "gemini-3.1-flash-lite-preview" => (0.25, 1.5),
         "gemini-3.1-pro-preview" => (2.0, 12.0),
         _ => return None,
     };
@@ -86,6 +87,7 @@ pub const SUPPORTED_MODELS: &[&str] = &[
     "gemini-2.5-flash-lite",
     "gemini-2.5-pro",
     "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
 ];
 
