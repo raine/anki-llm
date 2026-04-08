@@ -166,6 +166,46 @@ anki-llm config set model gpt-4o-mini
 
 Config file lives at `~/.config/anki-llm/config.json`.
 
+### Prompts directory
+
+anki-llm looks for prompt files in `~/.config/anki-llm/prompts/` by default.
+When you run `generate-init`, the created prompt file is saved there
+automatically. This means you can run `anki-llm generate` without the `-p` flag
+— the tool will find your prompts automatically.
+
+```bash
+# Create a prompt — saved to ~/.config/anki-llm/prompts/ by default
+anki-llm generate-init
+
+# Generate cards — no -p needed
+anki-llm generate "今日"
+```
+
+If you have **one prompt**, it's used automatically. If you have **multiple
+prompts**, an interactive picker is shown where you can select which one to use.
+The last-used prompt is remembered and pre-selected next time.
+
+To store prompts elsewhere (e.g. a version-controlled directory):
+
+```bash
+anki-llm config set prompts_dir ~/anki-prompts
+```
+
+Prompt files can include optional `title` and `description` fields in their
+frontmatter for a better picker experience:
+
+```yaml
+---
+title: Japanese Vocabulary
+description: Contextual sentence cards with readings
+deck: Japanese::Vocabulary
+note_type: Japanese (recognition)
+field_map:
+  en: English
+  jp: Japanese
+---
+```
+
 ---
 
 ## Commands reference
@@ -240,7 +280,6 @@ re-run.
 **Required options:**
 
 - `-o, --output`: Output file path (CSV or YAML).
-- `-p, --prompt`: Path to the prompt template text file.
 - **Either** `--field` **or** `--json` (mutually exclusive):
   - `--field <name>`: Update a single field with the AI response.
   - `--json`: Expect JSON response and merge all fields into the note.
@@ -250,6 +289,8 @@ re-run.
 
 **Common options:**
 
+- `-p, --prompt`: Path to the prompt template text file. If omitted,
+  auto-resolved from your [prompts directory](#prompts-directory).
 - `-m, --model`: AI model to use (required unless set via `config set model`).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
@@ -329,7 +370,6 @@ safe to run.
 
 **Required options:**
 
-- `-p, --prompt`: Path to the prompt template text file.
 - **Either** `--field` **or** `--json` (mutually exclusive):
   - `--field <name>`: Update a single field with the AI response.
   - `--json`: Expect JSON response and merge all fields into the note.
@@ -339,6 +379,8 @@ safe to run.
 
 **Common options:**
 
+- `-p, --prompt`: Path to the prompt template text file. If omitted,
+  auto-resolved from your [prompts directory](#prompts-directory).
 - `-m, --model`: AI model to use (required unless set via `config set model`).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
@@ -431,8 +473,8 @@ analyze your existing cards and generate a tailored prompt that matches your
 deck's style and formatting. This is the recommended way to get started with
 card generation.
 
-- `[output]`: Optional output file path. If omitted, automatically generates a
-  filename from the deck name.
+- `[output]`: Optional output file path. If omitted, saves to the prompts
+  directory (`~/.config/anki-llm/prompts/<deck>-prompt.md` by default).
 
 **Common options:**
 
@@ -454,10 +496,11 @@ card generation.
 
 1. Run the wizard: `anki-llm generate-init`
 2. Follow the interactive steps to select a deck and note type.
-3. A prompt file (e.g., `my-deck-prompt.md`) is created for you.
+3. A prompt file is saved to your prompts directory (e.g.,
+   `~/.config/anki-llm/prompts/vocabulary-prompt.md`).
 4. Review and customize the generated prompt file.
-5. Use the file with the `generate` command:
-   `anki-llm generate "term" -p my-deck-prompt.md`
+5. Use it with the `generate` command: `anki-llm generate "term"` (the prompt is
+   found automatically).
 
 ---
 
@@ -473,12 +516,11 @@ in a single session.
 - `<term>`: The word or phrase to generate cards for (must be in quotes if it
   contains spaces). Optional — can be entered in the TUI.
 
-**Required options:**
-
-- `-p, --prompt`: Path to the prompt template file (created with
-  `generate-init`).
-
 **Common options:**
+
+- `-p, --prompt`: Path to the prompt template file. If omitted, auto-resolved
+  from your [prompts directory](#prompts-directory) (single prompt is used
+  directly; multiple prompts show a picker).
 
 - `-c, --count`: Number of card examples to generate (default: `3`).
 - `-m, --model`: AI model to use (defaults to `gpt-5-mini` or `gemini-2.5-flash`
