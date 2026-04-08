@@ -335,13 +335,7 @@ impl Glyphs {
     }
 
     fn from_config() -> Self {
-        let nerd_font = read_config()
-            .ok()
-            .and_then(|c| {
-                c.get("nerd_font")
-                    .and_then(|v| v.as_bool().or_else(|| v.as_str().map(|s| s != "false")))
-            })
-            .unwrap_or(true);
+        let nerd_font = read_config().ok().and_then(|c| c.nerd_font).unwrap_or(true);
         if nerd_font {
             Self::nerd()
         } else {

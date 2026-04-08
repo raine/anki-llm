@@ -55,7 +55,7 @@ pub fn resolve_model(user_model: Option<&str>) -> String {
         return m.to_string();
     }
     if let Ok(config) = read_config()
-        && let Some(serde_json::Value::String(m)) = config.get("model")
+        && let Some(ref m) = config.model
         && !m.is_empty()
     {
         return m.clone();

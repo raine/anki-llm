@@ -6,6 +6,12 @@ use super::error::TemplateError;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Frontmatter {
+    /// Human-readable title for prompt picker (falls back to filename).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Short description shown in prompt picker.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub deck: String,
     pub note_type: String,
     pub field_map: IndexMap<String, String>,

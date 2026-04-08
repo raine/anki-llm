@@ -77,6 +77,8 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
     let quality_check = configure_quality_check(&draft.final_field_map)?;
 
     let frontmatter = Frontmatter {
+        title: None,
+        description: None,
         deck: deck.clone(),
         note_type,
         field_map: draft.final_field_map,
