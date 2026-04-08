@@ -5,9 +5,7 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{
-    Block, Borders, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Table, Wrap,
-};
+use ratatui::widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 
 mod events;
@@ -15,12 +13,14 @@ mod history;
 mod prompt_picker;
 mod screens;
 mod theme;
+mod widgets;
 
 pub use events::{BackendEvent, SessionInfo, StepStatus, WorkerCommand};
 use history::InputHistory;
-use screens::review::{draw_reviewing, ReviewState};
-use screens::selection::{draw_selecting, SelectionState};
-use theme::{footer_cmd, footer_pipe, Glyphs, SPINNER_FRAMES, THEME};
+use screens::review::{ReviewState, draw_reviewing};
+use screens::selection::{SelectionState, draw_selecting};
+use theme::{Glyphs, SPINNER_FRAMES, THEME, footer_cmd, footer_pipe};
+use widgets::{ModelPickerState, draw_log_panel, draw_model_picker, draw_step_logs};
 
 use super::line_input::LineInput;
 
@@ -65,45 +65,6 @@ enum AppMode {
         note_ids: Vec<i64>,
     },
     Error(String),
-}
-
-struct ModelPickerState {
-    models: Vec<String>,
-    cursor: usize,
-    list_state: ListState,
-}
-
-impl ModelPickerState {
-    fn new(models: Vec<String>, current_model: Option<&str>) -> Self {
-        let cursor = current_model
-            .and_then(|m| models.iter().position(|s| s == m))
-            .unwrap_or(0);
-        let mut list_state = ListState::default();
-        list_state.select(Some(cursor));
-        Self {
-            models,
-            cursor,
-            list_state,
-        }
-    }
-
-    fn move_up(&mut self) {
-        if self.cursor > 0 {
-            self.cursor -= 1;
-            self.list_state.select(Some(self.cursor));
-        }
-    }
-
-    fn move_down(&mut self) {
-        if self.cursor + 1 < self.models.len() {
-            self.cursor += 1;
-            self.list_state.select(Some(self.cursor));
-        }
-    }
-
-    fn selected(&self) -> Option<&str> {
-        self.models.get(self.cursor).map(|s| s.as_str())
-    }
 }
 
 struct App {
@@ -754,14 +715,28 @@ fn draw(frame: &mut Frame, app: &App) {
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
         AppMode::Done { message, cards, .. } => {
             if let Some(step_idx) = app.browse_step {
-                draw_step_logs(frame, app, step_idx, main_area);
+                let record = &app.steps[step_idx];
+                draw_step_logs(
+                    frame,
+                    record.step.label(),
+                    &record.logs,
+                    app.browse_scroll,
+                    main_area,
+                );
             } else {
                 draw_done(frame, app, message, cards, main_area);
             }
         }
         AppMode::Error(msg) => {
             if let Some(step_idx) = app.browse_step {
-                draw_step_logs(frame, app, step_idx, main_area);
+                let record = &app.steps[step_idx];
+                draw_step_logs(
+                    frame,
+                    record.step.label(),
+                    &record.logs,
+                    app.browse_scroll,
+                    main_area,
+                );
             } else {
                 draw_error(frame, msg, main_area);
             }
@@ -931,89 +906,6 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
 
     frame.render_widget(Clear, rect);
     frame.render_widget(table, rect);
-}
-
-fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
-    let row_count = picker.models.len() as u16;
-    let height = (row_count + 2).min(20); // borders
-    let width: u16 = 48;
-
-    let area = frame.area();
-    let rect = Rect::new(
-        area.width.saturating_sub(width) / 2,
-        area.height.saturating_sub(height) / 2,
-        width.min(area.width),
-        height.min(area.height),
-    );
-
-    let block = Block::bordered()
-        .border_type(ratatui::widgets::BorderType::Rounded)
-        .border_style(Style::default().fg(THEME.help_border))
-        .title(Line::from(vec![
-            Span::styled(" ", Style::default()),
-            Span::styled(
-                "Model",
-                Style::default()
-                    .fg(THEME.header)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(" ", Style::default()),
-        ]))
-        .title_bottom(Line::from(vec![
-            Span::styled(" ", Style::default()),
-            Span::styled("Enter", Style::default().fg(THEME.dimmed)),
-            Span::styled(" select ", Style::default().fg(THEME.help_muted)),
-            Span::styled("Esc", Style::default().fg(THEME.dimmed)),
-            Span::styled(" cancel ", Style::default().fg(THEME.help_muted)),
-        ]));
-
-    // Inner width: total width - 2 borders - 2 highlight symbol
-    let inner_w = width.saturating_sub(4) as usize;
-
-    let items: Vec<ListItem> = picker
-        .models
-        .iter()
-        .map(|m| {
-            let price = pricing::model_pricing(m)
-                .map(|p| format_model_price(p.input_cost_per_million, p.output_cost_per_million))
-                .unwrap_or_default();
-            let pad = inner_w.saturating_sub(m.len() + price.len());
-            ListItem::new(Line::from(vec![
-                Span::styled(m.as_str(), Style::default().fg(THEME.text)),
-                Span::raw(" ".repeat(pad)),
-                Span::styled(price, Style::default().fg(THEME.dimmed)),
-            ]))
-        })
-        .collect();
-
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(
-            Style::default()
-                .fg(THEME.highlight_fg)
-                .bg(THEME.highlight_bg)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol("▸ ");
-
-    let mut list_state = picker.list_state;
-
-    frame.render_widget(Clear, rect);
-    frame.render_stateful_widget(list, rect, &mut list_state);
-}
-
-/// Format pricing as compact "$in/$out" per million tokens.
-fn format_model_price(input: f64, output: f64) -> String {
-    fn fmt(v: f64) -> String {
-        if v == (v as u64) as f64 {
-            format!("${}", v as u64)
-        } else if v * 10.0 == (v * 10.0).round() {
-            format!("${:.1}", v)
-        } else {
-            format!("${:.2}", v)
-        }
-    }
-    format!("{}/{}", fmt(input), fmt(output))
 }
 
 fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
@@ -1341,33 +1233,8 @@ fn draw_input(
 
 fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
     // Steps are in the sidebar; main area is just the log
-    draw_log_panel(frame, app, area);
+    draw_log_panel(frame, &app.logs, app.log_scroll, area);
 }
-
-fn draw_log_panel(frame: &mut Frame, app: &App, area: Rect) {
-    let visible_height = area.height.saturating_sub(2) as usize;
-    let total_logs = app.logs.len();
-    let scroll_pos = app.log_scroll as usize;
-    // Show a window of logs ending at scroll_pos (inclusive)
-    let end = (scroll_pos + 1).min(total_logs);
-    let start = end.saturating_sub(visible_height);
-
-    let log_text: Text = app.logs[start..end]
-        .iter()
-        .map(|l| Line::from(l.as_str()))
-        .collect::<Vec<_>>()
-        .into();
-
-    let log_block = Block::default()
-        .borders(Borders::ALL.difference(Borders::LEFT))
-        .title(" Log ")
-        .border_style(Style::default().fg(THEME.border));
-    let log_para = Paragraph::new(log_text)
-        .block(log_block)
-        .wrap(Wrap { trim: false });
-    frame.render_widget(log_para, area);
-}
-
 
 fn draw_done(frame: &mut Frame, app: &App, msg: &str, cards: &[ValidatedCard], area: Rect) {
     let mut summary_lines = vec![
@@ -1456,48 +1323,6 @@ fn draw_error(frame: &mut Frame, msg: &str, area: Rect) {
 
     let para = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
     frame.render_widget(para, area);
-}
-
-fn draw_step_logs(frame: &mut Frame, app: &App, step_idx: usize, area: Rect) {
-    let record = &app.steps[step_idx];
-    let title = format!(" {} ", record.step.label());
-
-    if record.logs.is_empty() {
-        let lines = vec![
-            Line::from(""),
-            Line::from(Span::styled(
-                "  No log entries for this step.",
-                Style::default().fg(THEME.dimmed),
-            )),
-        ];
-        let para = Paragraph::new(Text::from(lines))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL.difference(Borders::LEFT))
-                    .title(title)
-                    .border_style(Style::default().fg(THEME.border)),
-            )
-            .wrap(Wrap { trim: false });
-        frame.render_widget(para, area);
-        return;
-    }
-
-    let log_text: Text = record
-        .logs
-        .iter()
-        .map(|l| Line::from(l.as_str()))
-        .collect::<Vec<_>>()
-        .into();
-
-    let log_block = Block::default()
-        .borders(Borders::ALL.difference(Borders::LEFT))
-        .title(title)
-        .border_style(Style::default().fg(THEME.border));
-    let log_para = Paragraph::new(log_text)
-        .block(log_block)
-        .wrap(Wrap { trim: false })
-        .scroll((app.browse_scroll, 0));
-    frame.render_widget(log_para, area);
 }
 
 // ---------------------------------------------------------------------------
