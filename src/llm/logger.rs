@@ -54,7 +54,23 @@ impl LlmLogger {
             .map(|d| d.as_secs())
             .unwrap_or(0);
         let entry = format!("[{ts}]\n--- PROMPT ---\n{prompt}\n--- RESPONSE ---\n{response}\n\n");
+        self.write(&entry);
+    }
 
+    /// Log an error for a prompt that failed. No-op if no output target is available.
+    pub fn log_error(&self, prompt: &str, error: &str) {
+        if !self.is_active() {
+            return;
+        }
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let entry = format!("[{ts}]\n--- PROMPT ---\n{prompt}\n--- ERROR ---\n{error}\n\n");
+        self.write(&entry);
+    }
+
+    fn write(&self, entry: &str) {
         for file_mutex in [&self.file, &self.auto_file].into_iter().flatten() {
             if let Ok(mut f) = file_mutex.lock() {
                 let _ = f.write_all(entry.as_bytes());

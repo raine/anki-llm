@@ -373,6 +373,9 @@ fn run_single_step(
             }
             Err(e) => {
                 last_error = e.to_string();
+                if let Some(logger) = logger {
+                    logger.log_error(user_prompt, &last_error);
+                }
                 if let LlmError::Api(_) = e {
                     break;
                 }
