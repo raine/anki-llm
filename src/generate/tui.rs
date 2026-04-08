@@ -87,10 +87,10 @@ impl PipelineStep {
             PipelineStep::LoadPrompt => "Load prompt",
             PipelineStep::ValidateAnki => "Validate Anki",
             PipelineStep::Generate => "Generate cards",
-            PipelineStep::PostProcess => "Post-process",
+            PipelineStep::PostProcess => "Pre-select processing",
             PipelineStep::Validate => "Check duplicates",
             PipelineStep::Select => "Select cards",
-            PipelineStep::QualityCheck => "Quality check",
+            PipelineStep::QualityCheck => "Post-select processing",
             PipelineStep::Finish => "Import / export",
         }
     }
