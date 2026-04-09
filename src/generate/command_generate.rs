@@ -11,7 +11,7 @@ use crate::llm::provider::available_models;
 use crate::llm::runtime::{RuntimeConfig, RuntimeConfigArgs, build_runtime_config};
 use crate::template::frontmatter::{Frontmatter, parse_prompt_file};
 
-use crate::style::style;
+use crate::style::{Style, style};
 
 use super::anki_import::{import_cards_to_anki, report_import_result};
 use super::cards::ValidatedCard;
@@ -47,6 +47,11 @@ fn require_prompt_path(prompt: &Option<std::path::PathBuf>) -> Result<std::path:
 // Session state — prepared once, reused across terms
 // ---------------------------------------------------------------------------
 
+struct LoadedPrompt {
+    frontmatter: Frontmatter,
+    body: String,
+}
+
 struct PreparedSession {
     frontmatter: Frontmatter,
     prompt_body: String,
@@ -56,6 +61,66 @@ struct PreparedSession {
     anki: AnkiClient,
     client: LlmClient,
     logger: LlmLogger,
+}
+
+/// Load and parse a prompt file, validating required placeholders.
+fn load_prompt(args: &GenerateArgs) -> Result<LoadedPrompt> {
+    let prompt_path = require_prompt_path(&args.prompt)?;
+    crate::workspace::resolver::save_last_prompt(&prompt_path);
+    let content = std::fs::read_to_string(&prompt_path)?;
+    let parsed = parse_prompt_file(&content)?;
+
+    if !parsed.body.contains("{term}") {
+        anyhow::bail!("Prompt is missing required placeholder: {{term}}");
+    }
+    if !parsed.body.contains("{count}") {
+        anyhow::bail!("Prompt is missing required placeholder: {{count}}");
+    }
+
+    Ok(LoadedPrompt {
+        frontmatter: parsed.frontmatter,
+        body: parsed.body,
+    })
+}
+
+/// Full session setup: load prompt, validate Anki, build logger/runtime/client.
+/// Reports progress via the `PipelineProgress` trait (TUI shows steps, legacy no-ops).
+fn prepare_session(
+    args: &GenerateArgs,
+    very_verbose: bool,
+    progress: &dyn PipelineProgress,
+) -> Result<PreparedSession> {
+    progress.step_start(PipelineStep::LoadPrompt, None);
+    let loaded = load_prompt(args)?;
+    progress.step_done(PipelineStep::LoadPrompt, None);
+
+    progress.step_start(PipelineStep::ValidateAnki, None);
+    let anki = AnkiClient::new();
+    let validation = validate_anki_assets(&anki, &loaded.frontmatter)?;
+    progress.step_done(PipelineStep::ValidateAnki, None);
+
+    let logger = LlmLogger::new(args.log.as_deref(), very_verbose)?;
+    let runtime = build_runtime_config(RuntimeConfigArgs {
+        model: args.model.as_deref(),
+        batch_size: None,
+        max_tokens: args.max_tokens,
+        temperature: args.temperature,
+        retries: args.retries,
+        dry_run: false,
+    })?;
+    let field_map_keys: Vec<String> = loaded.frontmatter.field_map.keys().cloned().collect();
+    let client = LlmClient::from_config(&runtime);
+
+    Ok(PreparedSession {
+        frontmatter: loaded.frontmatter,
+        prompt_body: loaded.body,
+        validation,
+        runtime,
+        field_map_keys,
+        anki,
+        client,
+        logger,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -167,102 +232,21 @@ pub fn run_pipeline(
         };
     }
 
-    macro_rules! step_start {
-        ($step:expr, $detail:expr) => {
-            tx.send(BackendEvent::StepUpdate {
-                step: $step,
-                status: StepStatus::Running($detail),
-            })
-            .ok();
-        };
-    }
-
-    macro_rules! step_done {
-        ($step:expr, $detail:expr) => {
-            tx.send(BackendEvent::StepUpdate {
-                step: $step,
-                status: StepStatus::Done($detail),
-            })
-            .ok();
-        };
-    }
-
     // --- Session setup (done once) ---
 
-    step_start!(PipelineStep::LoadPrompt, None);
-    let prompt_path = require_prompt_path(&args.prompt).map_err(|e| {
+    let progress = TuiProgress { tx: tx.clone() };
+    // Disable very_verbose in TUI mode — raw stderr output would corrupt the display.
+    let mut session = prepare_session(&args, false, &progress).map_err(|e| {
         tx.send(BackendEvent::Fatal(format!("{e}"))).ok();
         e
     })?;
-    crate::workspace::resolver::save_last_prompt(&prompt_path);
-    let content = std::fs::read_to_string(&prompt_path).map_err(|e| {
-        tx.send(BackendEvent::Fatal(format!("{e}"))).ok();
-        e
-    })?;
-    let parsed = parse_prompt_file(&content).map_err(|e| {
-        tx.send(BackendEvent::Fatal(format!("{e}"))).ok();
-        e
-    })?;
-    let frontmatter = parsed.frontmatter;
 
-    if !parsed.body.contains("{term}") {
-        let msg = "Prompt is missing required placeholder: {term}";
-        tx.send(BackendEvent::Fatal(msg.to_string())).ok();
-        return Err(anyhow::anyhow!("{}", msg));
-    }
-    if !parsed.body.contains("{count}") {
-        let msg = "Prompt is missing required placeholder: {count}";
-        tx.send(BackendEvent::Fatal(msg.to_string())).ok();
-        return Err(anyhow::anyhow!("{}", msg));
-    }
-
-    step_done!(PipelineStep::LoadPrompt, None);
-    log!("Loaded prompt for deck: {}", frontmatter.deck);
-    log!("Note type: {}", frontmatter.note_type);
-
-    step_start!(PipelineStep::ValidateAnki, None);
-    let anki = AnkiClient::new();
-    let validation = validate_anki_assets(&anki, &frontmatter).map_err(|e| {
-        tx.send(BackendEvent::Fatal(format!("{e}"))).ok();
-        e
-    })?;
-    step_done!(PipelineStep::ValidateAnki, None);
+    log!("Loaded prompt for deck: {}", session.frontmatter.deck);
+    log!("Note type: {}", session.frontmatter.note_type);
     log!(
         "Note type fields: {}",
-        validation.note_type_fields.join(", ")
+        session.validation.note_type_fields.join(", ")
     );
-
-    // Disable very_verbose in TUI mode — raw stderr output would corrupt the display.
-    let logger = LlmLogger::new(args.log.as_deref(), false).map_err(|e| {
-        tx.send(BackendEvent::Fatal(format!("{e}"))).ok();
-        e
-    })?;
-    let runtime = build_runtime_config(RuntimeConfigArgs {
-        model: args.model.as_deref(),
-        batch_size: None,
-        max_tokens: args.max_tokens,
-        temperature: args.temperature,
-        retries: args.retries,
-        dry_run: false,
-    })
-    .map_err(|e| {
-        tx.send(BackendEvent::Fatal(format!("{e}"))).ok();
-        e
-    })?;
-
-    let field_map_keys: Vec<String> = frontmatter.field_map.keys().cloned().collect();
-    let client = LlmClient::from_config(&runtime);
-
-    let mut session = PreparedSession {
-        frontmatter,
-        prompt_body: parsed.body,
-        validation,
-        runtime,
-        field_map_keys,
-        anki,
-        client,
-        logger,
-    };
 
     let models: Vec<String> = available_models(args.dry_run)
         .into_iter()
@@ -452,208 +436,65 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         anyhow::anyhow!("The <TERM> argument is required in non-interactive mode")
     })?;
 
-    // 1. Load and parse prompt file
-    let prompt_path = require_prompt_path(&args.prompt)?;
-    crate::workspace::resolver::save_last_prompt(&prompt_path);
-    let content = std::fs::read_to_string(&prompt_path)?;
-    let parsed = parse_prompt_file(&content)?;
-    let frontmatter = parsed.frontmatter;
-
-    if !parsed.body.contains("{term}") {
-        anyhow::bail!("Prompt is missing required placeholder: {{term}}");
-    }
-    if !parsed.body.contains("{count}") {
-        anyhow::bail!("Prompt is missing required placeholder: {{count}}");
-    }
-    let has_processing = frontmatter
-        .processing
-        .as_ref()
-        .map(|p| !p.pre_select.is_empty() || !p.post_select.is_empty())
-        .unwrap_or(false);
-    if args.copy && has_processing {
-        anyhow::bail!("processing is not supported in --copy mode");
-    }
-
     let s = style();
-    eprintln!("  {}  {}", s.muted("Deck     "), s.cyan(&frontmatter.deck));
-    eprintln!(
-        "  {}  {}",
-        s.muted("Note type"),
-        s.cyan(&frontmatter.note_type)
-    );
-
-    // 2. Validate Anki assets
-    let anki = AnkiClient::new();
-    let validation = validate_anki_assets(&anki, &frontmatter)?;
-    eprintln!(
-        "  {}  {}",
-        s.muted("Fields   "),
-        s.muted(validation.note_type_fields.join(", "))
-    );
-
-    // 3. Build logger
-    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
-
-    // 4. Resolve LLM config (skipped in --copy mode — no API key needed)
-    let runtime = if !args.copy {
-        Some(build_runtime_config(RuntimeConfigArgs {
-            model: args.model.as_deref(),
-            batch_size: None,
-            max_tokens: args.max_tokens,
-            temperature: args.temperature,
-            retries: args.retries,
-            dry_run: false,
-        })?)
-    } else {
-        None
-    };
-
-    let field_map_keys: Vec<String> = frontmatter.field_map.keys().cloned().collect();
-    let client = runtime.as_ref().map(LlmClient::from_config);
     let on_log: &(dyn Fn(&str) + Send + Sync) = &|msg| eprintln!("{msg}");
 
     if args.copy {
-        // Manual copy-paste mode — NOT routed through pipeline
-        let mut row = crate::data::Row::new();
-        row.insert("term".into(), serde_json::Value::String(term.clone()));
-        row.insert(
-            "count".into(),
-            serde_json::Value::String(args.count.to_string()),
-        );
-        let filled = crate::template::fill_template(&parsed.body, &row)?;
-        let raw = get_llm_response_manually(&filled)?;
-
-        let parsed_arr = try_parse_json_array(&raw)
-            .ok_or_else(|| anyhow::anyhow!("Response is not a valid JSON array"))?;
-
-        let mut skipped = 0;
-        let candidates: Vec<CardCandidate> = parsed_arr
-            .into_iter()
-            .filter_map(|obj| {
-                let mut fields = std::collections::HashMap::new();
-                let mut missing = false;
-                for key in &field_map_keys {
-                    match obj.get(key) {
-                        Some(val) => {
-                            fields.insert(key.clone(), val.clone());
-                        }
-                        None => {
-                            eprintln!(
-                                "  {}",
-                                s.warning(format!(
-                                    "Response is missing field \"{key}\". Skipping card."
-                                ))
-                            );
-                            missing = true;
-                        }
-                    }
-                }
-                if missing {
-                    skipped += 1;
-                    None
-                } else {
-                    Some(CardCandidate { fields })
-                }
-            })
-            .collect();
-
-        if skipped > 0 {
-            eprintln!(
-                "  {}",
-                s.warning(format!("Skipped {skipped} card(s) due to missing fields."))
-            );
-        }
-        eprintln!("  Parsed {} card(s) from response", candidates.len());
-
-        // Sanitize and validate
-        let sanitized_pairs: Vec<_> = candidates
-            .into_iter()
-            .map(|c| {
-                let s = super::sanitize::sanitize_fields(&c.fields);
-                (c, s)
-            })
-            .collect();
-
-        let first_field_name = &validation.note_type_fields[0];
-        let validated =
-            super::cards::validate_cards(sanitized_pairs, &frontmatter, first_field_name, &anki)?;
-
-        let dup_count = validated.iter().filter(|c| c.is_duplicate).count();
-        if dup_count > 0 {
-            eprintln!(
-                "  {}",
-                s.muted(format!("{dup_count} duplicate(s) already in Anki"))
-            );
-        }
-
-        if args.dry_run {
-            display_cards(&validated);
-            return Ok(());
-        }
-
-        if validated.is_empty() {
-            eprintln!("No cards to select from.");
-            return Ok(());
-        }
-
-        let selected_indices = select_cards_legacy(&validated)?;
-        let selected: Vec<ValidatedCard> = selected_indices
-            .iter()
-            .filter_map(|&i| validated.get(i).cloned())
-            .collect();
-
-        if selected.is_empty() {
-            eprintln!("\nNo cards selected. Exiting.");
-            return Ok(());
-        }
-
-        // Export or import
-        if let Some(ref output_path) = args.output {
-            export_cards(&selected, output_path, on_log)?;
-        } else {
-            let result = import_cards_to_anki(&selected, &frontmatter, &anki, on_log)?;
-            report_import_result(&result, &frontmatter.deck);
-
-            if result.failures > 0 {
-                anyhow::bail!(
-                    "Import failed: {} card(s) could not be added. Check your Anki collection and try again.",
-                    result.failures
-                );
-            }
-        }
-
-        return Ok(());
+        return run_copy_mode(&args, &term, s, on_log);
     }
 
-    // Non-copy legacy mode — route through shared pipeline
-    let rt = runtime.as_ref().unwrap();
-    let client_ref = client.as_ref().unwrap();
+    // Non-copy legacy mode — full session setup, route through shared pipeline
+    let session = prepare_session(&args, args.very_verbose, &LegacyProgress)?;
 
-    eprintln!("  {}  {}", s.muted("Model    "), s.muted(&rt.model));
+    eprintln!(
+        "  {}  {}",
+        s.muted("Deck     "),
+        s.cyan(&session.frontmatter.deck)
+    );
+    eprintln!(
+        "  {}  {}",
+        s.muted("Note type"),
+        s.cyan(&session.frontmatter.note_type)
+    );
+    eprintln!(
+        "  {}  {}",
+        s.muted("Fields   "),
+        s.muted(session.validation.note_type_fields.join(", "))
+    );
+    eprintln!(
+        "  {}  {}",
+        s.muted("Model    "),
+        s.muted(&session.runtime.model)
+    );
 
     let config = PipelineConfig {
-        frontmatter: &frontmatter,
-        prompt_body: &parsed.body,
-        field_map_keys: &field_map_keys,
-        validation: &validation,
-        client: client_ref,
-        anki: &anki,
-        logger: &logger,
-        model: &rt.model,
-        temperature: rt.temperature,
-        max_tokens: rt.max_tokens,
-        retries: rt.retries,
+        frontmatter: &session.frontmatter,
+        prompt_body: &session.prompt_body,
+        field_map_keys: &session.field_map_keys,
+        validation: &session.validation,
+        client: &session.client,
+        anki: &session.anki,
+        logger: &session.logger,
+        model: &session.runtime.model,
+        temperature: session.runtime.temperature,
+        max_tokens: session.runtime.max_tokens,
+        retries: session.runtime.retries,
         count: args.count,
         dry_run: args.dry_run,
         output: args.output.as_deref(),
     };
 
-    let progress = LegacyProgress;
     let interaction = LegacyInteraction {
         cards: std::cell::RefCell::new(Vec::new()),
     };
 
-    match super::pipeline::run_pipeline_for_term(&config, &interaction, &progress, &term, &[])? {
+    match super::pipeline::run_pipeline_for_term(
+        &config,
+        &interaction,
+        &LegacyProgress,
+        &term,
+        &[],
+    )? {
         PipelineOutcome::Success { message, .. } => {
             if !message.is_empty() {
                 eprintln!("\n  {}", s.green(&message));
@@ -669,4 +510,151 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// Manual copy-paste mode — loads prompt and Anki config but skips LLM client setup.
+fn run_copy_mode(
+    args: &GenerateArgs,
+    term: &str,
+    s: &Style,
+    on_log: &(dyn Fn(&str) + Send + Sync),
+) -> Result<()> {
+    let loaded = load_prompt(args)?;
+    let frontmatter = &loaded.frontmatter;
+
+    let has_processing = frontmatter
+        .processing
+        .as_ref()
+        .map(|p| !p.pre_select.is_empty() || !p.post_select.is_empty())
+        .unwrap_or(false);
+    if has_processing {
+        anyhow::bail!("processing is not supported in --copy mode");
+    }
+
+    eprintln!("  {}  {}", s.muted("Deck     "), s.cyan(&frontmatter.deck));
+    eprintln!(
+        "  {}  {}",
+        s.muted("Note type"),
+        s.cyan(&frontmatter.note_type)
+    );
+
+    let anki = AnkiClient::new();
+    let validation = validate_anki_assets(&anki, frontmatter)?;
+    eprintln!(
+        "  {}  {}",
+        s.muted("Fields   "),
+        s.muted(validation.note_type_fields.join(", "))
+    );
+
+    let field_map_keys: Vec<String> = frontmatter.field_map.keys().cloned().collect();
+
+    let mut row = crate::data::Row::new();
+    row.insert("term".into(), serde_json::Value::String(term.to_string()));
+    row.insert(
+        "count".into(),
+        serde_json::Value::String(args.count.to_string()),
+    );
+    let filled = crate::template::fill_template(&loaded.body, &row)?;
+    let raw = get_llm_response_manually(&filled)?;
+
+    let parsed_arr = try_parse_json_array(&raw)
+        .ok_or_else(|| anyhow::anyhow!("Response is not a valid JSON array"))?;
+
+    let mut skipped = 0;
+    let candidates: Vec<CardCandidate> = parsed_arr
+        .into_iter()
+        .filter_map(|obj| {
+            let mut fields = std::collections::HashMap::new();
+            let mut missing = false;
+            for key in &field_map_keys {
+                match obj.get(key) {
+                    Some(val) => {
+                        fields.insert(key.clone(), val.clone());
+                    }
+                    None => {
+                        eprintln!(
+                            "  {}",
+                            s.warning(format!(
+                                "Response is missing field \"{key}\". Skipping card."
+                            ))
+                        );
+                        missing = true;
+                    }
+                }
+            }
+            if missing {
+                skipped += 1;
+                None
+            } else {
+                Some(CardCandidate { fields })
+            }
+        })
+        .collect();
+
+    if skipped > 0 {
+        eprintln!(
+            "  {}",
+            s.warning(format!("Skipped {skipped} card(s) due to missing fields."))
+        );
+    }
+    eprintln!("  Parsed {} card(s) from response", candidates.len());
+
+    // Sanitize and validate
+    let sanitized_pairs: Vec<_> = candidates
+        .into_iter()
+        .map(|c| {
+            let s = super::sanitize::sanitize_fields(&c.fields);
+            (c, s)
+        })
+        .collect();
+
+    let first_field_name = &validation.note_type_fields[0];
+    let validated =
+        super::cards::validate_cards(sanitized_pairs, frontmatter, first_field_name, &anki)?;
+
+    let dup_count = validated.iter().filter(|c| c.is_duplicate).count();
+    if dup_count > 0 {
+        eprintln!(
+            "  {}",
+            s.muted(format!("{dup_count} duplicate(s) already in Anki"))
+        );
+    }
+
+    if args.dry_run {
+        display_cards(&validated);
+        return Ok(());
+    }
+
+    if validated.is_empty() {
+        eprintln!("No cards to select from.");
+        return Ok(());
+    }
+
+    let selected_indices = select_cards_legacy(&validated)?;
+    let selected: Vec<ValidatedCard> = selected_indices
+        .iter()
+        .filter_map(|&i| validated.get(i).cloned())
+        .collect();
+
+    if selected.is_empty() {
+        eprintln!("\nNo cards selected. Exiting.");
+        return Ok(());
+    }
+
+    // Export or import
+    if let Some(ref output_path) = args.output {
+        export_cards(&selected, output_path, on_log)?;
+    } else {
+        let result = import_cards_to_anki(&selected, frontmatter, &anki, on_log)?;
+        report_import_result(&result, &frontmatter.deck);
+
+        if result.failures > 0 {
+            anyhow::bail!(
+                "Import failed: {} card(s) could not be added. Check your Anki collection and try again.",
+                result.failures
+            );
+        }
+    }
+
+    Ok(())
 }
