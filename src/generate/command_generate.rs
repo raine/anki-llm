@@ -91,12 +91,16 @@ fn prepare_session(
     progress: &dyn PipelineProgress,
 ) -> Result<PreparedSession> {
     progress.step_start(PipelineStep::LoadPrompt, None);
-    let loaded = load_prompt(args)?;
+    let loaded = load_prompt(args).inspect_err(|e| {
+        progress.step_error(PipelineStep::LoadPrompt, &e.to_string());
+    })?;
     progress.step_done(PipelineStep::LoadPrompt, None);
 
     progress.step_start(PipelineStep::ValidateAnki, None);
     let anki = AnkiClient::new();
-    let validation = validate_anki_assets(&anki, &loaded.frontmatter)?;
+    let validation = validate_anki_assets(&anki, &loaded.frontmatter).inspect_err(|e| {
+        progress.step_error(PipelineStep::ValidateAnki, &e.to_string());
+    })?;
     progress.step_done(PipelineStep::ValidateAnki, None);
 
     let logger = LlmLogger::new(args.log.as_deref(), very_verbose)?;
