@@ -226,10 +226,7 @@ pub fn run_pipeline(
         tx.send(BackendEvent::Fatal(format!("{e}"))).ok();
         e
     })?;
-    step_done!(
-        PipelineStep::ValidateAnki,
-        Some(validation.note_type_fields.join(", "))
-    );
+    step_done!(PipelineStep::ValidateAnki, None);
     log!(
         "Note type fields: {}",
         validation.note_type_fields.join(", ")
