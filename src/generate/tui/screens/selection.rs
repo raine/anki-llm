@@ -10,6 +10,7 @@ use crate::generate::cards::ValidatedCard;
 use crate::generate::line_input::LineInput;
 
 use super::super::theme::{Glyphs, THEME};
+use ratatui::widgets::Clear;
 
 pub(in crate::generate::tui) struct SelectionState {
     pub(in crate::generate::tui) cards: Vec<ValidatedCard>,
@@ -212,17 +213,6 @@ pub(in crate::generate::tui) fn draw_selecting(
     );
     frame.render_stateful_widget(list, chunks[0], &mut list_state);
 
-    // Split detail area: if term input is active, reserve a line at the bottom
-    let (detail_area, term_input_area) = if state.term_input.is_some() {
-        let split = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(1)])
-            .split(chunks[1]);
-        (split[0], Some(split[1]))
-    } else {
-        (chunks[1], None)
-    };
-
     // Detail pane for focused card
     if let Some(card) = state.cards.get(state.cursor) {
         let mut lines: Vec<Line> = Vec::new();
@@ -259,30 +249,58 @@ pub(in crate::generate::tui) fn draw_selecting(
         let detail_para = Paragraph::new(Text::from(lines))
             .wrap(Wrap { trim: false })
             .scroll((state.detail_scroll, 0));
-        frame.render_widget(detail_para, detail_area);
+        frame.render_widget(detail_para, chunks[1]);
     }
 
-    // Term input line
-    if let Some(ref input) = state.term_input
-        && let Some(input_area) = term_input_area
-    {
-        let value = input.value();
-        let label = "Term: ";
-        let scroll =
-            input.visual_scroll(input_area.width.saturating_sub(label.len() as u16 + 1) as usize);
-        let line = Line::from(vec![
-            Span::styled(
-                label,
-                Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(value),
-        ]);
-        frame.render_widget(Paragraph::new(line).scroll((0, scroll as u16)), input_area);
-        frame.set_cursor_position((
-            input_area.x
-                + label.len() as u16
-                + (input.visual_cursor().saturating_sub(scroll)) as u16,
-            input_area.y,
-        ));
+    // Term input popup overlay
+    if let Some(ref input) = state.term_input {
+        draw_term_input_overlay(frame, input, area);
     }
+}
+
+fn draw_term_input_overlay(frame: &mut Frame, input: &LineInput, area: ratatui::layout::Rect) {
+    let max_width = 50u16.min(area.width.saturating_sub(4));
+    let h_pad = area.width.saturating_sub(max_width) / 2;
+
+    let h_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(h_pad),
+            Constraint::Length(max_width),
+            Constraint::Min(0),
+        ])
+        .split(area);
+
+    let col = h_chunks[1];
+    let input_height: u16 = 3;
+    let v_pad = col.height.saturating_sub(input_height) / 2;
+
+    let v_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(v_pad),
+            Constraint::Length(input_height),
+            Constraint::Min(0),
+        ])
+        .split(col);
+
+    let input_area = v_chunks[1];
+    let inner_width = input_area.width.saturating_sub(2).max(1) as usize;
+    let scroll = input.visual_scroll(inner_width);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Enter term ")
+        .border_style(Style::default().fg(THEME.info));
+
+    let para = Paragraph::new(input.value())
+        .block(block)
+        .scroll((0, scroll as u16));
+    frame.render_widget(Clear, input_area);
+    frame.render_widget(para, input_area);
+
+    frame.set_cursor_position((
+        input_area.x + 1 + (input.visual_cursor().saturating_sub(scroll)) as u16,
+        input_area.y + 1,
+    ));
 }
