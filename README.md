@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  A CLI toolkit for bulk-processing and generating Anki flashcards with LLMs.
+  A CLI/TUI toolkit for bulk-processing and generating Anki flashcards with LLMs.
 </p>
 
 <p align="center">
@@ -86,7 +86,6 @@ brew install raine/anki-llm/anki-llm
 cargo install anki-llm
 ```
 
-
 ## Requirements
 
 - Anki Desktop must be running.
@@ -105,31 +104,31 @@ The tool supports two API providers:
 <details>
 <summary>Pricing table</summary>
 
-| Model                    | Input   | Output   |                                                                           |
-| ------------------------ | ------- | -------- | ------------------------------------------------------------------------- |
-| **OpenAI models**        |
-| `gpt-4.1`                | $2.00/M | $8.00/M  | [🔗](https://platform.openai.com/docs/models/gpt-4.1)                     |
-| `gpt-4.1-mini`           | $0.40/M | $1.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4.1-mini)                |
-| `gpt-4.1-nano`           | $0.10/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-4.1-nano)                |
-| `gpt-4o`                 | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4o)                      |
-| `gpt-4o-mini`            | $0.15/M | $0.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4o-mini)                 |
-| `gpt-5`                  | $1.25/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5)                       |
-| `gpt-5-mini`             | $0.25/M | $2.00/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-mini)                  |
-| `gpt-5-nano`             | $0.05/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-nano)                  |
-| `gpt-5.1`                | $1.25/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.1)                     |
-| `gpt-5.2`                | $1.75/M | $14.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.2)                     |
-| `gpt-5.3`                | $1.75/M | $14.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.3)                     |
-| `gpt-5.4`                | $2.50/M | $15.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.4)                     |
-| `gpt-5.4-mini`           | $0.75/M | $4.50/M  | [🔗](https://platform.openai.com/docs/models/gpt-5.4-mini)                |
-| `gpt-5.4-nano`           | $0.20/M | $1.25/M  | [🔗](https://platform.openai.com/docs/models/gpt-5.4-nano)                |
-| **Google Gemini models** |
-| `gemini-2.0-flash`       | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)       |
-| `gemini-2.5-flash`       | $0.30/M | $2.50/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)       |
-| `gemini-2.5-flash-lite`  | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-lite)  |
-| `gemini-2.5-pro`         | $1.25/M | $10.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)         |
-| `gemini-3-flash-preview` | $0.50/M | $3.00/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3-flash-preview) |
+| Model                           | Input   | Output   |                                                                                  |
+| ------------------------------- | ------- | -------- | -------------------------------------------------------------------------------- |
+| **OpenAI models**               |
+| `gpt-4.1`                       | $2.00/M | $8.00/M  | [🔗](https://platform.openai.com/docs/models/gpt-4.1)                            |
+| `gpt-4.1-mini`                  | $0.40/M | $1.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4.1-mini)                       |
+| `gpt-4.1-nano`                  | $0.10/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-4.1-nano)                       |
+| `gpt-4o`                        | $2.50/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-4o)                             |
+| `gpt-4o-mini`                   | $0.15/M | $0.60/M  | [🔗](https://platform.openai.com/docs/models/gpt-4o-mini)                        |
+| `gpt-5`                         | $1.25/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5)                              |
+| `gpt-5-mini`                    | $0.25/M | $2.00/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-mini)                         |
+| `gpt-5-nano`                    | $0.05/M | $0.40/M  | [🔗](https://platform.openai.com/docs/models/gpt-5-nano)                         |
+| `gpt-5.1`                       | $1.25/M | $10.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.1)                            |
+| `gpt-5.2`                       | $1.75/M | $14.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.2)                            |
+| `gpt-5.3`                       | $1.75/M | $14.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.3)                            |
+| `gpt-5.4`                       | $2.50/M | $15.00/M | [🔗](https://platform.openai.com/docs/models/gpt-5.4)                            |
+| `gpt-5.4-mini`                  | $0.75/M | $4.50/M  | [🔗](https://platform.openai.com/docs/models/gpt-5.4-mini)                       |
+| `gpt-5.4-nano`                  | $0.20/M | $1.25/M  | [🔗](https://platform.openai.com/docs/models/gpt-5.4-nano)                       |
+| **Google Gemini models**        |
+| `gemini-2.0-flash`              | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)              |
+| `gemini-2.5-flash`              | $0.30/M | $2.50/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)              |
+| `gemini-2.5-flash-lite`         | $0.10/M | $0.40/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-lite)         |
+| `gemini-2.5-pro`                | $1.25/M | $10.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)                |
+| `gemini-3-flash-preview`        | $0.50/M | $3.00/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3-flash-preview)        |
 | `gemini-3.1-flash-lite-preview` | $0.25/M | $1.50/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-flash-lite-preview) |
-| `gemini-3.1-pro-preview` | $2.00/M | $12.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-pro-preview) |
+| `gemini-3.1-pro-preview`        | $2.00/M | $12.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-pro-preview)        |
 
 Pricing is per million tokens (M). Check the latest prices on the provider's
 website to be sure.
@@ -566,8 +565,8 @@ Press `c` to copy the focused card to clipboard. Confirm with `Enter`.
 
 **Quality check review** — If quality checking is enabled, flagged cards are
 presented one at a time with the LLM's reasoning. Keep (`k`/`y`/`Enter`) or
-discard (`d`/`n`) each card, keep/discard all remaining with `a`/`x`, or go
-back to reconsider with `u`.
+discard (`d`/`n`) each card, keep/discard all remaining with `a`/`x`, or go back
+to reconsider with `u`.
 
 **Error recovery** — On error, press `r` to retry the same term or `n` to enter
 a new one.
@@ -586,9 +585,9 @@ The frontmatter is a YAML block at the top of the file enclosed by `---`.
 
 - `deck`: The target Anki deck name.
 - `note_type`: The name of the Anki note type (model) to use.
-- `field_map`: Maps the keys from the LLM's JSON output to your actual Anki field
-  names. The LLM will be instructed to generate JSON with the keys on the left,
-  and `anki-llm` will use them to populate the Anki fields on the right.
+- `field_map`: Maps the keys from the LLM's JSON output to your actual Anki
+  field names. The LLM will be instructed to generate JSON with the keys on the
+  left, and `anki-llm` will use them to populate the Anki fields on the right.
 - `processing` (optional): Runs LLM processing steps before and/or after card
   selection. Supports two step types: `transform` (rewrite fields) and `check`
   (quality verification with pass/flag/reject verdicts).
