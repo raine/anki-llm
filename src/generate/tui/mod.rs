@@ -1534,6 +1534,14 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("Ctrl+C", "Quit"));
         }
         AppMode::Running => {
+            if let Some((current, total)) = app.batch_progress {
+                let spinner = SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()];
+                s.push(Span::styled(
+                    format!("{spinner} Batch {current}/{total}"),
+                    Style::default().fg(THEME.info),
+                ));
+                s.push(footer_pipe());
+            }
             s.extend(footer_cmd("Esc", "Cancel"));
             s.push(footer_pipe());
             s.extend(footer_cmd("q", "Quit"));
