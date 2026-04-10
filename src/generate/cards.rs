@@ -18,6 +18,10 @@ pub struct ValidatedCard {
     pub raw_anki_fields: IndexMap<String, String>,
     /// Whether this card already exists in Anki.
     pub is_duplicate: bool,
+    /// Note ID of the existing duplicate in Anki, if any.
+    pub duplicate_note_id: Option<i64>,
+    /// Fields of the existing duplicate note in Anki (field name → value).
+    pub duplicate_fields: Option<IndexMap<String, String>>,
     /// Informational flags from pre-select check steps.
     pub flags: Vec<String>,
     /// LLM model used to generate this card.
@@ -49,16 +53,30 @@ pub fn escape_anki_query(value: &str) -> String {
 }
 
 /// Check if a note with this first field value already exists.
+/// Returns the note ID of the first match, or None if no duplicate found.
 fn check_duplicate(
     anki: &AnkiClient,
     first_field_value: &str,
     note_type: &str,
     deck: &str,
-) -> Result<bool, anyhow::Error> {
+) -> Result<Option<i64>, anyhow::Error> {
     let escaped = escape_anki_query(first_field_value);
     let query = format!("\"note:{note_type}\" \"deck:{deck}\" \"{escaped}\"");
     let ids = anki.find_notes(&query)?;
-    Ok(!ids.is_empty())
+    Ok(ids.into_iter().next())
+}
+
+/// Fetch the fields of an existing note by its ID.
+fn fetch_note_fields(
+    anki: &AnkiClient,
+    note_id: i64,
+) -> Result<IndexMap<String, String>, anyhow::Error> {
+    let notes = anki.notes_info(&[note_id])?;
+    let note = notes
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Note {note_id} not found"))?;
+    Ok(note.fields.into_iter().map(|(k, v)| (k, v.value)).collect())
 }
 
 /// Validate cards: map fields to Anki names and check for duplicates.
@@ -87,17 +105,25 @@ pub fn validate_cards(
             .collect();
         let raw_anki_fields = map_fields_to_anki(&raw_strings, &frontmatter.field_map)?;
 
-        let is_duplicate = anki_fields
+        let dup_note_id = anki_fields
             .get(first_field_name)
             .filter(|v| !v.is_empty())
             .map(|v| check_duplicate(anki, v, &frontmatter.note_type, &frontmatter.deck))
-            .unwrap_or(Ok(false))?;
+            .unwrap_or(Ok(None))?;
+
+        let duplicate_fields = if let Some(note_id) = dup_note_id {
+            fetch_note_fields(anki, note_id).ok()
+        } else {
+            None
+        };
 
         validated.push(ValidatedCard {
             fields: sanitized,
             anki_fields,
             raw_anki_fields,
-            is_duplicate,
+            is_duplicate: dup_note_id.is_some(),
+            duplicate_note_id: dup_note_id,
+            duplicate_fields,
             flags: Vec::new(),
             model: model.to_string(),
         });

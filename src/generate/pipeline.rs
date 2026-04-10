@@ -537,6 +537,8 @@ pub fn run_pipeline_for_term(
                     anki_fields,
                     raw_anki_fields,
                     is_duplicate: false,
+                    duplicate_note_id: None,
+                    duplicate_fields: None,
                     flags: Vec::new(),
                     model: config.model.to_string(),
                 }

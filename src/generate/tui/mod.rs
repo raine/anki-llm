@@ -716,6 +716,9 @@ impl App {
                 let indices: Vec<usize> = state.selected.into_iter().collect();
                 self.worker_tx.send(WorkerCommand::Selection(indices)).ok();
             }
+            KeyCode::Char('f') => {
+                state.force_toggle_duplicate();
+            }
             KeyCode::Char('d') => {
                 state.remove_current();
             }
@@ -1062,6 +1065,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
         ],
         AppMode::Selecting(_) => vec![
             ("Space", "Toggle"),
+            ("f", "Force-select duplicate"),
             ("a", "All"),
             ("n", "None"),
             ("c", "Copy"),
@@ -1342,8 +1346,17 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         }
         AppMode::Selecting(state) => {
             let n = state.selected.len();
+            let focused_is_dup = state
+                .cards
+                .get(state.cursor)
+                .map(|c| c.is_duplicate)
+                .unwrap_or(false);
             s.extend(footer_cmd("Space", "Toggle"));
             s.push(footer_pipe());
+            if focused_is_dup {
+                s.extend(footer_cmd("f", "Force"));
+                s.push(footer_pipe());
+            }
             s.extend(footer_cmd("a", "All"));
             s.push(footer_pipe());
             s.extend(footer_cmd("n", "None"));

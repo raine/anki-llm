@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use indexmap::IndexMap;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Modifier, Style};
@@ -63,13 +64,26 @@ impl SelectionState {
             .map(|c| c.is_duplicate)
             .unwrap_or(false)
         {
-            return; // Duplicates cannot be selected
+            return; // Duplicates cannot be selected (use force_toggle_duplicate)
         }
         if self.selected.contains(&self.cursor) {
             self.selected.remove(&self.cursor);
         } else {
             self.selected.insert(self.cursor);
         }
+    }
+
+    /// Force-toggle a duplicate card: clears is_duplicate so it can be selected.
+    pub(in crate::generate::tui) fn force_toggle_duplicate(&mut self) {
+        let Some(card) = self.cards.get_mut(self.cursor) else {
+            return;
+        };
+        if !card.is_duplicate {
+            return; // Only applies to duplicates
+        }
+        // Clear duplicate status and select it
+        card.is_duplicate = false;
+        self.selected.insert(self.cursor);
     }
 
     pub(in crate::generate::tui) fn select_all(&mut self) {
@@ -237,7 +251,7 @@ pub(in crate::generate::tui) fn draw_selecting(
 
         if card.is_duplicate {
             lines.push(Line::from(Span::styled(
-                "  ⚠ Already exists in Anki",
+                "  ⚠ Already exists in Anki (f to force-select)",
                 Style::default().fg(THEME.warning),
             )));
             lines.push(Line::from(""));
@@ -255,13 +269,30 @@ pub(in crate::generate::tui) fn draw_selecting(
             lines.push(Line::from(""));
         }
 
-        for (name, value) in &card.raw_anki_fields {
-            lines.push(Line::from(Span::styled(
-                name.clone(),
-                Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
-            )));
-            lines.extend(crate::generate::selector::markdown_to_lines(value, "  "));
-            lines.push(Line::from(""));
+        if card.is_duplicate {
+            if let Some(ref dup_fields) = card.duplicate_fields {
+                // Diff view: show field-by-field comparison
+                render_diff_lines(&mut lines, &card.raw_anki_fields, dup_fields);
+            } else {
+                // No duplicate fields available, show new card normally
+                for (name, value) in &card.raw_anki_fields {
+                    lines.push(Line::from(Span::styled(
+                        name.clone(),
+                        Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
+                    )));
+                    lines.extend(crate::generate::selector::markdown_to_lines(value, "  "));
+                    lines.push(Line::from(""));
+                }
+            }
+        } else {
+            for (name, value) in &card.raw_anki_fields {
+                lines.push(Line::from(Span::styled(
+                    name.clone(),
+                    Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
+                )));
+                lines.extend(crate::generate::selector::markdown_to_lines(value, "  "));
+                lines.push(Line::from(""));
+            }
         }
 
         if has_multiple_models && !card.model.is_empty() {
@@ -328,4 +359,70 @@ fn draw_term_input_overlay(frame: &mut Frame, input: &LineInput, area: ratatui::
         input_area.x + 1 + (input.visual_cursor().saturating_sub(scroll)) as u16,
         input_area.y + 1,
     ));
+}
+
+/// Render a field-by-field diff between the new card and the existing Anki note.
+fn render_diff_lines<'a>(
+    lines: &mut Vec<Line<'a>>,
+    new_fields: &IndexMap<String, String>,
+    existing_fields: &IndexMap<String, String>,
+) {
+    let existing_style = Style::default().fg(THEME.danger);
+    let new_style = Style::default().fg(THEME.success);
+
+    for (name, new_value) in new_fields {
+        let existing_value = existing_fields.get(name).map(|s| s.as_str()).unwrap_or("");
+        let new_plain = crate::generate::selector::strip_html_tags(new_value);
+        let existing_plain = crate::generate::selector::strip_html_tags(existing_value);
+
+        lines.push(Line::from(Span::styled(
+            name.clone(),
+            Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
+        )));
+
+        if new_plain.trim() == existing_plain.trim() {
+            // Fields match — show normally
+            lines.extend(crate::generate::selector::markdown_to_lines(
+                new_value, "  ",
+            ));
+        } else {
+            // Fields differ — show existing (red) then new (green)
+            for line_str in existing_plain.lines() {
+                lines.push(Line::from(Span::styled(
+                    format!("  - {line_str}"),
+                    existing_style,
+                )));
+            }
+            for line_str in new_plain.lines() {
+                lines.push(Line::from(Span::styled(
+                    format!("  + {line_str}"),
+                    new_style,
+                )));
+            }
+        }
+        lines.push(Line::from(""));
+    }
+
+    // Show fields that exist in Anki but not in the new card
+    for (name, value) in existing_fields {
+        if !new_fields.contains_key(name) {
+            let plain = crate::generate::selector::strip_html_tags(value);
+            if plain.trim().is_empty() {
+                continue;
+            }
+            lines.push(Line::from(Span::styled(
+                name.clone(),
+                Style::default()
+                    .fg(THEME.info)
+                    .add_modifier(Modifier::BOLD | Modifier::DIM),
+            )));
+            for line_str in plain.lines() {
+                lines.push(Line::from(Span::styled(
+                    format!("  - {line_str}"),
+                    existing_style,
+                )));
+            }
+            lines.push(Line::from(""));
+        }
+    }
 }
