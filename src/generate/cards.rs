@@ -20,6 +20,8 @@ pub struct ValidatedCard {
     pub is_duplicate: bool,
     /// Informational flags from pre-select check steps.
     pub flags: Vec<String>,
+    /// LLM model used to generate this card.
+    pub model: String,
 }
 
 /// Map card fields from LLM keys to Anki field names.
@@ -65,6 +67,7 @@ pub fn validate_cards(
     frontmatter: &Frontmatter,
     first_field_name: &str,
     anki: &AnkiClient,
+    model: &str,
 ) -> Result<Vec<ValidatedCard>, anyhow::Error> {
     let mut validated = Vec::new();
     for (candidate, sanitized) in cards {
@@ -96,6 +99,7 @@ pub fn validate_cards(
             raw_anki_fields,
             is_duplicate,
             flags: Vec::new(),
+            model: model.to_string(),
         });
     }
     Ok(validated)

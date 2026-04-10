@@ -615,7 +615,7 @@ fn run_copy_mode(
 
     let first_field_name = &validation.note_type_fields[0];
     let validated =
-        super::cards::validate_cards(sanitized_pairs, frontmatter, first_field_name, &anki)?;
+        super::cards::validate_cards(sanitized_pairs, frontmatter, first_field_name, &anki, "")?;
 
     let dup_count = validated.iter().filter(|c| c.is_duplicate).count();
     if dup_count > 0 {

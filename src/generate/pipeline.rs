@@ -291,6 +291,7 @@ pub fn run_pipeline_for_term(
             config.frontmatter,
             first_field_name,
             config.anki,
+            config.model,
         ) {
             Ok(v) => v,
             Err(e) => {
@@ -537,6 +538,7 @@ pub fn run_pipeline_for_term(
                     raw_anki_fields,
                     is_duplicate: false,
                     flags: Vec::new(),
+                    model: config.model.to_string(),
                 }
             })
             .collect();

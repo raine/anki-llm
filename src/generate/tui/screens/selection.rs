@@ -128,6 +128,16 @@ pub(in crate::generate::tui) fn draw_selecting(
     glyphs: &Glyphs,
     area: ratatui::layout::Rect,
 ) {
+    // Check if cards come from multiple models (to decide whether to show model labels)
+    let has_multiple_models = {
+        let mut models = state.cards.iter().map(|c| c.model.as_str());
+        if let Some(first) = models.next() {
+            models.any(|m| m != first)
+        } else {
+            false
+        }
+    };
+
     // Split: card list on top, detail below
     let list_height = (state.cards.len() as u16 + 2).min(area.height / 2); // +2 for border
     let chunks = Layout::default()
@@ -195,6 +205,14 @@ pub(in crate::generate::tui) fn draw_selecting(
                         .add_modifier(Modifier::DIM),
                 ));
             }
+            if has_multiple_models && !card.model.is_empty() {
+                spans.push(Span::styled(
+                    format!(" [{}]", card.model),
+                    Style::default()
+                        .fg(THEME.dimmed)
+                        .add_modifier(Modifier::DIM),
+                ));
+            }
             ListItem::new(Line::from(spans))
         })
         .collect();
@@ -244,6 +262,13 @@ pub(in crate::generate::tui) fn draw_selecting(
             )));
             lines.extend(crate::generate::selector::markdown_to_lines(value, "  "));
             lines.push(Line::from(""));
+        }
+
+        if has_multiple_models && !card.model.is_empty() {
+            lines.push(Line::from(Span::styled(
+                format!("Model: {}", card.model),
+                Style::default().fg(THEME.dimmed),
+            )));
         }
 
         let detail_para = Paragraph::new(Text::from(lines))

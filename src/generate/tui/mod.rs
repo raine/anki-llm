@@ -95,6 +95,11 @@ struct App {
     model_picker: Option<ModelPickerState>,
     /// Last term submitted, for retry.
     last_term: Option<String>,
+    /// Cards to prepend when the next RequestSelection arrives (used when
+    /// model change cancels the pipeline but existing cards should be kept).
+    retained_cards: Vec<ValidatedCard>,
+    /// Model name to apply before the next pipeline run (deferred model change).
+    pending_model: Option<String>,
     /// True after a Fatal error — worker is dead, no new runs possible.
     is_fatal: bool,
     glyphs: Glyphs,
@@ -154,6 +159,8 @@ impl App {
             show_help: false,
             model_picker: None,
             last_term,
+            retained_cards: Vec::new(),
+            pending_model: None,
             is_fatal: false,
             glyphs,
             history: InputHistory::load(),
@@ -269,7 +276,12 @@ impl App {
                     *st = status;
                 }
             }
-            BackendEvent::RequestSelection(cards) => {
+            BackendEvent::RequestSelection(mut cards) => {
+                if !self.retained_cards.is_empty() {
+                    let mut merged = std::mem::take(&mut self.retained_cards);
+                    merged.extend(cards);
+                    cards = merged;
+                }
                 self.mode = AppMode::Selecting(SelectionState::new(cards));
             }
             BackendEvent::AppendCards(new_cards) => {
@@ -337,19 +349,18 @@ impl App {
                             .map(|s| s.model != model)
                             .unwrap_or(true);
                         if changed {
-                            // In Selecting mode: cancel current run, switch model,
-                            // and re-run with the same term.
                             if matches!(self.mode, AppMode::Selecting(_)) {
-                                self.worker_tx.send(WorkerCommand::Cancel).ok();
-                                self.pending_cancels += 1;
-                                self.reset_for_new_run();
-                                self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
-                                if let Some(term) = self.last_term.clone() {
-                                    self.mode = AppMode::Running;
-                                    self.worker_tx.send(WorkerCommand::Start(term)).ok();
-                                } else {
-                                    self.mode = AppMode::Input(LineInput::default());
+                                // In Selecting mode: defer the model change until
+                                // the user requests more cards. The pipeline stays
+                                // alive so Enter/Confirm still works normally.
+                                self.pending_model = Some(model.clone());
+                                if let Some(ref mut info) = self.session_info {
+                                    info.model.clone_from(&model);
                                 }
+                                self.toast = Some(Toast {
+                                    message: format!("Model: {model}"),
+                                    tick: self.tick,
+                                });
                             } else {
                                 self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
                             }
@@ -626,10 +637,21 @@ impl App {
                     if !term.is_empty() && !state.refresh_in_flight {
                         self.history.push(&term);
                         self.last_term = Some(term.clone());
-                        state.refresh_in_flight = true;
-                        self.worker_tx
-                            .send(WorkerCommand::RefreshWithTerm(term))
-                            .ok();
+                        if let Some(model) = self.pending_model.take() {
+                            // Deferred model change: cancel, switch, start fresh.
+                            self.retained_cards = state.cards.clone();
+                            self.worker_tx.send(WorkerCommand::Cancel).ok();
+                            self.pending_cancels += 1;
+                            self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
+                            self.reset_for_new_run();
+                            self.mode = AppMode::Running;
+                            self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                        } else {
+                            state.refresh_in_flight = true;
+                            self.worker_tx
+                                .send(WorkerCommand::RefreshWithTerm(term))
+                                .ok();
+                        }
                     }
                 }
                 KeyCode::Esc => {
@@ -651,8 +673,21 @@ impl App {
             KeyCode::Char('a') => state.select_all(),
             KeyCode::Char('n') => state.select_none(),
             KeyCode::Char('r') if !state.refresh_in_flight => {
-                state.refresh_in_flight = true;
-                self.worker_tx.send(WorkerCommand::Refresh).ok();
+                if let Some(model) = self.pending_model.take() {
+                    // Deferred model change: cancel current pipeline, switch
+                    // model, and start a fresh one. Existing cards are retained.
+                    self.retained_cards = state.cards.clone();
+                    self.worker_tx.send(WorkerCommand::Cancel).ok();
+                    self.pending_cancels += 1;
+                    self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
+                    self.reset_for_new_run();
+                    let term = self.last_term.clone().unwrap_or_default();
+                    self.mode = AppMode::Running;
+                    self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                } else {
+                    state.refresh_in_flight = true;
+                    self.worker_tx.send(WorkerCommand::Refresh).ok();
+                }
             }
             KeyCode::Char('t') if !state.refresh_in_flight => {
                 state.term_input = Some(LineInput::default());
@@ -661,6 +696,7 @@ impl App {
                 self.open_model_picker();
             }
             KeyCode::Esc => {
+                self.pending_model = None;
                 self.worker_tx.send(WorkerCommand::Cancel).ok();
                 self.pending_cancels += 1;
                 self.reset_for_new_run();
@@ -672,6 +708,7 @@ impl App {
                 self.user_quit = true;
             }
             KeyCode::Enter if !state.refresh_in_flight => {
+                self.pending_model = None;
                 let AppMode::Selecting(state) = std::mem::replace(&mut self.mode, AppMode::Running)
                 else {
                     return;
