@@ -768,8 +768,6 @@ anki-llm generate "新しい" -p prompt.md --log
 anki-llm generate "今日" -p japanese-vocab-prompt.md --copy
 ```
 
-<img src="meta/generate.webp" alt="Interactive card selection in terminal" width="450">
-
 ---
 
 ### `anki-llm query <action> [params]`
