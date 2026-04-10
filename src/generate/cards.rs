@@ -52,6 +52,16 @@ pub fn escape_anki_query(value: &str) -> String {
         .replace('_', "\\_")
 }
 
+/// Check if a note with this first field value already exists (public wrapper).
+pub fn check_duplicate_pub(
+    anki: &AnkiClient,
+    first_field_value: &str,
+    note_type: &str,
+    deck: &str,
+) -> Result<bool, anyhow::Error> {
+    Ok(check_duplicate(anki, first_field_value, note_type, deck)?.is_some())
+}
+
 /// Check if a note with this first field value already exists.
 /// Returns the note ID of the first match, or None if no duplicate found.
 fn check_duplicate(

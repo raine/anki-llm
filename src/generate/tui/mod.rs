@@ -290,6 +290,27 @@ impl App {
                     state.refresh_in_flight = false;
                 }
             }
+            BackendEvent::ReplaceCard { index, card } => {
+                if let AppMode::Selecting(ref mut state) = self.mode {
+                    if index < state.cards.len() {
+                        state.cards[index] = card;
+                    }
+                    state.regen_in_flight = None;
+                    self.toast = Some(Toast {
+                        message: "Card regenerated".into(),
+                        tick: self.tick,
+                    });
+                }
+            }
+            BackendEvent::RegenError(msg) => {
+                if let AppMode::Selecting(ref mut state) = self.mode {
+                    state.regen_in_flight = None;
+                }
+                self.toast = Some(Toast {
+                    message: msg,
+                    tick: self.tick,
+                });
+            }
             BackendEvent::RequestReview(flagged) => {
                 self.mode = AppMode::Reviewing(ReviewState::new(flagged));
             }
@@ -624,6 +645,36 @@ impl App {
             return;
         };
 
+        // When the inline feedback input is active (regen), route keys there
+        if state.feedback_input.is_some() {
+            match key.code {
+                KeyCode::Enter => {
+                    let feedback = state
+                        .feedback_input
+                        .as_ref()
+                        .map(|i| i.value().trim().to_string())
+                        .unwrap_or_default();
+                    let index = state.cursor;
+                    state.feedback_input = None;
+                    if !feedback.is_empty() && state.regen_in_flight.is_none() {
+                        state.regen_in_flight = Some(index);
+                        self.worker_tx
+                            .send(WorkerCommand::RegenerateCard { index, feedback })
+                            .ok();
+                    }
+                }
+                KeyCode::Esc => {
+                    state.feedback_input = None;
+                }
+                _ => {
+                    if let Some(ref mut input) = state.feedback_input {
+                        input.handle_event(&Event::Key(key));
+                    }
+                }
+            }
+            return;
+        }
+
         // When the inline term input is active, route keys there
         if state.term_input.is_some() {
             match key.code {
@@ -691,6 +742,17 @@ impl App {
             }
             KeyCode::Char('e') => {
                 self.pending_edit = Some(state.cursor);
+            }
+            KeyCode::Char('R') if state.regen_in_flight.is_none() => {
+                // Don't allow regenerating duplicates
+                let is_dup = state
+                    .cards
+                    .get(state.cursor)
+                    .map(|c| c.is_duplicate)
+                    .unwrap_or(true);
+                if !is_dup {
+                    state.feedback_input = Some(LineInput::default());
+                }
             }
             KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.open_model_picker();
@@ -981,7 +1043,7 @@ fn draw(frame: &mut Frame, app: &App) {
             app.model_picker.is_none(),
         ),
         AppMode::Running => draw_running(frame, app, main_area),
-        AppMode::Selecting(state) => draw_selecting(frame, state, &app.glyphs, main_area),
+        AppMode::Selecting(state) => draw_selecting(frame, state, &app.glyphs, app.tick, main_area),
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
         AppMode::Done { message, cards, .. } => {
             if let Some(step_idx) = app.browse_step {
@@ -1073,6 +1135,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("e", "Edit in $EDITOR"),
             ("r", "More"),
             ("t", "More (new term)"),
+            ("R", "Regenerate card"),
             ("Ctrl+O", "Model"),
             ("Enter", "Confirm"),
             ("Esc", "Back"),
@@ -1367,20 +1430,22 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.push(footer_pipe());
             s.extend(footer_cmd("e", "Edit"));
             s.push(footer_pipe());
-            if state.refresh_in_flight {
+            if state.refresh_in_flight || state.regen_in_flight.is_some() {
                 let spinner = SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()];
                 s.push(Span::styled(
                     format!("{spinner} Loading..."),
                     Style::default().fg(THEME.info),
                 ));
-            } else if state.term_input.is_some() {
-                s.extend(footer_cmd("Enter", "Generate"));
+            } else if state.term_input.is_some() || state.feedback_input.is_some() {
+                s.extend(footer_cmd("Enter", "Submit"));
                 s.push(footer_pipe());
                 s.extend(footer_cmd("Esc", "Cancel"));
             } else {
                 s.extend(footer_cmd("r", "More"));
                 s.push(footer_pipe());
                 s.extend(footer_cmd("t", "New term"));
+                s.push(footer_pipe());
+                s.extend(footer_cmd("R", "Regen"));
             }
             s.push(footer_pipe());
             s.extend(footer_cmd("Ctrl+O", "Model"));

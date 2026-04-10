@@ -5,13 +5,12 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::generate::cards::ValidatedCard;
 use crate::generate::line_input::LineInput;
 
-use super::super::theme::{Glyphs, THEME};
-use ratatui::widgets::Clear;
+use super::super::theme::{Glyphs, SPINNER_FRAMES, THEME};
 
 pub(in crate::generate::tui) struct SelectionState {
     pub(in crate::generate::tui) cards: Vec<ValidatedCard>,
@@ -23,6 +22,10 @@ pub(in crate::generate::tui) struct SelectionState {
     pub(in crate::generate::tui) refresh_in_flight: bool,
     /// When Some, an inline term input is active for generating cards with a different term.
     pub(in crate::generate::tui) term_input: Option<LineInput>,
+    /// When Some, an inline feedback input is active for regenerating the focused card.
+    pub(in crate::generate::tui) feedback_input: Option<LineInput>,
+    /// Card index currently being regenerated (in flight).
+    pub(in crate::generate::tui) regen_in_flight: Option<usize>,
 }
 
 impl SelectionState {
@@ -38,6 +41,8 @@ impl SelectionState {
             detail_scroll: 0,
             refresh_in_flight: false,
             term_input: None,
+            feedback_input: None,
+            regen_in_flight: None,
         }
     }
 
@@ -140,6 +145,7 @@ pub(in crate::generate::tui) fn draw_selecting(
     frame: &mut Frame,
     state: &SelectionState,
     glyphs: &Glyphs,
+    tick: u64,
     area: ratatui::layout::Rect,
 ) {
     // Check if cards come from multiple models (to decide whether to show model labels)
@@ -179,7 +185,14 @@ pub(in crate::generate::tui) fn draw_selecting(
                 .next()
                 .map(|v| crate::generate::selector::strip_html_tags(v))
                 .unwrap_or_default();
+            let is_regenerating = state.regen_in_flight == Some(i);
             let dup_note = if card.is_duplicate { " [dup]" } else { "" };
+            let regen_note = if is_regenerating {
+                let spinner = SPINNER_FRAMES[tick as usize % SPINNER_FRAMES.len()];
+                format!(" {spinner}")
+            } else {
+                String::new()
+            };
             let flag_note = if !card.flags.is_empty() {
                 " [flagged]"
             } else {
@@ -209,7 +222,7 @@ pub(in crate::generate::tui) fn draw_selecting(
             };
             let mut spans = vec![
                 Span::styled(checkbox, checkbox_style),
-                Span::styled(format!("{label}{dup_note}"), style),
+                Span::styled(format!("{label}{dup_note}{regen_note}"), style),
             ];
             if !flag_note.is_empty() {
                 spans.push(Span::styled(
@@ -312,6 +325,58 @@ pub(in crate::generate::tui) fn draw_selecting(
     if let Some(ref input) = state.term_input {
         draw_term_input_overlay(frame, input, area);
     }
+
+    // Feedback input overlay for card regeneration
+    if let Some(ref input) = state.feedback_input {
+        draw_feedback_overlay(frame, input, area);
+    }
+}
+
+fn draw_feedback_overlay(frame: &mut Frame, input: &LineInput, area: ratatui::layout::Rect) {
+    let max_width = 60u16.min(area.width.saturating_sub(4));
+    let h_pad = area.width.saturating_sub(max_width) / 2;
+
+    let h_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(h_pad),
+            Constraint::Length(max_width),
+            Constraint::Min(0),
+        ])
+        .split(area);
+
+    let col = h_chunks[1];
+    let input_height: u16 = 3;
+    let v_pad = col.height.saturating_sub(input_height) / 2;
+
+    let v_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(v_pad),
+            Constraint::Length(input_height),
+            Constraint::Min(0),
+        ])
+        .split(col);
+
+    let input_area = v_chunks[1];
+    let inner_width = input_area.width.saturating_sub(2).max(1) as usize;
+    let scroll = input.visual_scroll(inner_width);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Regenerate feedback ")
+        .border_style(Style::default().fg(THEME.info));
+
+    let para = Paragraph::new(input.value())
+        .block(block)
+        .scroll((0, scroll as u16));
+    frame.render_widget(Clear, input_area);
+    frame.render_widget(para, input_area);
+
+    frame.set_cursor_position((
+        input_area.x + 1 + (input.visual_cursor().saturating_sub(scroll)) as u16,
+        input_area.y + 1,
+    ));
 }
 
 fn draw_term_input_overlay(frame: &mut Frame, input: &LineInput, area: ratatui::layout::Rect) {

@@ -201,10 +201,21 @@ impl PipelineInteraction for TuiInteraction<'_> {
         self.tx.send(BackendEvent::AppendCards(cards)).ok();
     }
 
+    fn replace_card(&self, index: usize, card: ValidatedCard) {
+        self.tx.send(BackendEvent::ReplaceCard { index, card }).ok();
+    }
+
+    fn regen_error(&self, message: String) {
+        self.tx.send(BackendEvent::RegenError(message)).ok();
+    }
+
     fn wait_selection(&self) -> SelectionAction {
         match self.rx.recv() {
             Ok(WorkerCommand::Refresh) => SelectionAction::Refresh,
             Ok(WorkerCommand::RefreshWithTerm(term)) => SelectionAction::RefreshWithTerm(term),
+            Ok(WorkerCommand::RegenerateCard { index, feedback }) => {
+                SelectionAction::RegenerateCard { index, feedback }
+            }
             Ok(WorkerCommand::Selection(indices)) => SelectionAction::Selected(indices),
             Ok(WorkerCommand::Cancel) => SelectionAction::Cancel,
             Ok(WorkerCommand::Quit) | Err(_) => SelectionAction::Quit,
@@ -401,6 +412,14 @@ impl PipelineInteraction for LegacyInteraction {
 
     fn append_selection(&self, _cards: Vec<ValidatedCard>) {
         unreachable!("Legacy mode does not support refresh");
+    }
+
+    fn replace_card(&self, _index: usize, _card: ValidatedCard) {
+        unreachable!("Legacy mode does not support regeneration");
+    }
+
+    fn regen_error(&self, _message: String) {
+        unreachable!("Legacy mode does not support regeneration");
     }
 
     fn wait_selection(&self) -> SelectionAction {

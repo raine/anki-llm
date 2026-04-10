@@ -19,6 +19,11 @@ pub enum BackendEvent {
     },
     RequestSelection(Vec<ValidatedCard>),
     AppendCards(Vec<ValidatedCard>), // refresh: new unique cards to append
+    ReplaceCard {
+        index: usize,
+        card: ValidatedCard,
+    }, // single-card regeneration result
+    RegenError(String),              // single-card regeneration failed
     RequestReview(Vec<FlaggedCard>),
     CostUpdate {
         input_tokens: u64,
@@ -37,9 +42,10 @@ pub enum BackendEvent {
 }
 
 pub enum WorkerCommand {
-    Start(String),           // term to generate cards for
-    Refresh,                 // generate more cards for the same term
-    RefreshWithTerm(String), // generate more cards with a different term
+    Start(String),                                     // term to generate cards for
+    Refresh,                                           // generate more cards for the same term
+    RefreshWithTerm(String),                           // generate more cards with a different term
+    RegenerateCard { index: usize, feedback: String }, // regenerate a single card with feedback
     Selection(Vec<usize>),
     Review(Vec<bool>), // true = keep, false = discard
     SetModel(String),  // change model between runs

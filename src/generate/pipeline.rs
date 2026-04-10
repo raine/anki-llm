@@ -65,6 +65,7 @@ pub enum SelectionAction {
     Selected(Vec<usize>),
     Refresh,
     RefreshWithTerm(String),
+    RegenerateCard { index: usize, feedback: String },
     Cancel,
     Quit,
 }
@@ -77,6 +78,8 @@ pub enum ReviewResult {
 pub trait PipelineInteraction {
     fn begin_selection(&self, cards: Vec<ValidatedCard>);
     fn append_selection(&self, cards: Vec<ValidatedCard>);
+    fn replace_card(&self, index: usize, card: ValidatedCard);
+    fn regen_error(&self, message: String);
     fn wait_selection(&self) -> SelectionAction;
     fn request_review(&self, flagged: Vec<FlaggedCard>) -> ReviewResult;
 }
@@ -110,6 +113,175 @@ pub enum PipelineOutcome {
     },
     Cancelled,
     Quit,
+}
+
+// ---------------------------------------------------------------------------
+// Single-card regeneration
+// ---------------------------------------------------------------------------
+
+/// Regenerate a single card with user feedback. Returns the replacement card
+/// or an error message.
+fn regenerate_single_card(
+    config: &PipelineConfig,
+    card: &ValidatedCard,
+    feedback: &str,
+    progress: &dyn PipelineProgress,
+) -> Result<ValidatedCard> {
+    // Build a focused prompt with the original card + feedback
+    let card_json: serde_json::Map<String, serde_json::Value> = card
+        .fields
+        .iter()
+        .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+        .collect();
+    let card_json_str = serde_json::to_string_pretty(&card_json)?;
+
+    let field_keys: Vec<&str> = config.field_map_keys.iter().map(|s| s.as_str()).collect();
+    let prompt = format!(
+        "Here is a flashcard that was generated:\n\n\
+         ```json\n{card_json_str}\n```\n\n\
+         The user wants this card regenerated with the following feedback: {feedback}\n\n\
+         Return ONLY a single JSON object (not an array) with the same field keys: {}.\n\
+         Do not wrap in an array. Return only the JSON object, no other text.",
+        field_keys.join(", ")
+    );
+
+    let result = config.client.chat_completion(
+        config.model,
+        &prompt,
+        config.temperature,
+        config.max_tokens,
+    )?;
+
+    if let Some(logger) = Some(config.logger) {
+        logger.log(&prompt, &result.content);
+    }
+
+    if let Some(usage) = &result.usage {
+        let cost = crate::llm::pricing::calculate_cost(
+            config.model,
+            usage.prompt_tokens,
+            usage.completion_tokens,
+        );
+        progress.cost_update(usage.prompt_tokens, usage.completion_tokens, cost);
+    }
+
+    let content = result.content.trim();
+    // Try parsing as a single JSON object, or extract from an array/code block
+    let obj: serde_json::Map<String, serde_json::Value> =
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(content) {
+            val.as_object()
+                .cloned()
+                .or_else(|| {
+                    // If it's an array, take the first element
+                    val.as_array()
+                        .and_then(|arr| arr.first())
+                        .and_then(|v| v.as_object().cloned())
+                })
+                .ok_or_else(|| anyhow::anyhow!("Regenerated card is not a JSON object"))?
+        } else {
+            // Try extracting JSON from markdown code blocks
+            crate::llm::parse_json::try_parse_json_array(content)
+                .and_then(|arr| arr.into_iter().next())
+                .ok_or_else(|| anyhow::anyhow!("Failed to parse regenerated card"))?
+        };
+
+    // Build CardCandidate fields
+    let mut fields = std::collections::HashMap::new();
+    for key in config.field_map_keys {
+        let value = obj
+            .get(key)
+            .ok_or_else(|| anyhow::anyhow!("Regenerated card is missing field \"{key}\""))?;
+        let coerced = match value {
+            serde_json::Value::String(s) => serde_json::Value::String(s.clone()),
+            serde_json::Value::Array(arr) => {
+                let strings: Vec<String> = arr
+                    .iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect();
+                serde_json::Value::Array(
+                    strings.into_iter().map(serde_json::Value::String).collect(),
+                )
+            }
+            serde_json::Value::Number(n) => serde_json::Value::String(n.to_string()),
+            serde_json::Value::Bool(b) => serde_json::Value::String(b.to_string()),
+            serde_json::Value::Null => serde_json::Value::String(String::new()),
+            _ => anyhow::bail!("Unexpected field type for \"{key}\""),
+        };
+        fields.insert(key.clone(), coerced);
+    }
+
+    // Sanitize and map
+    let sanitized = sanitize_fields(&fields);
+    let anki_fields = map_fields_to_anki(&sanitized, &config.frontmatter.field_map)?;
+
+    let raw_strings: std::collections::HashMap<String, String> = fields
+        .iter()
+        .map(|(k, v)| {
+            let s = match v {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            (k.clone(), s)
+        })
+        .collect();
+    let raw_anki_fields = map_fields_to_anki(&raw_strings, &config.frontmatter.field_map)?;
+
+    // Check duplicate
+    let first_field_name = &config.validation.note_type_fields[0];
+    let is_duplicate = anki_fields
+        .get(first_field_name)
+        .filter(|v| !v.is_empty())
+        .map(|v| {
+            super::cards::check_duplicate_pub(
+                config.anki,
+                v,
+                &config.frontmatter.note_type,
+                &config.frontmatter.deck,
+            )
+        })
+        .unwrap_or(Ok(false))?;
+
+    Ok(ValidatedCard {
+        fields: sanitized,
+        anki_fields,
+        raw_anki_fields,
+        is_duplicate,
+        duplicate_note_id: None,
+        duplicate_fields: None,
+        flags: Vec::new(),
+    })
+}
+
+/// Wait for a selection action, handling inline card regeneration requests.
+/// Returns only terminal actions (Refresh, RefreshWithTerm, Selected, Cancel, Quit).
+fn wait_selection_with_regen(
+    config: &PipelineConfig,
+    interaction: &dyn PipelineInteraction,
+    progress: &dyn PipelineProgress,
+    all_validated: &mut [ValidatedCard],
+) -> SelectionAction {
+    loop {
+        match interaction.wait_selection() {
+            SelectionAction::RegenerateCard { index, feedback } => {
+                progress.log(&format!(
+                    "Regenerating card {index} with feedback: \"{feedback}\""
+                ));
+                match regenerate_single_card(config, &all_validated[index], &feedback, progress) {
+                    Ok(new_card) => {
+                        all_validated[index] = new_card.clone();
+                        interaction.replace_card(index, new_card);
+                        progress.log("Card regenerated successfully");
+                    }
+                    Err(e) => {
+                        interaction.regen_error(format!("Regeneration failed: {e}"));
+                        progress.log(&format!("Regeneration failed: {e}"));
+                    }
+                }
+                continue;
+            }
+            other => return other,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +357,12 @@ pub fn run_pipeline_for_term(
                     interaction.append_selection(Vec::new());
                     progress.step_error(PipelineStep::Generate, &format!("{e}"));
 
-                    match interaction.wait_selection() {
+                    match wait_selection_with_regen(
+                        config,
+                        interaction,
+                        progress,
+                        &mut all_validated,
+                    ) {
                         SelectionAction::Refresh => continue,
                         SelectionAction::RefreshWithTerm(t) => {
                             current_term = t;
@@ -194,6 +371,7 @@ pub fn run_pipeline_for_term(
                         SelectionAction::Selected(indices) => break indices,
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
+                        SelectionAction::RegenerateCard { .. } => unreachable!(),
                     }
                 } else {
                     progress.step_error(PipelineStep::Generate, &format!("{e}"));
@@ -300,7 +478,12 @@ pub fn run_pipeline_for_term(
                     interaction.append_selection(Vec::new());
                     progress.step_error(PipelineStep::Validate, &format!("{e}"));
 
-                    match interaction.wait_selection() {
+                    match wait_selection_with_regen(
+                        config,
+                        interaction,
+                        progress,
+                        &mut all_validated,
+                    ) {
                         SelectionAction::Refresh => continue,
                         SelectionAction::RefreshWithTerm(t) => {
                             current_term = t;
@@ -309,6 +492,7 @@ pub fn run_pipeline_for_term(
                         SelectionAction::Selected(indices) => break indices,
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
+                        SelectionAction::RegenerateCard { .. } => unreachable!(),
                     }
                 } else {
                     progress.step_error(PipelineStep::Validate, &format!("{e}"));
@@ -397,7 +581,7 @@ pub fn run_pipeline_for_term(
         }
 
         // Wait for user action
-        match interaction.wait_selection() {
+        match wait_selection_with_regen(config, interaction, progress, &mut all_validated) {
             SelectionAction::Refresh => {
                 is_refresh = true;
                 continue;
@@ -410,6 +594,7 @@ pub fn run_pipeline_for_term(
             SelectionAction::Selected(indices) => break indices,
             SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
             SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
+            SelectionAction::RegenerateCard { .. } => unreachable!(),
         }
     };
 
