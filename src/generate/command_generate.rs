@@ -263,6 +263,7 @@ pub fn run_pipeline(
         note_type: session.frontmatter.note_type.clone(),
         model: session.runtime.model.clone(),
         available_models: models.clone(),
+        field_map: session.frontmatter.field_map.clone(),
     }))
     .ok();
 
@@ -354,6 +355,7 @@ pub fn run_pipeline(
                             note_type: session.frontmatter.note_type.clone(),
                             model: session.runtime.model.clone(),
                             available_models: models.clone(),
+                            field_map: session.frontmatter.field_map.clone(),
                         }))
                         .ok();
                     }

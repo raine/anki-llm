@@ -7,6 +7,7 @@ pub struct SessionInfo {
     pub note_type: String,
     pub model: String,
     pub available_models: Vec<String>,
+    pub field_map: indexmap::IndexMap<String, String>,
 }
 
 pub enum BackendEvent {

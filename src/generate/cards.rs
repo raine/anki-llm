@@ -40,7 +40,7 @@ pub fn map_fields_to_anki(
 }
 
 /// Escape special characters for Anki search queries.
-fn escape_anki_query(value: &str) -> String {
+pub fn escape_anki_query(value: &str) -> String {
     value
         .replace('\\', "\\\\")
         .replace('"', "\\\"")

@@ -105,6 +105,8 @@ struct App {
     /// In Done/Error mode: selected step index for log browsing, None = summary.
     browse_step: Option<usize>,
     browse_scroll: u16,
+    /// When Some, the main loop should suspend the TUI and open $EDITOR for this card index.
+    pending_edit: Option<usize>,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
 }
@@ -163,6 +165,7 @@ impl App {
             toast: None,
             browse_step: None,
             browse_scroll: 0,
+            pending_edit: None,
             backend_rx,
             worker_tx,
         }
@@ -686,6 +689,9 @@ impl App {
             KeyCode::Char('t') if !state.refresh_in_flight => {
                 state.term_input = Some(LineInput::default());
             }
+            KeyCode::Char('e') => {
+                self.pending_edit = Some(state.cursor);
+            }
             KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.open_model_picker();
             }
@@ -779,6 +785,167 @@ impl App {
             let decisions = state.decisions.clone();
             self.worker_tx.send(WorkerCommand::Review(decisions)).ok();
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// External editor
+// ---------------------------------------------------------------------------
+
+/// Suspend the TUI, open the focused card in $EDITOR, and apply edits.
+fn edit_card_in_editor(terminal: &mut DefaultTerminal, app: &mut App, card_index: usize) {
+    let AppMode::Selecting(ref state) = app.mode else {
+        return;
+    };
+    let Some(card) = state.cards.get(card_index) else {
+        return;
+    };
+    let Some(ref info) = app.session_info else {
+        return;
+    };
+
+    // Build ordered YAML from raw_anki_fields (Anki field names → raw markdown).
+    // We use a Vec of (key, value) to preserve field order via serde_yaml.
+    let fields_for_edit: indexmap::IndexMap<String, String> = card.raw_anki_fields.clone();
+    let yaml = match serde_yaml::to_string(&fields_for_edit) {
+        Ok(y) => y,
+        Err(e) => {
+            app.toast = Some(Toast {
+                message: format!("Failed to serialize: {e}"),
+                tick: app.tick,
+            });
+            return;
+        }
+    };
+
+    // Write to temp file
+    let tmp_dir = std::env::temp_dir();
+    let tmp_path = tmp_dir.join("anki-llm-edit.yaml");
+    if std::fs::write(&tmp_path, &yaml).is_err() {
+        app.toast = Some(Toast {
+            message: "Failed to write temp file".into(),
+            tick: app.tick,
+        });
+        return;
+    }
+
+    // Determine editor
+    let editor = std::env::var("EDITOR")
+        .or_else(|_| std::env::var("VISUAL"))
+        .unwrap_or_else(|_| "vi".to_string());
+
+    // Suspend TUI
+    crossterm::execute!(std::io::stdout(), crossterm::event::DisableBracketedPaste).ok();
+    ratatui::restore();
+
+    // Spawn editor
+    let status = std::process::Command::new(&editor).arg(&tmp_path).status();
+
+    // Resume TUI
+    *terminal = ratatui::init();
+    crossterm::execute!(std::io::stdout(), crossterm::event::EnableBracketedPaste).ok();
+
+    let ok = match status {
+        Ok(s) if s.success() => true,
+        Ok(_) => {
+            app.toast = Some(Toast {
+                message: "Editor exited with error".into(),
+                tick: app.tick,
+            });
+            false
+        }
+        Err(e) => {
+            app.toast = Some(Toast {
+                message: format!("Failed to launch {editor}: {e}"),
+                tick: app.tick,
+            });
+            false
+        }
+    };
+
+    if !ok {
+        let _ = std::fs::remove_file(&tmp_path);
+        return;
+    }
+
+    // Read edited content
+    let edited_yaml = match std::fs::read_to_string(&tmp_path) {
+        Ok(s) => s,
+        Err(e) => {
+            app.toast = Some(Toast {
+                message: format!("Failed to read edited file: {e}"),
+                tick: app.tick,
+            });
+            return;
+        }
+    };
+    let _ = std::fs::remove_file(&tmp_path);
+
+    // Parse edited YAML (Anki field names → raw markdown)
+    let edited_anki_fields: indexmap::IndexMap<String, String> =
+        match serde_yaml::from_str(&edited_yaml) {
+            Ok(m) => m,
+            Err(e) => {
+                app.toast = Some(Toast {
+                    message: format!("YAML parse error: {e}"),
+                    tick: app.tick,
+                });
+                return;
+            }
+        };
+
+    // Build reverse map: Anki name → LLM key
+    let reverse_map: std::collections::HashMap<&str, &str> = info
+        .field_map
+        .iter()
+        .map(|(llm_key, anki_name)| (anki_name.as_str(), llm_key.as_str()))
+        .collect();
+
+    // Rebuild fields (LLM keys → sanitized HTML) and raw_anki_fields
+    let mut new_fields: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    let mut new_raw_anki_fields: indexmap::IndexMap<String, String> = indexmap::IndexMap::new();
+    let mut new_anki_fields: indexmap::IndexMap<String, String> = indexmap::IndexMap::new();
+
+    for (anki_name, raw_value) in &edited_anki_fields {
+        new_raw_anki_fields.insert(anki_name.clone(), raw_value.clone());
+        let sanitized = super::sanitize::sanitize_html(raw_value);
+        new_anki_fields.insert(anki_name.clone(), sanitized.clone());
+        if let Some(&llm_key) = reverse_map.get(anki_name.as_str()) {
+            new_fields.insert(llm_key.to_string(), sanitized);
+        }
+    }
+
+    // Re-check duplicate status
+    let first_field_value = new_anki_fields.values().next().cloned().unwrap_or_default();
+    let is_duplicate = if !first_field_value.is_empty() {
+        let anki = AnkiClient::new();
+        anki.find_notes(&format!(
+            "\"note:{}\" \"deck:{}\" \"{}\"",
+            info.note_type,
+            info.deck,
+            super::cards::escape_anki_query(&first_field_value),
+        ))
+        .map(|ids| !ids.is_empty())
+        .unwrap_or(false)
+    } else {
+        false
+    };
+
+    // Apply edits to the card
+    let AppMode::Selecting(ref mut state) = app.mode else {
+        return;
+    };
+    if let Some(card) = state.cards.get_mut(card_index) {
+        card.fields = new_fields;
+        card.anki_fields = new_anki_fields;
+        card.raw_anki_fields = new_raw_anki_fields;
+        card.is_duplicate = is_duplicate;
+        card.flags.clear(); // clear stale flags after manual edit
+        app.toast = Some(Toast {
+            message: "Card updated".into(),
+            tick: app.tick,
+        });
     }
 }
 
@@ -899,6 +1066,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("n", "None"),
             ("c", "Copy"),
             ("d", "Remove"),
+            ("e", "Edit in $EDITOR"),
             ("r", "More"),
             ("t", "More (new term)"),
             ("Ctrl+O", "Model"),
@@ -1183,6 +1351,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("c", "Copy"));
             s.push(footer_pipe());
             s.extend(footer_cmd("d", "Remove"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("e", "Edit"));
             s.push(footer_pipe());
             if state.refresh_in_flight {
                 let spinner = SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()];
@@ -1489,6 +1659,11 @@ fn run_app(
                 Event::Paste(text) => app.handle_paste_input(text),
                 _ => {}
             }
+        }
+
+        // Handle pending editor launch (needs terminal access)
+        if let Some(card_index) = app.pending_edit.take() {
+            edit_card_in_editor(&mut terminal, &mut app, card_index);
         }
 
         if app.should_quit {
