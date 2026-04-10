@@ -766,6 +766,9 @@ anki-llm generate "新しい" -p prompt.md --log
 
 # Use manual copy-paste mode (no API key required)
 anki-llm generate "今日" -p japanese-vocab-prompt.md --copy
+
+# Launch TUI mode (interactive full-screen terminal UI)
+anki-llm generate
 ```
 
 ---
