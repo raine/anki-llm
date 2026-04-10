@@ -9,9 +9,11 @@
   A CLI toolkit for bulk-processing and generating Anki flashcards with LLMs.
 </p>
 
-[Install](#installation) · [Features](#features) ·
-[Commands](#commands-reference) · [Configuration](#configuration) ·
-[Changelog](CHANGELOG.md)
+<p align="center">
+  <a href="#installation">Install</a> · <a href="#features">Features</a> ·
+  <a href="#commands-reference">Commands</a> · <a href="#configuration">Configuration</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 ---
 
