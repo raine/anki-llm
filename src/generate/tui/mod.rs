@@ -374,8 +374,15 @@ impl App {
             return;
         }
 
-        // Toggle help overlay from any mode
-        if key.code == KeyCode::Char('?') && !matches!(self.mode, AppMode::Input(_)) {
+        // Toggle help overlay from any mode (but not when typing in an inline input)
+        let has_term_input = matches!(
+            self.mode,
+            AppMode::Selecting(ref s) if s.term_input.is_some()
+        );
+        if key.code == KeyCode::Char('?')
+            && !matches!(self.mode, AppMode::Input(_))
+            && !has_term_input
+        {
             self.show_help = true;
             return;
         }
@@ -586,11 +593,18 @@ impl App {
     }
 
     fn handle_paste_input(&mut self, text: String) {
-        let AppMode::Input(ref mut input) = self.mode else {
-            return;
-        };
-        if input.handle_event(&Event::Paste(text)) {
-            self.history.reset_browse();
+        match self.mode {
+            AppMode::Input(ref mut input) => {
+                if input.handle_event(&Event::Paste(text)) {
+                    self.history.reset_browse();
+                }
+            }
+            AppMode::Selecting(ref mut state) => {
+                if let Some(ref mut input) = state.term_input {
+                    input.handle_event(&Event::Paste(text));
+                }
+            }
+            _ => {}
         }
     }
 
