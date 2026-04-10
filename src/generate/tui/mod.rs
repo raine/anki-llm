@@ -107,6 +107,10 @@ struct App {
     browse_scroll: u16,
     /// When Some, the main loop should suspend the TUI and open $EDITOR for this card index.
     pending_edit: Option<usize>,
+    /// Remaining terms to process in a batch (front = next term).
+    batch_queue: Vec<String>,
+    /// Batch progress: (current 1-based index, total count). None when not in batch.
+    batch_progress: Option<(usize, usize)>,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
 }
@@ -166,6 +170,8 @@ impl App {
             browse_step: None,
             browse_scroll: 0,
             pending_edit: None,
+            batch_queue: Vec::new(),
+            batch_progress: None,
             backend_rx,
             worker_tx,
         }
@@ -281,13 +287,43 @@ impl App {
                     state.cards.extend(cards);
                     state.refresh_in_flight = false;
                 } else {
-                    self.mode = AppMode::Selecting(SelectionState::new(cards));
+                    let mut state = SelectionState::new(cards);
+                    // If batch has more terms, auto-advance
+                    if let Some(next_term) = self.batch_queue.first().cloned() {
+                        self.batch_queue.remove(0);
+                        if let Some((ref mut current, _)) = self.batch_progress {
+                            *current += 1;
+                        }
+                        self.last_term = Some(next_term.clone());
+                        state.refresh_in_flight = true;
+                        self.worker_tx
+                            .send(WorkerCommand::RefreshWithTerm(next_term))
+                            .ok();
+                    }
+                    self.mode = AppMode::Selecting(state);
                 }
             }
             BackendEvent::AppendCards(new_cards) => {
                 if let AppMode::Selecting(ref mut state) = self.mode {
                     state.cards.extend(new_cards);
-                    state.refresh_in_flight = false;
+                    // If batch has more terms, auto-advance to next
+                    if let Some(next_term) = self.batch_queue.first().cloned() {
+                        self.batch_queue.remove(0);
+                        if let Some((ref mut current, _)) = self.batch_progress {
+                            *current += 1;
+                        }
+                        self.last_term = Some(next_term.clone());
+                        state.refresh_in_flight = true;
+                        self.worker_tx
+                            .send(WorkerCommand::RefreshWithTerm(next_term))
+                            .ok();
+                    } else {
+                        state.refresh_in_flight = false;
+                        // Batch complete, clear progress
+                        if self.batch_progress.is_some() {
+                            self.batch_progress = None;
+                        }
+                    }
                 }
             }
             BackendEvent::ReplaceCard { index, card } => {
@@ -336,7 +372,28 @@ impl App {
                 self.current_step_idx = None;
             }
             BackendEvent::RunError(msg) => {
-                self.mode = AppMode::Error(msg);
+                // During batch: log the error and try to continue with next term
+                if !self.batch_queue.is_empty() {
+                    let failed_term = self.last_term.as_deref().unwrap_or("?");
+                    self.toast = Some(Toast {
+                        message: format!("Failed: {failed_term}"),
+                        tick: self.tick,
+                    });
+                    self.logs
+                        .push(format!("Error for term \"{failed_term}\": {msg}"));
+
+                    let next_term = self.batch_queue.remove(0);
+                    if let Some((ref mut current, _)) = self.batch_progress {
+                        *current += 1;
+                    }
+                    self.last_term = Some(next_term.clone());
+                    self.reset_for_new_run();
+                    self.mode = AppMode::Running;
+                    self.worker_tx.send(WorkerCommand::Start(next_term)).ok();
+                } else {
+                    self.batch_progress = None;
+                    self.mode = AppMode::Error(msg);
+                }
             }
             BackendEvent::ModelChangeError(msg) => {
                 self.logs.push(format!("Model change failed: {msg}"));
@@ -423,10 +480,9 @@ impl App {
             AppMode::Input(_) => self.handle_key_input(key),
             AppMode::Running => match key.code {
                 KeyCode::Esc => {
-                    // Cancel current run and go back to term input.
-                    // Send Cancel so if the worker reaches a recv() (e.g.
-                    // RequestSelection) it unblocks. Events from the
-                    // abandoned run are discarded until RunDone/RunError.
+                    // Cancel current run (and entire batch) and go back to term input.
+                    self.batch_queue.clear();
+                    self.batch_progress = None;
                     self.worker_tx.send(WorkerCommand::Cancel).ok();
                     self.pending_cancels += 1;
                     self.reset_for_new_run();
@@ -584,8 +640,9 @@ impl App {
                 self.user_quit = true;
             }
             KeyCode::Esc => {
-                if !input.value().is_empty() {
+                if !input.value().is_empty() || !self.batch_queue.is_empty() {
                     input.reset();
+                    self.batch_queue.clear();
                     self.history.reset_browse();
                 }
             }
@@ -612,6 +669,19 @@ impl App {
                     self.history.push(&term);
                     self.history.reset_browse();
                     self.last_term = Some(term.clone());
+
+                    // Set up batch progress if we have queued terms
+                    if !self.batch_queue.is_empty() {
+                        let total = 1 + self.batch_queue.len();
+                        self.batch_progress = Some((1, total));
+                        // Push all batch terms to history
+                        for t in &self.batch_queue {
+                            self.history.push(t);
+                        }
+                    } else {
+                        self.batch_progress = None;
+                    }
+
                     self.mode = AppMode::Running;
                     self.worker_tx.send(WorkerCommand::Start(term)).ok();
                 }
@@ -627,6 +697,36 @@ impl App {
     fn handle_paste_input(&mut self, text: String) {
         match self.mode {
             AppMode::Input(ref mut input) => {
+                // Detect multi-line paste: split into batch terms
+                if text.contains('\n') || text.contains('\r') {
+                    let terms: Vec<String> = text
+                        .lines()
+                        .map(|l| l.trim().to_string())
+                        .filter(|l| !l.is_empty())
+                        .collect();
+
+                    if terms.len() > 1 {
+                        // Deduplicate preserving order
+                        let mut seen = std::collections::HashSet::new();
+                        let terms: Vec<String> = terms
+                            .into_iter()
+                            .filter(|t| seen.insert(t.clone()))
+                            .collect();
+
+                        // Put first term in the input, rest in batch_queue
+                        *input = LineInput::new(terms[0].clone());
+                        self.batch_queue = terms[1..].to_vec();
+                        self.history.reset_browse();
+                        return;
+                    } else if terms.len() == 1 {
+                        // Single non-empty line after trimming
+                        *input = LineInput::new(terms[0].clone());
+                        self.batch_queue.clear();
+                        self.history.reset_browse();
+                        return;
+                    }
+                }
+
                 if input.handle_event(&Event::Paste(text)) {
                     self.history.reset_browse();
                 }
@@ -759,6 +859,8 @@ impl App {
             }
             KeyCode::Esc => {
                 self.pending_model = None;
+                self.batch_queue.clear();
+                self.batch_progress = None;
                 self.worker_tx.send(WorkerCommand::Cancel).ok();
                 self.pending_cancels += 1;
                 self.reset_for_new_run();
@@ -1039,6 +1141,7 @@ fn draw(frame: &mut Frame, app: &App) {
             frame,
             input,
             app.history.browse_position(),
+            app.batch_queue.len(),
             main_area,
             app.model_picker.is_none(),
         ),
@@ -1360,8 +1463,14 @@ fn draw_sidebar(frame: &mut Frame, app: &App, area: Rect) {
         if let Some(term) = &app.last_term
             && has_term
         {
+            let label = if let Some((current, total)) = app.batch_progress {
+                format!("{current}/{total} ")
+            } else {
+                String::new()
+            };
             lines.push(Line::from(vec![
                 Span::styled("Term  ", Style::default().fg(THEME.dimmed)),
+                Span::styled(label, Style::default().fg(THEME.info)),
                 Span::styled(
                     term.clone(),
                     Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
@@ -1432,10 +1541,12 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.push(footer_pipe());
             if state.refresh_in_flight || state.regen_in_flight.is_some() {
                 let spinner = SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()];
-                s.push(Span::styled(
-                    format!("{spinner} Loading..."),
-                    Style::default().fg(THEME.info),
-                ));
+                let loading_text = if let Some((current, total)) = app.batch_progress {
+                    format!("{spinner} Batch {current}/{total}...")
+                } else {
+                    format!("{spinner} Loading...")
+                };
+                s.push(Span::styled(loading_text, Style::default().fg(THEME.info)));
             } else if state.term_input.is_some() || state.feedback_input.is_some() {
                 s.extend(footer_cmd("Enter", "Submit"));
                 s.push(footer_pipe());
@@ -1537,6 +1648,7 @@ fn draw_input(
     frame: &mut Frame,
     input: &LineInput,
     history_pos: Option<(usize, usize)>,
+    batch_queued: usize,
     area: Rect,
     show_cursor: bool,
 ) {
@@ -1554,7 +1666,8 @@ fn draw_input(
         .split(area);
 
     let col = h_chunks[1];
-    let input_height: u16 = 3;
+    // Extra line below input for batch indicator
+    let input_height: u16 = if batch_queued > 0 { 4 } else { 3 };
     let v_pad = col.height.saturating_sub(input_height) / 2;
 
     let v_chunks = Layout::default()
@@ -1566,13 +1679,22 @@ fn draw_input(
         ])
         .split(col);
 
-    let input_area = v_chunks[1];
-    let inner_width = input_area.width.saturating_sub(2).max(1) as usize;
+    let input_block_area = Rect {
+        height: 3,
+        ..v_chunks[1]
+    };
+    let inner_width = input_block_area.width.saturating_sub(2).max(1) as usize;
     let scroll = input.visual_scroll(inner_width);
+
+    let title = if batch_queued > 0 {
+        format!(" Enter term (1 of {}) ", 1 + batch_queued)
+    } else {
+        " Enter term ".to_string()
+    };
 
     let mut block = Block::default()
         .borders(Borders::ALL)
-        .title(" Enter term ")
+        .title(title)
         .border_style(Style::default().fg(THEME.info));
 
     if let Some((pos, total)) = history_pos {
@@ -1585,12 +1707,30 @@ fn draw_input(
     let para = Paragraph::new(input.value())
         .block(block)
         .scroll((0, scroll as u16));
-    frame.render_widget(para, input_area);
+    frame.render_widget(para, input_block_area);
+
+    // Batch indicator below the input box
+    if batch_queued > 0 {
+        let hint_area = Rect {
+            x: input_block_area.x,
+            y: input_block_area.y + 3,
+            width: input_block_area.width,
+            height: 1,
+        };
+        let hint = Paragraph::new(Line::from(vec![Span::styled(
+            format!(
+                " +{batch_queued} more term{}",
+                if batch_queued == 1 { "" } else { "s" }
+            ),
+            Style::default().fg(THEME.dimmed),
+        )]));
+        frame.render_widget(hint, hint_area);
+    }
 
     if show_cursor {
         frame.set_cursor_position((
-            input_area.x + 1 + (input.visual_cursor().saturating_sub(scroll)) as u16,
-            input_area.y + 1,
+            input_block_area.x + 1 + (input.visual_cursor().saturating_sub(scroll)) as u16,
+            input_block_area.y + 1,
         ));
     }
 }

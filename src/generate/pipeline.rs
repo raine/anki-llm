@@ -249,6 +249,7 @@ fn regenerate_single_card(
         duplicate_note_id: None,
         duplicate_fields: None,
         flags: Vec::new(),
+        model: String::new(),
     })
 }
 
