@@ -542,6 +542,8 @@ in a single session.
 
 #### Interactive TUI
 
+<img src="meta/generate-tui.webp" alt="Generate TUI screenshot" width="700">
+
 The generate command runs in a full-screen terminal UI with a sidebar showing
 pipeline progress and session info (deck, note type, model, cost) alongside the
 main content area. Press `?` at any time to see available keyboard shortcuts for
