@@ -111,6 +111,8 @@ struct App {
     batch_queue: Vec<String>,
     /// Batch progress: (current 1-based index, total count). None when not in batch.
     batch_progress: Option<(usize, usize)>,
+    /// Accumulated cards during batch processing (before entering selection).
+    batch_cards: Vec<ValidatedCard>,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
 }
@@ -172,6 +174,7 @@ impl App {
             pending_edit: None,
             batch_queue: Vec::new(),
             batch_progress: None,
+            batch_cards: Vec::new(),
             backend_rx,
             worker_tx,
         }
@@ -286,44 +289,52 @@ impl App {
                     // Already selecting (model-change refresh): append new cards
                     state.cards.extend(cards);
                     state.refresh_in_flight = false;
-                } else {
-                    let mut state = SelectionState::new(cards);
-                    // If batch has more terms, auto-advance
-                    if let Some(next_term) = self.batch_queue.first().cloned() {
-                        self.batch_queue.remove(0);
-                        if let Some((ref mut current, _)) = self.batch_progress {
-                            *current += 1;
-                        }
-                        self.last_term = Some(next_term.clone());
-                        state.refresh_in_flight = true;
-                        self.worker_tx
-                            .send(WorkerCommand::RefreshWithTerm(next_term))
-                            .ok();
+                } else if self.batch_queue.is_empty() && self.batch_cards.is_empty() {
+                    // Single term or last batch term (first result): go to selection
+                    self.batch_progress = None;
+                    self.mode = AppMode::Selecting(SelectionState::new(cards));
+                } else if !self.batch_queue.is_empty() {
+                    // Batch: accumulate cards, stay in Running, advance to next term
+                    self.batch_cards.extend(cards);
+                    let next_term = self.batch_queue.remove(0);
+                    if let Some((ref mut current, _)) = self.batch_progress {
+                        *current += 1;
                     }
-                    self.mode = AppMode::Selecting(state);
+                    self.last_term = Some(next_term.clone());
+                    self.worker_tx
+                        .send(WorkerCommand::RefreshWithTerm(next_term))
+                        .ok();
+                } else {
+                    // batch_queue empty but batch_cards non-empty: handle gracefully
+                    let mut all_cards = std::mem::take(&mut self.batch_cards);
+                    all_cards.extend(cards);
+                    self.batch_progress = None;
+                    self.mode = AppMode::Selecting(SelectionState::new(all_cards));
                 }
             }
             BackendEvent::AppendCards(new_cards) => {
-                if let AppMode::Selecting(ref mut state) = self.mode {
-                    state.cards.extend(new_cards);
-                    // If batch has more terms, auto-advance to next
+                if !self.batch_cards.is_empty() || !self.batch_queue.is_empty() {
+                    // Still in batch processing (Running mode): accumulate
+                    self.batch_cards.extend(new_cards);
                     if let Some(next_term) = self.batch_queue.first().cloned() {
                         self.batch_queue.remove(0);
                         if let Some((ref mut current, _)) = self.batch_progress {
                             *current += 1;
                         }
                         self.last_term = Some(next_term.clone());
-                        state.refresh_in_flight = true;
                         self.worker_tx
                             .send(WorkerCommand::RefreshWithTerm(next_term))
                             .ok();
                     } else {
-                        state.refresh_in_flight = false;
-                        // Batch complete, clear progress
-                        if self.batch_progress.is_some() {
-                            self.batch_progress = None;
-                        }
+                        // Last batch term done: enter selection with all cards
+                        let all_cards = std::mem::take(&mut self.batch_cards);
+                        self.batch_progress = None;
+                        self.mode = AppMode::Selecting(SelectionState::new(all_cards));
                     }
+                } else if let AppMode::Selecting(ref mut state) = self.mode {
+                    // Non-batch refresh (manual 'r' or 't'): append as before
+                    state.cards.extend(new_cards);
+                    state.refresh_in_flight = false;
                 }
             }
             BackendEvent::ReplaceCard { index, card } => {
@@ -387,12 +398,23 @@ impl App {
                         *current += 1;
                     }
                     self.last_term = Some(next_term.clone());
-                    self.reset_for_new_run();
+                    // Reset step indicators but keep logs for batch continuity
+                    for record in &mut self.steps {
+                        record.status = StepStatus::Pending;
+                        record.logs.clear();
+                    }
+                    self.current_step_idx = None;
                     self.mode = AppMode::Running;
                     self.worker_tx.send(WorkerCommand::Start(next_term)).ok();
                 } else {
                     self.batch_progress = None;
-                    self.mode = AppMode::Error(msg);
+                    // If we accumulated cards before this error, show selection
+                    if !self.batch_cards.is_empty() {
+                        let all_cards = std::mem::take(&mut self.batch_cards);
+                        self.mode = AppMode::Selecting(SelectionState::new(all_cards));
+                    } else {
+                        self.mode = AppMode::Error(msg);
+                    }
                 }
             }
             BackendEvent::ModelChangeError(msg) => {
@@ -483,6 +505,7 @@ impl App {
                     // Cancel current run (and entire batch) and go back to term input.
                     self.batch_queue.clear();
                     self.batch_progress = None;
+                    self.batch_cards.clear();
                     self.worker_tx.send(WorkerCommand::Cancel).ok();
                     self.pending_cancels += 1;
                     self.reset_for_new_run();
@@ -861,6 +884,7 @@ impl App {
                 self.pending_model = None;
                 self.batch_queue.clear();
                 self.batch_progress = None;
+                self.batch_cards.clear();
                 self.worker_tx.send(WorkerCommand::Cancel).ok();
                 self.pending_cancels += 1;
                 self.reset_for_new_run();
