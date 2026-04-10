@@ -665,6 +665,9 @@ impl App {
                 let indices: Vec<usize> = state.selected.into_iter().collect();
                 self.worker_tx.send(WorkerCommand::Selection(indices)).ok();
             }
+            KeyCode::Char('d') => {
+                state.remove_current();
+            }
             KeyCode::Char('c') => {
                 if let Some(card) = state.cards.get(state.cursor).cloned() {
                     self.copy_cards(&[card]);
@@ -850,6 +853,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("a", "All"),
             ("n", "None"),
             ("c", "Copy"),
+            ("d", "Remove"),
             ("r", "More"),
             ("t", "More (new term)"),
             ("Ctrl+O", "Model"),
@@ -1132,6 +1136,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.extend(footer_cmd("n", "None"));
             s.push(footer_pipe());
             s.extend(footer_cmd("c", "Copy"));
+            s.push(footer_pipe());
+            s.extend(footer_cmd("d", "Remove"));
             s.push(footer_pipe());
             if state.refresh_in_flight {
                 let spinner = SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()];

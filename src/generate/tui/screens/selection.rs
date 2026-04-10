@@ -82,6 +82,43 @@ impl SelectionState {
     pub(in crate::generate::tui) fn select_none(&mut self) {
         self.selected.clear();
     }
+
+    /// Remove the card at the current cursor position from the list.
+    /// Returns `true` if a card was removed, `false` if the list is empty.
+    pub(in crate::generate::tui) fn remove_current(&mut self) -> bool {
+        if self.cards.is_empty() {
+            return false;
+        }
+
+        let removed = self.cursor;
+        self.cards.remove(removed);
+
+        // Rebuild selected set: drop the removed index, shift higher indices down
+        let mut new_selected = BTreeSet::new();
+        for &i in &self.selected {
+            if i < removed {
+                new_selected.insert(i);
+            } else if i > removed {
+                new_selected.insert(i - 1);
+            }
+            // i == removed is dropped
+        }
+        self.selected = new_selected;
+
+        // Adjust cursor
+        if self.cards.is_empty() {
+            self.cursor = 0;
+        } else if self.cursor >= self.cards.len() {
+            self.cursor = self.cards.len() - 1;
+        }
+        self.list_state.select(if self.cards.is_empty() {
+            None
+        } else {
+            Some(self.cursor)
+        });
+        self.detail_scroll = 0;
+        true
+    }
 }
 
 pub(in crate::generate::tui) fn draw_selecting(
