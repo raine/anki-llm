@@ -182,6 +182,33 @@ impl App {
         self.browse_scroll = 0;
     }
 
+    fn copy_cards(&mut self, cards: &[ValidatedCard]) {
+        if cards.is_empty() {
+            return;
+        }
+        let text = cards
+            .iter()
+            .map(|card| {
+                card.raw_anki_fields
+                    .iter()
+                    .map(|(name, value)| {
+                        let plain = super::selector::strip_html_tags(value);
+                        format!("{name}\n{plain}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n────────────────────────────────────────\n\n");
+        if let Ok(mut cb) = arboard::Clipboard::new() {
+            cb.set_text(text).ok();
+        }
+        self.toast = Some(Toast {
+            message: "Copied!".into(),
+            tick: self.tick,
+        });
+    }
+
     fn open_model_picker(&mut self) {
         if let Some(info) = &self.session_info
             && !info.available_models.is_empty()
@@ -460,6 +487,12 @@ impl App {
                         self.browse_scroll = 0;
                     }
                 }
+                KeyCode::Char('c') => {
+                    if let AppMode::Done { ref cards, .. } = self.mode {
+                        let cards = cards.clone();
+                        self.copy_cards(&cards);
+                    }
+                }
                 KeyCode::Char('d') => {
                     if let AppMode::Done {
                         ref mut note_ids,
@@ -599,23 +632,8 @@ impl App {
                 self.worker_tx.send(WorkerCommand::Selection(indices)).ok();
             }
             KeyCode::Char('c') => {
-                if let Some(card) = state.cards.get(state.cursor) {
-                    let text = card
-                        .raw_anki_fields
-                        .iter()
-                        .map(|(name, value)| {
-                            let plain = super::selector::strip_html_tags(value);
-                            format!("{name}\n{plain}")
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n\n");
-                    if let Ok(mut cb) = arboard::Clipboard::new() {
-                        cb.set_text(text).ok();
-                    }
-                    self.toast = Some(Toast {
-                        message: "Copied!".into(),
-                        tick: self.tick,
-                    });
+                if let Some(card) = state.cards.get(state.cursor).cloned() {
+                    self.copy_cards(&[card]);
                 }
             }
             KeyCode::PageUp => {
@@ -1126,7 +1144,9 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.push(footer_pipe());
             s.extend(footer_cmd("?", "Help"));
         }
-        AppMode::Done { note_ids, .. } => {
+        AppMode::Done {
+            note_ids, cards, ..
+        } => {
             s.extend(footer_cmd("j/k", "Steps"));
             s.push(footer_pipe());
             if !app.is_fatal {
@@ -1137,6 +1157,10 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                 }
                 s.push(footer_pipe());
                 s.extend(footer_cmd("Ctrl+O", "Model"));
+                if !cards.is_empty() {
+                    s.push(footer_pipe());
+                    s.extend(footer_cmd("c", "Copy"));
+                }
                 if !note_ids.is_empty() {
                     s.push(footer_pipe());
                     s.extend(footer_cmd("d", "Delete"));
