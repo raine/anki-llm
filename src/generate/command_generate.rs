@@ -204,6 +204,7 @@ impl PipelineInteraction for TuiInteraction<'_> {
     fn wait_selection(&self) -> SelectionAction {
         match self.rx.recv() {
             Ok(WorkerCommand::Refresh) => SelectionAction::Refresh,
+            Ok(WorkerCommand::RefreshWithTerm(term)) => SelectionAction::RefreshWithTerm(term),
             Ok(WorkerCommand::Selection(indices)) => SelectionAction::Selected(indices),
             Ok(WorkerCommand::Cancel) => SelectionAction::Cancel,
             Ok(WorkerCommand::Quit) | Err(_) => SelectionAction::Quit,

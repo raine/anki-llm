@@ -599,6 +599,37 @@ impl App {
             return;
         };
 
+        // When the inline term input is active, route keys there
+        if state.term_input.is_some() {
+            match key.code {
+                KeyCode::Enter => {
+                    let term = state
+                        .term_input
+                        .as_ref()
+                        .map(|i| i.value().trim().to_string())
+                        .unwrap_or_default();
+                    state.term_input = None;
+                    if !term.is_empty() && !state.refresh_in_flight {
+                        self.history.push(&term);
+                        self.last_term = Some(term.clone());
+                        state.refresh_in_flight = true;
+                        self.worker_tx
+                            .send(WorkerCommand::RefreshWithTerm(term))
+                            .ok();
+                    }
+                }
+                KeyCode::Esc => {
+                    state.term_input = None;
+                }
+                _ => {
+                    if let Some(ref mut input) = state.term_input {
+                        input.handle_event(&Event::Key(key));
+                    }
+                }
+            }
+            return;
+        }
+
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => state.move_up(),
             KeyCode::Down | KeyCode::Char('j') => state.move_down(),
@@ -608,6 +639,9 @@ impl App {
             KeyCode::Char('r') if !state.refresh_in_flight => {
                 state.refresh_in_flight = true;
                 self.worker_tx.send(WorkerCommand::Refresh).ok();
+            }
+            KeyCode::Char('t') if !state.refresh_in_flight => {
+                state.term_input = Some(LineInput::default());
             }
             KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.open_model_picker();
@@ -817,6 +851,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("n", "None"),
             ("c", "Copy"),
             ("r", "More"),
+            ("t", "More (new term)"),
             ("Ctrl+O", "Model"),
             ("Enter", "Confirm"),
             ("Esc", "Back"),
@@ -1104,8 +1139,14 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                     format!("{spinner} Loading..."),
                     Style::default().fg(THEME.info),
                 ));
+            } else if state.term_input.is_some() {
+                s.extend(footer_cmd("Enter", "Generate"));
+                s.push(footer_pipe());
+                s.extend(footer_cmd("Esc", "Cancel"));
             } else {
                 s.extend(footer_cmd("r", "More"));
+                s.push(footer_pipe());
+                s.extend(footer_cmd("t", "New term"));
             }
             s.push(footer_pipe());
             s.extend(footer_cmd("Ctrl+O", "Model"));

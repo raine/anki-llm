@@ -64,6 +64,7 @@ pub trait PipelineProgress: Send + Sync {
 pub enum SelectionAction {
     Selected(Vec<usize>),
     Refresh,
+    RefreshWithTerm(String),
     Cancel,
     Quit,
 }
@@ -132,6 +133,7 @@ pub fn run_pipeline_for_term(
     let mut all_validated: Vec<ValidatedCard> = Vec::new();
     let mut seen_keys: HashSet<String> = HashSet::new();
     let mut is_refresh = false;
+    let mut current_term = term.to_string();
 
     // --- Generate / validate / select loop (supports refresh) ---
 
@@ -147,17 +149,17 @@ pub fn run_pipeline_for_term(
         if is_refresh {
             progress.log(&format!(
                 "Generating {} more card(s) for \"{}\"...",
-                config.count, term,
+                config.count, current_term,
             ));
         } else {
             progress.log(&format!(
                 "Generating {} card(s) for \"{}\" using {}...",
-                config.count, term, config.model
+                config.count, current_term, config.model
             ));
         }
 
         let gen_result = generate_cards(
-            term,
+            &current_term,
             config.prompt_body,
             config.count,
             config.field_map_keys,
@@ -185,6 +187,10 @@ pub fn run_pipeline_for_term(
 
                     match interaction.wait_selection() {
                         SelectionAction::Refresh => continue,
+                        SelectionAction::RefreshWithTerm(t) => {
+                            current_term = t;
+                            continue;
+                        }
                         SelectionAction::Selected(indices) => break indices,
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
@@ -295,6 +301,10 @@ pub fn run_pipeline_for_term(
 
                     match interaction.wait_selection() {
                         SelectionAction::Refresh => continue,
+                        SelectionAction::RefreshWithTerm(t) => {
+                            current_term = t;
+                            continue;
+                        }
                         SelectionAction::Selected(indices) => break indices,
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
@@ -389,6 +399,11 @@ pub fn run_pipeline_for_term(
         match interaction.wait_selection() {
             SelectionAction::Refresh => {
                 is_refresh = true;
+                continue;
+            }
+            SelectionAction::RefreshWithTerm(t) => {
+                is_refresh = true;
+                current_term = t;
                 continue;
             }
             SelectionAction::Selected(indices) => break indices,

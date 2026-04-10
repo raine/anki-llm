@@ -7,6 +7,7 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::generate::cards::ValidatedCard;
+use crate::generate::line_input::LineInput;
 
 use super::super::theme::{Glyphs, THEME};
 
@@ -18,6 +19,8 @@ pub(in crate::generate::tui) struct SelectionState {
     pub(in crate::generate::tui) detail_scroll: u16,
     /// True while a refresh (load more) request is in flight.
     pub(in crate::generate::tui) refresh_in_flight: bool,
+    /// When Some, an inline term input is active for generating cards with a different term.
+    pub(in crate::generate::tui) term_input: Option<LineInput>,
 }
 
 impl SelectionState {
@@ -32,6 +35,7 @@ impl SelectionState {
             list_state,
             detail_scroll: 0,
             refresh_in_flight: false,
+            term_input: None,
         }
     }
 
@@ -171,6 +175,17 @@ pub(in crate::generate::tui) fn draw_selecting(
     );
     frame.render_stateful_widget(list, chunks[0], &mut list_state);
 
+    // Split detail area: if term input is active, reserve a line at the bottom
+    let (detail_area, term_input_area) = if state.term_input.is_some() {
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(1)])
+            .split(chunks[1]);
+        (split[0], Some(split[1]))
+    } else {
+        (chunks[1], None)
+    };
+
     // Detail pane for focused card
     if let Some(card) = state.cards.get(state.cursor) {
         let mut lines: Vec<Line> = Vec::new();
@@ -207,6 +222,30 @@ pub(in crate::generate::tui) fn draw_selecting(
         let detail_para = Paragraph::new(Text::from(lines))
             .wrap(Wrap { trim: false })
             .scroll((state.detail_scroll, 0));
-        frame.render_widget(detail_para, chunks[1]);
+        frame.render_widget(detail_para, detail_area);
+    }
+
+    // Term input line
+    if let Some(ref input) = state.term_input
+        && let Some(input_area) = term_input_area
+    {
+        let value = input.value();
+        let label = "Term: ";
+        let scroll =
+            input.visual_scroll(input_area.width.saturating_sub(label.len() as u16 + 1) as usize);
+        let line = Line::from(vec![
+            Span::styled(
+                label,
+                Style::default().fg(THEME.info).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(value),
+        ]);
+        frame.render_widget(Paragraph::new(line).scroll((0, scroll as u16)), input_area);
+        frame.set_cursor_position((
+            input_area.x
+                + label.len() as u16
+                + (input.visual_cursor().saturating_sub(scroll)) as u16,
+            input_area.y,
+        ));
     }
 }

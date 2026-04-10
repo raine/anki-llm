@@ -36,8 +36,9 @@ pub enum BackendEvent {
 }
 
 pub enum WorkerCommand {
-    Start(String), // term to generate cards for
-    Refresh,       // generate more cards for the same term
+    Start(String),           // term to generate cards for
+    Refresh,                 // generate more cards for the same term
+    RefreshWithTerm(String), // generate more cards with a different term
     Selection(Vec<usize>),
     Review(Vec<bool>), // true = keep, false = discard
     SetModel(String),  // change model between runs
