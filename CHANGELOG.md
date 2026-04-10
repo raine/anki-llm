@@ -1,3 +1,28 @@
+## v2.0.4 (2026-04-10)
+
+- Added prompt picker — prompts in the prompts directory are auto-discovered,
+  and a picker appears when `--prompt` is omitted. Use Ctrl+P to switch prompts
+  during a session. Last used prompt is remembered.
+- Added model pricing display in the model picker
+- Model can now be switched from the card selection, done, and error screens
+  (Ctrl+O)
+- Done screen now shows the final generated cards, allows copying card text, and
+  deleting imported cards
+- Added step history browsing on done and error screens — review what each
+  processing step produced
+- **Breaking:** `post_process` and `quality_check` prompt template keys have
+  been replaced with a unified `processing` pipeline. See the README for the new
+  configuration format.
+- All LLM queries are now automatically logged to
+  `~/.local/state/anki-llm/logs/`
+- LLM errors are now logged to the session log file
+- `generate-init` now outputs to the prompts directory by default
+- Added gemini-3.1-flash-lite-preview model, removed gpt-5.4-pro
+- Nerd Font checkbox glyphs are now configurable
+- Fixed CJK characters bleeding into the sidebar
+- Fixed cross-provider model overrides not applying in processing steps
+- Fixed Ctrl+P not opening the picker when a prompt was already remembered
+
 ## v2.0.3 (2026-04-07)
 
 - Added interactive TUI for the `generate` command — full-screen terminal
