@@ -163,6 +163,9 @@ pub struct RowStatus {
 
 pub struct DoneState {
     pub summary: BatchSummary,
+    /// Frozen snapshot of the running screen for continued display.
+    pub run: RunState,
+    /// Selected failed row index for triage browsing.
     pub cursor: usize,
 }
 

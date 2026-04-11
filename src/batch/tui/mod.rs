@@ -146,6 +146,38 @@ fn run_app(
 }
 
 fn handle_batch_event(mode: &mut AppMode, event: BatchEvent) {
+    // RunDone and Fatal need to consume the RunState, so handle them specially
+    match &event {
+        BatchEvent::RunDone(_) => {
+            let BatchEvent::RunDone(summary) = event else {
+                unreachable!()
+            };
+            // Take the RunState out of the current mode
+            let prev = std::mem::replace(mode, AppMode::Error(String::new()));
+            let run = match prev {
+                AppMode::Running(run) => run,
+                other => {
+                    *mode = other;
+                    return;
+                }
+            };
+            *mode = AppMode::Done(DoneState {
+                summary,
+                run,
+                cursor: 0,
+            });
+            return;
+        }
+        BatchEvent::Fatal(_) => {
+            let BatchEvent::Fatal(msg) = event else {
+                unreachable!()
+            };
+            *mode = AppMode::Error(msg);
+            return;
+        }
+        _ => {}
+    }
+
     let AppMode::Running(state) = mode else {
         return;
     };
@@ -166,11 +198,6 @@ fn handle_batch_event(mode: &mut AppMode, event: BatchEvent) {
             state.stats.output_tokens = output_tokens;
             state.stats.cost = cost;
         }
-        BatchEvent::RunDone(summary) => {
-            *mode = AppMode::Done(DoneState { summary, cursor: 0 });
-        }
-        BatchEvent::Fatal(msg) => {
-            *mode = AppMode::Error(msg);
-        }
+        BatchEvent::RunDone(_) | BatchEvent::Fatal(_) => unreachable!(),
     }
 }

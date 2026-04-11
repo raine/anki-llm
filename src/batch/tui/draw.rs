@@ -16,7 +16,7 @@ pub fn draw(mode: &AppMode, plan: &BatchPlan, frame: &mut Frame) {
     match mode {
         AppMode::Preflight => draw_preflight(plan, frame),
         AppMode::Running(state) => draw_running(state, plan, frame),
-        AppMode::Done(state) => draw_done(state, frame),
+        AppMode::Done(state) => draw_done(state, plan, frame),
         AppMode::Error(msg) => draw_error(msg, frame),
     }
 }
@@ -416,22 +416,71 @@ fn draw_log_strip(state: &RunState, frame: &mut Frame, area: Rect) {
 // Done
 // ---------------------------------------------------------------------------
 
-fn draw_done(state: &DoneState, frame: &mut Frame) {
+fn draw_done(state: &DoneState, plan: &BatchPlan, frame: &mut Frame) {
     let area = frame.area();
     let summary = &state.summary;
-
     let has_failures = !summary.failed_rows.is_empty();
 
-    if has_failures {
-        draw_done_with_failures(state, frame, area);
+    // Keep the running layout: sidebar + row table on top, summary banner at bottom
+    let bottom_height = if has_failures {
+        // Need more space for failure triage
+        (summary.failed_rows.len() as u16 + 6)
+            .min(area.height / 2)
+            .max(8)
     } else {
-        draw_done_success(state, frame, area);
+        5
+    };
+
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(bottom_height),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    let body = main_chunks[0];
+    let bottom_area = main_chunks[1];
+    let footer_area = main_chunks[2];
+
+    // --- Top: frozen sidebar + row table (reuse running screen layout) ---
+    let body_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(24), Constraint::Min(1)])
+        .split(body);
+
+    draw_sidebar(&state.run, plan, frame, body_chunks[0]);
+    draw_row_table(&state.run, frame, body_chunks[1]);
+
+    // --- Bottom: summary banner (or failure triage) ---
+    if has_failures {
+        draw_failure_triage(state, frame, bottom_area);
+    } else {
+        draw_success_banner(summary, frame, bottom_area);
     }
+
+    // --- Footer ---
+    let footer_spans: Vec<Span> = if has_failures {
+        [
+            footer_cmd("r", "Retry failed"),
+            vec![footer_pipe()],
+            footer_cmd("j/k", "Browse"),
+            vec![footer_pipe()],
+            footer_cmd("q", "Quit"),
+        ]
+        .concat()
+    } else {
+        footer_cmd("q", "Quit")
+    };
+    frame.render_widget(Line::from(footer_spans), footer_area);
 }
 
-fn draw_done_success(state: &DoneState, frame: &mut Frame, area: Rect) {
-    let summary = &state.summary;
-
+fn draw_success_banner(
+    summary: &super::super::events::BatchSummary,
+    frame: &mut Frame,
+    area: Rect,
+) {
     let label_style = Style::default().fg(THEME.dimmed);
     let value_style = Style::default().fg(THEME.text);
 
@@ -445,134 +494,61 @@ fn draw_done_success(state: &DoneState, frame: &mut Frame, area: Rect) {
         String::new()
     };
 
-    let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  \u{2713} Batch complete",
-        Style::default()
-            .fg(THEME.success)
-            .add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
-
-    let fields: Vec<(&str, String, Style)> = vec![
-        ("Processed", summary.total.to_string(), value_style),
-        (
-            "Succeeded",
-            summary.succeeded.to_string(),
-            Style::default().fg(THEME.success),
+    let banner = Line::from(vec![
+        Span::styled(
+            " \u{2713} Batch complete ",
+            Style::default()
+                .fg(THEME.success)
+                .add_modifier(Modifier::BOLD),
         ),
-        ("Failed", summary.failed.to_string(), value_style),
-        (
-            "Tokens",
+        Span::styled(
             format!(
-                "{} ({} in / {} out)",
+                " {} rows  {} tokens  {}  {} ({})",
+                summary.total,
                 format_number(total_tokens),
-                format_number(summary.input_tokens),
-                format_number(summary.output_tokens)
+                pricing::format_cost(summary.cost),
+                format_duration(summary.elapsed),
+                avg_per_row,
             ),
             value_style,
         ),
-        (
-            "Cost",
-            pricing::format_cost(summary.cost),
-            Style::default().fg(THEME.info),
-        ),
-        (
-            "Time",
-            format!("{} ({})", format_duration(summary.elapsed), avg_per_row),
-            value_style,
-        ),
-    ];
+    ]);
 
-    for (label, value, style) in &fields {
-        let pad = 14usize.saturating_sub(label.len());
-        lines.push(Line::from(vec![
-            Span::styled(format!("  {label}"), label_style),
-            Span::raw(" ".repeat(pad)),
-            Span::styled(value.as_str(), *style),
-        ]));
-    }
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled("  Output written to ", label_style),
+    let output_line = Line::from(vec![
+        Span::styled(" Output written to ", label_style),
         Span::styled(&summary.output_path, value_style),
-    ]));
-    lines.push(Line::from(""));
+    ]);
 
-    let text = Text::from(lines);
-    let block = Block::bordered()
-        .border_type(ratatui::widgets::BorderType::Rounded)
-        .border_style(Style::default().fg(THEME.border));
+    let block = Block::default()
+        .borders(Borders::TOP)
+        .border_style(Style::default().fg(THEME.success));
+
+    let text = Text::from(vec![Line::from(""), banner, output_line, Line::from("")]);
+
     let para = Paragraph::new(text).block(block);
-
-    let footer_spans: Vec<Span> = footer_cmd("q", "Quit");
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(area);
-
-    frame.render_widget(para, chunks[0]);
-    frame.render_widget(Line::from(footer_spans), chunks[1]);
+    frame.render_widget(para, area);
 }
 
-fn draw_done_with_failures(state: &DoneState, frame: &mut Frame, area: Rect) {
+fn draw_failure_triage(state: &DoneState, frame: &mut Frame, area: Rect) {
     let summary = &state.summary;
+    let label_style = Style::default().fg(THEME.dimmed);
 
+    // Split into left (failed row list) and right (detail)
     let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(area);
-
-    let body = chunks[0];
-    let footer_area = chunks[1];
-
-    // Split body into left (summary + list) and right (detail)
-    let body_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Length(24), Constraint::Min(1)])
-        .split(body);
+        .split(area);
 
-    let left = body_chunks[0];
-    let right = body_chunks[1];
+    let left = chunks[0];
+    let right = chunks[1];
 
-    // --- Left panel ---
-    let label_style = Style::default().fg(THEME.dimmed);
-    let value_style = Style::default().fg(THEME.text);
-
+    // --- Left: failed row list ---
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        format!("  \u{26a0} {} rows failed", summary.failed),
+        format!(" \u{26a0} {} rows failed", summary.failed),
         Style::default()
             .fg(THEME.warning)
             .add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
-
-    let fields: Vec<(&str, String)> = vec![
-        ("Processed", summary.total.to_string()),
-        ("Succeeded", summary.succeeded.to_string()),
-        ("Failed", summary.failed.to_string()),
-        ("Cost", pricing::format_cost(summary.cost)),
-        ("Time", format_duration(summary.elapsed)),
-    ];
-
-    for (label, value) in &fields {
-        let pad = 12usize.saturating_sub(label.len());
-        lines.push(Line::from(vec![
-            Span::styled(format!("  {label}"), label_style),
-            Span::raw(" ".repeat(pad)),
-            Span::styled(value.as_str(), value_style),
-        ]));
-    }
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  Failed rows:",
-        Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
     )));
 
     for (i, failed) in summary.failed_rows.iter().enumerate() {
@@ -585,82 +561,61 @@ fn draw_done_with_failures(state: &DoneState, frame: &mut Frame, area: Rect) {
             Style::default().fg(THEME.text)
         };
         lines.push(Line::from(Span::styled(
-            format!("  {marker}{}", failed.id),
+            format!(" {marker}{}", failed.id),
             style,
         )));
     }
 
     let left_block = Block::default()
-        .borders(Borders::RIGHT)
-        .border_style(Style::default().fg(THEME.border));
+        .borders(Borders::TOP | Borders::RIGHT)
+        .border_style(Style::default().fg(THEME.warning));
     let left_para = Paragraph::new(Text::from(lines)).block(left_block);
     frame.render_widget(left_para, left);
 
-    // --- Right panel: detail for selected row ---
+    // --- Right: detail for selected row ---
     let mut detail_lines: Vec<Line> = Vec::new();
 
     if let Some(failed) = summary.failed_rows.get(state.cursor) {
-        detail_lines.push(Line::from(""));
-        detail_lines.push(Line::from(Span::styled(
-            format!("  {}", failed.id),
-            Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
-        )));
-        detail_lines.push(Line::from(""));
-        detail_lines.push(Line::from(Span::styled(
-            "  Error",
-            Style::default()
-                .fg(THEME.header)
-                .add_modifier(Modifier::BOLD),
-        )));
-        detail_lines.push(Line::from(Span::styled(
-            format!("    {}", failed.error),
-            Style::default().fg(THEME.danger),
-        )));
-        detail_lines.push(Line::from(""));
-        detail_lines.push(Line::from(Span::styled(
-            "  Row data",
-            Style::default()
-                .fg(THEME.header)
-                .add_modifier(Modifier::BOLD),
-        )));
+        detail_lines.push(Line::from(vec![
+            Span::styled(
+                format!(" {}", failed.id),
+                Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("  ", Style::default()),
+            Span::styled(&failed.error, Style::default().fg(THEME.danger)),
+        ]));
 
-        for (key, value) in &failed.row_data {
-            if key.starts_with('_') {
-                continue; // skip internal fields like _error
-            }
-            let display_val = match value {
-                serde_json::Value::String(s) => {
-                    if s.is_empty() {
-                        "(empty)".to_string()
-                    } else if s.len() > 60 {
-                        format!("{}...", &s[..60])
-                    } else {
-                        s.clone()
-                    }
-                }
-                other => other.to_string(),
-            };
-            detail_lines.push(Line::from(vec![
-                Span::styled(format!("    {key}: "), label_style),
-                Span::styled(display_val, value_style),
-            ]));
+        // Show row fields on one line
+        let fields: Vec<String> = failed
+            .row_data
+            .iter()
+            .filter(|(k, _)| !k.starts_with('_'))
+            .map(|(k, v)| {
+                let val = match v {
+                    serde_json::Value::String(s) if s.is_empty() => "(empty)".to_string(),
+                    serde_json::Value::String(s) if s.len() > 30 => format!("{}...", &s[..30]),
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                format!("{k}: {val}")
+            })
+            .collect();
+
+        if !fields.is_empty() {
+            detail_lines.push(Line::from(Span::styled(
+                format!(" {}", fields.join("  ")),
+                label_style,
+            )));
         }
     }
 
-    let right_para = Paragraph::new(Text::from(detail_lines)).wrap(Wrap { trim: false });
+    let right_block = Block::default()
+        .borders(Borders::TOP)
+        .border_style(Style::default().fg(THEME.warning));
+    let right_para = Paragraph::new(Text::from(detail_lines))
+        .block(right_block)
+        .wrap(Wrap { trim: false });
     frame.render_widget(right_para, right);
-
-    // --- Footer ---
-    let footer_spans: Vec<Span> = [
-        footer_cmd("r", "Retry failed"),
-        vec![footer_pipe()],
-        footer_cmd("j/k", "Browse"),
-        vec![footer_pipe()],
-        footer_cmd("q", "Quit"),
-    ]
-    .concat();
-
-    frame.render_widget(Line::from(footer_spans), footer_area);
 }
 
 // ---------------------------------------------------------------------------
