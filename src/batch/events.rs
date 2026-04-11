@@ -17,6 +17,7 @@ pub enum BatchEvent {
 
 /// Plan data built by the controller before starting the engine.
 /// Not an engine event — passed directly to the renderer.
+#[derive(Clone)]
 pub struct BatchPlan {
     pub rows: Vec<RowDescriptor>,
     pub input_total: usize,
@@ -31,11 +32,13 @@ pub struct BatchPlan {
     pub sample_prompt: Option<String>,
 }
 
+#[derive(Clone)]
 pub enum OutputMode {
     SingleField(String),
     JsonMerge,
 }
 
+#[derive(Clone)]
 pub struct RowDescriptor {
     pub index: usize,
     pub id: String,

@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
+use std::io::IsTerminal;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread;
@@ -11,14 +12,16 @@ use crate::data::io::{load_existing_output, parse_data_file};
 use crate::data::rows::{Row, get_note_id, require_note_id};
 use crate::llm::client::LlmClient;
 use crate::llm::logger::LlmLogger;
-use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
+use crate::llm::runtime::{RuntimeConfig, RuntimeConfigArgs, build_runtime_config};
 use crate::template::fill_template;
 
-use super::engine::{BatchConfig, run_batch};
+use super::engine::{BatchConfig, ProcessFn, run_batch};
+use super::events::{BatchPlan, OutputMode, RowDescriptor};
 use super::file_mode::FileWriter;
 use super::plain::run_plain_renderer;
 use super::process_row::{ProcessRowConfig, build_process_fn};
 use super::report::{ERROR_FIELD, RowOutcome};
+use super::tui::BatchTuiResult;
 
 pub fn run(args: ProcessFileArgs) -> Result<()> {
     // Read input
@@ -61,32 +64,16 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         dry_run: args.dry_run,
     })?;
 
-    eprintln!("\n{}", "=".repeat(60));
-    eprintln!("Model: {}", runtime.model);
-    eprintln!("Batch size: {}", runtime.batch_size);
-    eprintln!("Retries: {}", runtime.retries);
-    if let Some(t) = runtime.temperature {
-        eprintln!("Temperature: {t}");
-    }
-    if let Some(field) = &args.field {
-        eprintln!("Mode: single field ({})", field);
-    } else {
-        eprintln!("Mode: JSON merge");
-    }
-    eprintln!("{}", "=".repeat(60));
+    let input_total = rows.len();
 
     // Resume: load existing output
     let existing = if args.force {
         indexmap::IndexMap::new()
     } else {
-        let existing = load_existing_output(&args.output).with_context(|| {
-            format!("failed to read existing output: {}", args.output.display())
-        })?;
-        if !existing.is_empty() {
-            eprintln!("\nFound {} existing rows in output file", existing.len());
-        }
-        existing
+        load_existing_output(&args.output)
+            .with_context(|| format!("failed to read existing output: {}", args.output.display()))?
     };
+    let resume_skipped = existing.len();
 
     // Filter rows to process: skip rows already completed successfully.
     // In --field mode, also re-process rows that are missing the target field.
@@ -117,9 +104,6 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         return Ok(());
     }
 
-    let num_to_process = rows_to_process.len();
-    eprintln!("\n{num_to_process} rows to process");
-
     // Dry run
     if args.dry_run {
         eprintln!("\n--- DRY RUN MODE ---");
@@ -141,6 +125,48 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         }
         return Ok(());
     }
+
+    // Build sample prompt for preflight
+    let sample_prompt = rows_to_process
+        .first()
+        .and_then(|row| fill_template(&prompt_template, row).ok());
+
+    // Build plan
+    let plan = BatchPlan {
+        rows: rows_to_process
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                let id = get_note_id(row).unwrap_or_default();
+                let preview = row
+                    .values()
+                    .find_map(|v| v.as_str().filter(|s| !s.is_empty()))
+                    .unwrap_or("")
+                    .chars()
+                    .take(40)
+                    .collect();
+                RowDescriptor {
+                    index: i,
+                    id,
+                    preview,
+                }
+            })
+            .collect(),
+        input_total,
+        resume_skipped,
+        run_total: rows_to_process.len(),
+        model: runtime.model.clone(),
+        prompt_path: prompt_path.display().to_string(),
+        output_path: args.output.display().to_string(),
+        output_mode: if let Some(ref field) = args.field {
+            OutputMode::SingleField(field.clone())
+        } else {
+            OutputMode::JsonMerge
+        },
+        batch_size: runtime.batch_size,
+        retries: runtime.retries,
+        sample_prompt,
+    };
 
     // Build logger
     let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
@@ -166,13 +192,44 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         runtime.batch_size as usize,
     ));
 
-    let writer_cb = Arc::clone(&writer);
-    let on_row_done: super::engine::OnRowDone = Box::new(move |outcome: &RowOutcome| {
-        writer_cb.on_row_done(outcome);
-        false
-    });
+    if std::io::stderr().is_terminal() {
+        run_with_tui(plan, rows_to_process, process_fn, &runtime, writer)
+    } else {
+        run_with_plain(plan, rows_to_process, process_fn, &runtime, writer)
+    }
+}
 
-    // Run batch with plain renderer
+fn run_with_plain(
+    plan: BatchPlan,
+    rows_to_process: Vec<Row>,
+    process_fn: ProcessFn,
+    runtime: &RuntimeConfig,
+    writer: Arc<FileWriter>,
+) -> Result<()> {
+    let num_to_process = plan.run_total;
+    let output_path = plan.output_path.clone();
+
+    // Print config summary (plain mode only — TUI shows it in preflight)
+    eprintln!("\n{}", "=".repeat(60));
+    eprintln!("Model: {}", runtime.model);
+    eprintln!("Batch size: {}", runtime.batch_size);
+    eprintln!("Retries: {}", runtime.retries);
+    if let Some(t) = runtime.temperature {
+        eprintln!("Temperature: {t}");
+    }
+    match &plan.output_mode {
+        OutputMode::SingleField(f) => eprintln!("Mode: single field ({f})"),
+        OutputMode::JsonMerge => eprintln!("Mode: JSON merge"),
+    }
+    eprintln!("{}", "=".repeat(60));
+    if plan.resume_skipped > 0 {
+        eprintln!(
+            "\nFound {} existing rows in output file",
+            plan.resume_skipped
+        );
+    }
+    eprintln!("\n{num_to_process} rows to process");
+
     let batch_config = BatchConfig {
         batch_size: runtime.batch_size,
         retries: runtime.retries,
@@ -186,7 +243,12 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         cancel_for_ctrlc.store(true, Ordering::SeqCst);
     });
 
-    // Spawn engine on background thread
+    let writer_cb = Arc::clone(&writer);
+    let on_row_done: super::engine::OnRowDone = Box::new(move |outcome: &RowOutcome| {
+        writer_cb.on_row_done(outcome);
+        false
+    });
+
     let engine_handle = thread::spawn(move || {
         run_batch(
             rows_to_process,
@@ -198,15 +260,12 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         )
     });
 
-    // Run plain renderer on main thread (consumes events until RunDone)
     run_plain_renderer(event_rx, num_to_process);
 
-    // Wait for engine to finish
     let (outcomes, _tokens, _interrupted) = engine_handle.join().unwrap();
 
-    // Final flush
     writer.flush().context("failed to write final output")?;
-    eprintln!("\nOutput written to {}", args.output.display());
+    eprintln!("\nOutput written to {output_path}");
 
     let failures = outcomes
         .iter()
@@ -214,8 +273,105 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         .count();
 
     if failures > 0 {
-        anyhow::bail!("{failures} row(s) failed processing. See _error fields in output file.");
+        bail!("{failures} row(s) failed processing. See _error fields in output file.");
     }
 
     Ok(())
+}
+
+fn run_with_tui(
+    plan: BatchPlan,
+    mut pending_rows: Vec<Row>,
+    process_fn: ProcessFn,
+    runtime: &RuntimeConfig,
+    writer: Arc<FileWriter>,
+) -> Result<()> {
+    let output_path = plan.output_path.clone();
+
+    // The process_fn is shared across retry iterations via Arc
+    let process_fn = Arc::new(process_fn);
+
+    loop {
+        let batch_config = BatchConfig {
+            batch_size: runtime.batch_size,
+            retries: runtime.retries,
+            model: runtime.model.clone(),
+        };
+
+        let (event_tx, event_rx) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (start_tx, start_rx) = mpsc::sync_channel::<()>(0);
+
+        let cancel_for_engine = Arc::clone(&cancel);
+        let writer_cb = Arc::clone(&writer);
+        let pf = Arc::clone(&process_fn);
+        let rows = pending_rows.clone();
+
+        let engine_handle = thread::spawn(move || {
+            // Block until TUI confirms start, or return if cancelled
+            if start_rx.recv().is_err() {
+                return None;
+            }
+
+            let on_row_done: super::engine::OnRowDone = Box::new(move |outcome: &RowOutcome| {
+                writer_cb.on_row_done(outcome);
+                false
+            });
+
+            // Wrap Arc<ProcessFn> into ProcessFn for run_batch
+            let process: super::engine::ProcessFn = Box::new(move |row| pf(row));
+
+            Some(run_batch(
+                rows,
+                process,
+                &batch_config,
+                Some(on_row_done),
+                event_tx,
+                cancel_for_engine,
+            ))
+        });
+
+        let tui_result = super::tui::run_tui(plan.clone(), event_rx, cancel, start_tx)?;
+
+        // Wait for engine thread
+        let engine_result = engine_handle.join().unwrap();
+
+        match tui_result {
+            BatchTuiResult::Cancelled => {
+                if engine_result.is_some() {
+                    writer.flush().context("failed to write final output")?;
+                    eprintln!("\nPartial output written to {output_path}");
+                }
+                return Ok(());
+            }
+            BatchTuiResult::Done => {
+                writer.flush().context("failed to write final output")?;
+
+                if let Some((outcomes, _, _)) = engine_result {
+                    let failures = outcomes
+                        .iter()
+                        .filter(|o| matches!(o, RowOutcome::Failure { .. }))
+                        .count();
+                    if failures > 0 {
+                        bail!(
+                            "{failures} row(s) failed processing. See _error fields in output file."
+                        );
+                    }
+                }
+                return Ok(());
+            }
+            BatchTuiResult::RetryFailed(failed_rows) => {
+                writer.flush().context("failed to write final output")?;
+                // Strip _error field from rows before retrying
+                pending_rows = failed_rows
+                    .into_iter()
+                    .map(|mut row| {
+                        row.shift_remove(ERROR_FIELD);
+                        row
+                    })
+                    .collect();
+                continue;
+            }
+        }
+    }
 }

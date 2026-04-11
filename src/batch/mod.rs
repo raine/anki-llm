@@ -8,3 +8,4 @@ pub mod file_mode;
 pub mod plain;
 pub mod process_row;
 pub mod report;
+pub mod tui;

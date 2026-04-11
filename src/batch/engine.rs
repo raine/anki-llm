@@ -61,16 +61,15 @@ pub fn run_batch(
                     }
 
                     let row = &rows[idx];
-                    let outcome = process_with_retry(
-                        row,
-                        idx,
-                        &process,
-                        config.retries,
-                        &tokens,
-                        &event_tx,
-                        &cancel,
-                        &config.model,
-                    );
+                    let ctx = RetryCtx {
+                        process: &process,
+                        max_retries: config.retries,
+                        tokens: &tokens,
+                        event_tx: &event_tx,
+                        cancel: &cancel,
+                        model: &config.model,
+                    };
+                    let outcome = process_with_retry(row, idx, &ctx);
 
                     // Notify callback — abort if it returns true
                     if let Some(ref cb) = on_row_done
@@ -128,24 +127,25 @@ pub fn run_batch(
     (outcomes, tokens, was_interrupted)
 }
 
+/// Shared context for retry processing, bundled to avoid too many arguments.
+struct RetryCtx<'a> {
+    process: &'a ProcessFn,
+    max_retries: u32,
+    tokens: &'a Mutex<TokenStats>,
+    event_tx: &'a mpsc::Sender<BatchEvent>,
+    cancel: &'a AtomicBool,
+    model: &'a str,
+}
+
 /// Process a single row with retry and exponential backoff.
 /// Token usage is accumulated into `tokens` on each successful attempt.
 /// Events are emitted for each state transition.
-fn process_with_retry(
-    row: &Row,
-    index: usize,
-    process: &ProcessFn,
-    max_retries: u32,
-    tokens: &Mutex<TokenStats>,
-    event_tx: &mpsc::Sender<BatchEvent>,
-    cancel: &AtomicBool,
-    model: &str,
-) -> RowOutcome {
+fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> RowOutcome {
     let start = Instant::now();
     let id = get_note_id(row).unwrap_or_default();
     let mut last_error = String::new();
 
-    event_tx
+    ctx.event_tx
         .send(BatchEvent::RowStateChanged(RowUpdate {
             index,
             id: id.clone(),
@@ -156,9 +156,9 @@ fn process_with_retry(
         }))
         .ok();
 
-    for attempt in 0..=max_retries {
-        if cancel.load(Ordering::SeqCst) {
-            event_tx
+    for attempt in 0..=ctx.max_retries {
+        if ctx.cancel.load(Ordering::SeqCst) {
+            ctx.event_tx
                 .send(BatchEvent::RowStateChanged(RowUpdate {
                     index,
                     id: id.clone(),
@@ -175,7 +175,7 @@ fn process_with_retry(
             let backoff =
                 Duration::from_millis(1000 * 2u64.pow(attempt - 1)).min(Duration::from_secs(30));
 
-            event_tx
+            ctx.event_tx
                 .send(BatchEvent::RowStateChanged(RowUpdate {
                     index,
                     id: id.clone(),
@@ -188,17 +188,17 @@ fn process_with_retry(
                 }))
                 .ok();
 
-            event_tx
+            ctx.event_tx
                 .send(BatchEvent::Log(format!(
-                    "Retry {attempt}/{max_retries}: {}",
-                    &last_error
+                    "Retry {attempt}/{}: {}",
+                    ctx.max_retries, &last_error
                 )))
                 .ok();
 
             std::thread::sleep(backoff);
 
-            if cancel.load(Ordering::SeqCst) {
-                event_tx
+            if ctx.cancel.load(Ordering::SeqCst) {
+                ctx.event_tx
                     .send(BatchEvent::RowStateChanged(RowUpdate {
                         index,
                         id: id.clone(),
@@ -212,13 +212,13 @@ fn process_with_retry(
             }
         }
 
-        match process(row) {
+        match (ctx.process)(row) {
             Ok((updated_row, usage)) => {
                 if let Some((input, output)) = usage {
-                    let mut t = tokens.lock().unwrap();
+                    let mut t = ctx.tokens.lock().unwrap();
                     t.add(input, output);
-                    let cost = pricing::calculate_cost(model, t.input, t.output);
-                    event_tx
+                    let cost = pricing::calculate_cost(ctx.model, t.input, t.output);
+                    ctx.event_tx
                         .send(BatchEvent::CostUpdate {
                             input_tokens: t.input,
                             output_tokens: t.output,
@@ -226,7 +226,7 @@ fn process_with_retry(
                         })
                         .ok();
                 }
-                event_tx
+                ctx.event_tx
                     .send(BatchEvent::RowStateChanged(RowUpdate {
                         index,
                         id: id.clone(),
@@ -247,14 +247,14 @@ fn process_with_retry(
         }
     }
 
-    event_tx
+    ctx.event_tx
         .send(BatchEvent::RowStateChanged(RowUpdate {
             index,
             id: id.clone(),
             state: RowState::Failed {
                 error: last_error.clone(),
             },
-            attempt: max_retries + 1,
+            attempt: ctx.max_retries + 1,
             usage: None,
             elapsed: start.elapsed(),
         }))
@@ -437,8 +437,7 @@ mod tests {
         });
 
         let (tx, _rx) = mpsc::channel();
-        let (outcomes, _, interrupted) =
-            run_batch(rows, process, &config(0), None, tx, cancel);
+        let (outcomes, _, interrupted) = run_batch(rows, process, &config(0), None, tx, cancel);
 
         assert!(interrupted);
         // With batch_size=1, at most 2 rows processed before cancel takes effect

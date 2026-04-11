@@ -23,10 +23,7 @@ pub fn run_plain_renderer(rx: mpsc::Receiver<BatchEvent>, total: usize) {
     for event in rx {
         match event {
             BatchEvent::RowStateChanged(update) => {
-                if matches!(
-                    update.state,
-                    RowState::Succeeded | RowState::Failed { .. }
-                ) {
+                if matches!(update.state, RowState::Succeeded | RowState::Failed { .. }) {
                     pb.inc(1);
                 }
             }
@@ -37,10 +34,7 @@ pub fn run_plain_renderer(rx: mpsc::Receiver<BatchEvent>, total: usize) {
                 let s = style();
                 // Format retry messages like the old engine did
                 if msg.starts_with("Retry ") {
-                    pb.println(format!(
-                        "  {}",
-                        s.yellow(&msg)
-                    ));
+                    pb.println(format!("  {}", s.yellow(&msg)));
                 } else {
                     pb.println(&msg);
                 }
@@ -105,7 +99,10 @@ fn print_plain_summary(summary: &BatchSummary) {
             s.muted(format!("(${:.2}/M)", p.output_cost_per_million))
         );
     }
-    eprintln!("  Total      {}", s.accent(pricing::format_cost(summary.cost)));
+    eprintln!(
+        "  Total      {}",
+        s.accent(pricing::format_cost(summary.cost))
+    );
 
     eprintln!("\n{}", s.bold("Performance"));
     eprintln!("  Time       {:.1}s", summary.elapsed.as_secs_f64());
