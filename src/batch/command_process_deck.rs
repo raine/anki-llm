@@ -253,18 +253,15 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         eprintln!("Error: failed to flush final Anki updates: {e}");
     }
 
-    // Check for Anki write failures (distinct from LLM processing failures)
-    if writer.has_flush_error.load(Ordering::SeqCst) {
-        bail!(
-            "failed to update Anki — some processed notes were not saved. \
-             Check Anki connectivity and try again."
-        );
+    let has_flush_error = writer.has_flush_error.load(Ordering::SeqCst);
+    let anki_updates = writer.success_count();
+
+    if !has_flush_error {
+        eprintln!("\nSuccessfully updated {anki_updates} notes in Anki.");
     }
 
-    let anki_updates = writer.success_count();
-    eprintln!("\nSuccessfully updated {anki_updates} notes in Anki.");
-
-    // Save snapshot for rollback
+    // Save snapshot for rollback — even on partial failure, so notes that
+    // were successfully flushed before the error can still be rolled back.
     let revisions = writer.take_revisions();
     if !revisions.is_empty() {
         let snapshot = Snapshot {
@@ -288,6 +285,13 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
                 eprintln!("Warning: failed to save snapshot: {e}");
             }
         }
+    }
+
+    if has_flush_error {
+        bail!(
+            "failed to update Anki — some processed notes were not saved. \
+             Check Anki connectivity and try again."
+        );
     }
 
     let failures = outcomes

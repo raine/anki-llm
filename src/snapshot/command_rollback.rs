@@ -12,7 +12,10 @@ pub fn run(args: RollbackArgs) -> Result<()> {
     let mut snapshot = load_snapshot(&args.run_id)?;
 
     if snapshot.rolled_back {
-        bail!("snapshot {} has already been rolled back", args.run_id);
+        eprintln!(
+            "Warning: snapshot {} was previously rolled back. Proceeding anyway.",
+            args.run_id
+        );
     }
 
     if snapshot.notes.is_empty() {
@@ -41,7 +44,11 @@ pub fn run(args: RollbackArgs) -> Result<()> {
         current_notes
             .into_iter()
             .map(|n| {
-                let fields = n.fields.into_iter().map(|(k, v)| (k, v.value)).collect();
+                let fields = n
+                    .fields
+                    .into_iter()
+                    .map(|(k, v)| (k, v.value.replace('\r', "")))
+                    .collect();
                 (n.note_id, fields)
             })
             .collect();
@@ -60,9 +67,10 @@ pub fn run(args: RollbackArgs) -> Result<()> {
         let mut conflict_fields = Vec::new();
         for (field, after_value) in &rev.after_fields {
             if let Some(current_value) = current_fields.get(field)
-                && current_value != after_value {
-                    conflict_fields.push(field.clone());
-                }
+                && current_value != after_value
+            {
+                conflict_fields.push(field.clone());
+            }
         }
 
         if !conflict_fields.is_empty() && !args.force {
@@ -70,12 +78,13 @@ pub fn run(args: RollbackArgs) -> Result<()> {
             continue;
         }
 
-        // Build updateNoteFields action restoring before_fields
-        let fields: serde_json::Map<String, Value> = rev
-            .before_fields
-            .iter()
-            .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-            .collect();
+        // Restore only the fields that were changed during the run
+        let mut fields = serde_json::Map::new();
+        for changed_key in rev.after_fields.keys() {
+            if let Some(old_val) = rev.before_fields.get(changed_key) {
+                fields.insert(changed_key.clone(), Value::String(old_val.clone()));
+            }
+        }
 
         updates.push(json!({
             "action": "updateNoteFields",
@@ -145,9 +154,12 @@ pub fn run(args: RollbackArgs) -> Result<()> {
         );
     }
 
-    // Mark snapshot as rolled back
-    snapshot.rolled_back = true;
-    save_snapshot(&snapshot)?;
+    // Mark snapshot as rolled back only if all notes were restored
+    let all_restored = conflicts.is_empty() && missing.is_empty();
+    if all_restored {
+        snapshot.rolled_back = true;
+        save_snapshot(&snapshot)?;
+    }
 
     eprintln!(
         "\n{} Successfully rolled back {} note(s).",

@@ -56,12 +56,14 @@ pub fn snapshots_dir() -> Result<PathBuf> {
         .join("snapshots"))
 }
 
-/// Generate a sortable run ID from current UTC time: 20260411T153000Z
+/// Generate a sortable run ID from current UTC time: 20260411T153000_123Z
+/// Includes milliseconds to avoid collisions from rapid successive runs.
 pub fn generate_run_id() -> String {
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default();
     let secs = now.as_secs();
+    let millis = now.subsec_millis();
 
     // Manual UTC breakdown (no chrono needed)
     let days = secs / 86400;
@@ -73,7 +75,7 @@ pub fn generate_run_id() -> String {
     // Days since epoch to y/m/d
     let (year, month, day) = days_to_ymd(days);
 
-    format!("{year:04}{month:02}{day:02}T{hours:02}{minutes:02}{seconds:02}Z")
+    format!("{year:04}{month:02}{day:02}T{hours:02}{minutes:02}{seconds:02}_{millis:03}Z")
 }
 
 /// Generate a human-readable UTC timestamp.
@@ -165,7 +167,8 @@ mod tests {
     #[test]
     fn run_id_is_sortable() {
         let id1 = generate_run_id();
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        // Sleep briefly to ensure different millisecond
+        std::thread::sleep(std::time::Duration::from_millis(5));
         let id2 = generate_run_id();
         assert!(id2 > id1, "run IDs should be lexicographically sortable");
     }
