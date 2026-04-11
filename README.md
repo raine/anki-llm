@@ -561,9 +561,15 @@ area shows a scrollable log. You can cancel with `Esc` to go back to input.
 
 **Card selection** — Browse generated cards with a list on the left and a detail
 pane on the right. Toggle cards with `Space`, select all/none with `a`/`n`.
-Duplicates are flagged with `[dup]` and cannot be selected. Press `r` to
-generate more cards for the same term without losing your current selection.
-Press `c` to copy the focused card to clipboard. Confirm with `Enter`.
+Duplicates are flagged with `[dup]` and show a field-by-field diff against the
+existing Anki note; press `f` to force-select a duplicate for import. Press `r`
+to generate more cards for the same term, or `t` to generate for a different
+term — both keep your current selection. Press `R` to regenerate the focused
+card with feedback (e.g. "make the definition simpler"). Press `e` to edit a
+card in your `$EDITOR`. Press `d` to remove a card from the list, `c` to copy
+to clipboard. Switch model with `Ctrl+O` (type to filter, `Ctrl+N`/`Ctrl+P` to
+navigate). When cards from multiple models are present, each card shows its
+model. Confirm with `Enter`.
 
 **Quality check review** — If quality checking is enabled, flagged cards are
 presented one at a time with the LLM's reasoning. Keep (`k`/`y`/`Enter`) or
