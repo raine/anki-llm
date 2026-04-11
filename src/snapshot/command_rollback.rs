@@ -7,6 +7,8 @@ use crate::style::style;
 
 use super::store::{load_snapshot, save_snapshot};
 
+const ROLLBACK_BATCH_SIZE: usize = 50;
+
 pub fn run(args: RollbackArgs) -> Result<()> {
     let s = style();
     let mut snapshot = load_snapshot(&args.run_id)?;
@@ -78,12 +80,20 @@ pub fn run(args: RollbackArgs) -> Result<()> {
             continue;
         }
 
-        // Restore only the fields that were changed during the run
+        // Restore only fields that were changed during the run AND still exist
+        // on the note type. Skip removed fields to avoid AnkiConnect errors.
         let mut fields = serde_json::Map::new();
         for changed_key in rev.after_fields.keys() {
+            if !current_fields.contains_key(changed_key) {
+                continue;
+            }
             if let Some(old_val) = rev.before_fields.get(changed_key) {
                 fields.insert(changed_key.clone(), Value::String(old_val.clone()));
             }
+        }
+
+        if fields.is_empty() {
+            continue;
         }
 
         updates.push(json!({
@@ -134,29 +144,26 @@ pub fn run(args: RollbackArgs) -> Result<()> {
         return Ok(());
     }
 
-    // Execute rollback
+    // Execute rollback in batches
     eprintln!("\nRestoring {} note(s)...", updates.len());
-    let results = anki
-        .multi(&updates)
-        .context("failed to send rollback updates to Anki")?;
+    let mut total_failures = 0;
+    for chunk in updates.chunks(ROLLBACK_BATCH_SIZE) {
+        let results = anki
+            .multi(chunk)
+            .context("failed to send rollback updates to Anki")?;
+        total_failures += results.iter().filter(|r| !r.is_null()).count();
+    }
 
-    let failures: Vec<_> = results
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| !r.is_null())
-        .collect();
-
-    if !failures.is_empty() {
+    if total_failures > 0 {
         bail!(
             "{} of {} rollback operations failed",
-            failures.len(),
+            total_failures,
             updates.len()
         );
     }
 
-    // Mark snapshot as rolled back only if all notes were restored
-    let all_restored = conflicts.is_empty() && missing.is_empty();
-    if all_restored {
+    // Mark snapshot as rolled back if all notes were handled
+    if conflicts.is_empty() && missing.is_empty() || args.force {
         snapshot.rolled_back = true;
         save_snapshot(&snapshot)?;
     }

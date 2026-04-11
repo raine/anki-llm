@@ -122,12 +122,25 @@ pub fn save_snapshot(snapshot: &Snapshot) -> Result<PathBuf> {
 
 /// Load a snapshot by run ID.
 pub fn load_snapshot(run_id: &str) -> Result<Snapshot> {
+    validate_run_id(run_id)?;
     let path = snapshots_dir()?.join(format!("{run_id}.json"));
     let content =
         fs::read_to_string(&path).with_context(|| format!("snapshot not found: {run_id}"))?;
     let snapshot: Snapshot = serde_json::from_str(&content)
         .with_context(|| format!("failed to parse snapshot: {}", path.display()))?;
     Ok(snapshot)
+}
+
+/// Validate that a run ID contains only safe characters (alphanumeric, T, Z, _).
+fn validate_run_id(run_id: &str) -> Result<()> {
+    if run_id.is_empty()
+        || !run_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == 'T' || c == 'Z' || c == '_')
+    {
+        anyhow::bail!("invalid run ID: {run_id}");
+    }
+    Ok(())
 }
 
 /// List all snapshots sorted by run_id descending (most recent first).

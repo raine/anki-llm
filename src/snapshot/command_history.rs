@@ -14,11 +14,11 @@ pub fn run() -> Result<()> {
 
     let s = style();
     eprintln!(
-        "{:<22} {:<24} {:<18} {:>5}  {}",
-        s.bold("Run ID"),
-        s.bold("Deck"),
-        s.bold("Model"),
-        s.bold("Notes"),
+        "{} {} {} {}  {}",
+        s.bold(format!("{:<22}", "Run ID")),
+        s.bold(format!("{:<24}", "Deck")),
+        s.bold(format!("{:<18}", "Model")),
+        s.bold(format!("{:>5}", "Notes")),
         s.bold("Status"),
     );
     eprintln!("{}", s.dim("─".repeat(78)));

@@ -116,14 +116,15 @@ impl DeckWriter {
                 continue;
             }
             let current = match value {
-                Value::String(s) => s.clone(),
+                Value::String(s) => s.replace('\r', ""),
                 Value::Null => String::new(),
                 other => other.to_string(),
             };
             if let Some(original) = before.get(key)
-                && &current != original {
-                    after_fields.insert(key.clone(), current);
-                }
+                && &current != original
+            {
+                after_fields.insert(key.clone(), current);
+            }
         }
 
         // Only record if something actually changed
