@@ -318,6 +318,16 @@ fn draw_row_table(state: &RunState, frame: &mut Frame, area: Rect) {
     let start = state.scroll;
     let end = (start + visible_height).min(state.row_order.len());
 
+    // Size ID column to fit the widest ID (min 2 for "ID" header, +1 for padding)
+    let id_width = state
+        .rows
+        .iter()
+        .map(|r| r.id.len())
+        .max()
+        .unwrap_or(2)
+        .max(2) as u16
+        + 1;
+
     let header = Row::new(vec![
         Cell::from(Span::styled("ID", Style::default().fg(THEME.header))),
         Cell::from(Span::styled("Preview", Style::default().fg(THEME.header))),
@@ -382,7 +392,7 @@ fn draw_row_table(state: &RunState, frame: &mut Frame, area: Rect) {
     let table = Table::new(
         rows,
         [
-            Constraint::Length(12),
+            Constraint::Length(id_width),
             Constraint::Min(10),
             Constraint::Length(8),
             Constraint::Length(8),
