@@ -9,6 +9,7 @@ pub struct TokenStats {
 }
 
 impl TokenStats {
+    #[cfg(test)]
     pub fn total(&self) -> u64 {
         self.input + self.output
     }
