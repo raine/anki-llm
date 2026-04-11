@@ -363,10 +363,17 @@ fn draw_row_table(state: &RunState, frame: &mut Frame, area: Rect) {
             };
 
             Row::new(vec![
-                Cell::from(Span::styled(
-                    row.id.clone(),
-                    Style::default().fg(THEME.text),
-                )),
+                Cell::from(Line::from(if row.preview.is_empty() {
+                    vec![Span::styled(
+                        row.id.clone(),
+                        Style::default().fg(THEME.text),
+                    )]
+                } else {
+                    vec![
+                        Span::styled(format!("{} ", row.id), Style::default().fg(THEME.dimmed)),
+                        Span::styled(row.preview.clone(), Style::default().fg(THEME.text)),
+                    ]
+                })),
                 Cell::from(Span::styled(status_str, status_style)),
                 Cell::from(Span::styled(attempt_str, Style::default().fg(THEME.dimmed))),
                 Cell::from(Span::styled(elapsed_str, Style::default().fg(THEME.dimmed))),

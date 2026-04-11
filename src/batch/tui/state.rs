@@ -30,6 +30,7 @@ impl RunState {
             .iter()
             .map(|rd| RowStatus {
                 id: rd.id.clone(),
+                preview: rd.preview.clone(),
                 state: RowState::Succeeded, // placeholder — will be Pending-like
                 attempt: 0,
                 max_attempts: plan.retries + 1,
@@ -167,6 +168,7 @@ impl RunStats {
 
 pub struct RowStatus {
     pub id: String,
+    pub preview: String,
     pub state: RowState,
     pub attempt: u32,
     pub max_attempts: u32,
