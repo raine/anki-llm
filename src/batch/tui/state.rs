@@ -90,21 +90,8 @@ impl RunState {
     }
 
     fn rebuild_row_order(&mut self) {
-        // Running/retrying first, then rest in input order
-        let mut running = Vec::new();
-        let mut rest = Vec::new();
-        for i in 0..self.rows.len() {
-            if matches!(
-                self.rows[i].state,
-                RowState::Running | RowState::Retrying { .. }
-            ) {
-                running.push(i);
-            } else {
-                rest.push(i);
-            }
-        }
-        running.extend(rest);
-        self.row_order = running;
+        // Stable input order — running rows are visually distinct via spinner icon
+        // so no need to reorder them to the top.
     }
 
     pub fn scroll_down(&mut self) {
