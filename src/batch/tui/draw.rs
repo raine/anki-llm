@@ -197,7 +197,7 @@ fn draw_running(state: &RunState, plan: &BatchPlan, frame: &mut Frame) {
 
 fn draw_sidebar(state: &RunState, plan: &BatchPlan, frame: &mut Frame, area: Rect) {
     let stats = &state.stats;
-    let elapsed = stats.start_time.elapsed();
+    let elapsed = stats.elapsed();
 
     // Progress ratio
     let completed = stats.succeeded + stats.failed;

@@ -124,6 +124,8 @@ pub struct RunStats {
     pub cost: f64,
     pub start_time: Instant,
     pub row_durations: Vec<Duration>,
+    /// Set when the run completes to freeze the elapsed display.
+    pub frozen_elapsed: Option<Duration>,
 }
 
 impl RunStats {
@@ -139,7 +141,13 @@ impl RunStats {
             cost: 0.0,
             start_time: Instant::now(),
             row_durations: Vec::new(),
+            frozen_elapsed: None,
         }
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        self.frozen_elapsed
+            .unwrap_or_else(|| self.start_time.elapsed())
     }
 
     pub fn eta(&self) -> Option<Duration> {

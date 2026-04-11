@@ -154,13 +154,15 @@ fn handle_batch_event(mode: &mut AppMode, event: BatchEvent) {
             };
             // Take the RunState out of the current mode
             let prev = std::mem::replace(mode, AppMode::Error(String::new()));
-            let run = match prev {
+            let mut run = match prev {
                 AppMode::Running(run) => run,
                 other => {
                     *mode = other;
                     return;
                 }
             };
+            // Freeze elapsed time so the sidebar stops ticking
+            run.stats.frozen_elapsed = Some(run.stats.start_time.elapsed());
             *mode = AppMode::Done(DoneState {
                 summary,
                 run,
