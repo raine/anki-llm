@@ -95,7 +95,7 @@ cargo install anki-llm
 
 - Anki Desktop must be running.
 - The [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on must be
-  installed in Anki.
+  installed in Anki. ([Why?](#why-ankiconnect))
 
 ## LLM Configuration
 
@@ -1365,3 +1365,10 @@ Press <kbd>Enter</kbd> to confirm your selection and import the cards into Anki.
 After import, you can press <kbd>n</kbd> to start a new term, <kbd>r</kbd> to
 retry, or <kbd>q</kbd> to quit. Session cost is tracked in the sidebar
 throughout.
+
+## Why AnkiConnect?
+
+Anki doesn't provide a built-in API for external tools to read or modify your
+collection. AnkiConnect fills that gap by exposing a local REST API that
+`anki-llm` uses to export notes, import changes, and add generated cards.
+Without it, there's no way for `anki-llm` to communicate with Anki.
