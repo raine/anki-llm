@@ -551,7 +551,10 @@ the current mode.
 **Input** — Type or paste a term to generate cards for. Use `↑`/`↓` to browse
 previous terms (history is persisted across sessions). Press `Enter` to start
 generation. After a run completes, you're returned to the input to generate
-cards for another term.
+cards for another term. **Batch input**: paste a multi-line list of terms and
+they'll all be queued for sequential processing — the sidebar and footer show
+batch progress (e.g. `Term 3/10: 猫`) and all generated cards accumulate into a
+single selection screen.
 
 **Generation** — The sidebar tracks each pipeline step (load prompt, validate,
 generate, post-process, check duplicates, etc.) with real-time status. The main
