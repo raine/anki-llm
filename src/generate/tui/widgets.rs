@@ -10,6 +10,7 @@ use super::theme::THEME;
 
 pub(super) struct ModelPickerState {
     pub(super) models: Vec<String>,
+    pub(super) filter: String,
     pub(super) cursor: usize,
     pub(super) list_state: ListState,
 }
@@ -23,8 +24,34 @@ impl ModelPickerState {
         list_state.select(Some(cursor));
         Self {
             models,
+            filter: String::new(),
             cursor,
             list_state,
+        }
+    }
+
+    pub(super) fn filtered_models(&self) -> Vec<&str> {
+        if self.filter.is_empty() {
+            self.models.iter().map(|s| s.as_str()).collect()
+        } else {
+            let normalized_filter: String = self
+                .filter
+                .to_lowercase()
+                .chars()
+                .filter(|c| *c != '-' && *c != '.')
+                .collect();
+            self.models
+                .iter()
+                .filter(|m| {
+                    let normalized: String = m
+                        .to_lowercase()
+                        .chars()
+                        .filter(|c| *c != '-' && *c != '.')
+                        .collect();
+                    normalized.contains(&normalized_filter)
+                })
+                .map(|s| s.as_str())
+                .collect()
         }
     }
 
@@ -36,19 +63,42 @@ impl ModelPickerState {
     }
 
     pub(super) fn move_down(&mut self) {
-        if self.cursor + 1 < self.models.len() {
+        let filtered = self.filtered_models();
+        if self.cursor + 1 < filtered.len() {
             self.cursor += 1;
             self.list_state.select(Some(self.cursor));
         }
     }
 
     pub(super) fn selected(&self) -> Option<&str> {
-        self.models.get(self.cursor).map(|s| s.as_str())
+        let filtered = self.filtered_models();
+        filtered.get(self.cursor).copied()
+    }
+
+    pub(super) fn add_filter_char(&mut self, c: char) {
+        self.filter.push(c);
+        self.clamp_cursor();
+    }
+
+    pub(super) fn remove_filter_char(&mut self) {
+        self.filter.pop();
+        self.clamp_cursor();
+    }
+
+    fn clamp_cursor(&mut self) {
+        let len = self.filtered_models().len();
+        if len == 0 {
+            self.cursor = 0;
+        } else if self.cursor >= len {
+            self.cursor = len - 1;
+        }
+        self.list_state.select(Some(self.cursor));
     }
 }
 
 pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
-    let row_count = picker.models.len() as u16;
+    let filtered = picker.filtered_models();
+    let row_count = filtered.len() as u16;
     let height = (row_count + 2).min(20); // borders
     let width: u16 = 48;
 
@@ -60,10 +110,8 @@ pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
         height.min(area.height),
     );
 
-    let block = Block::bordered()
-        .border_type(ratatui::widgets::BorderType::Rounded)
-        .border_style(Style::default().fg(THEME.help_border))
-        .title(Line::from(vec![
+    let title = if picker.filter.is_empty() {
+        Line::from(vec![
             Span::styled(" ", Style::default()),
             Span::styled(
                 "Model",
@@ -72,7 +120,29 @@ pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(" ", Style::default()),
-        ]))
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(" ", Style::default()),
+            Span::styled(
+                "Model",
+                Style::default()
+                    .fg(THEME.header)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" [", Style::default().fg(THEME.dimmed)),
+            Span::styled(
+                picker.filter.as_str(),
+                Style::default().fg(THEME.highlight_fg),
+            ),
+            Span::styled("] ", Style::default().fg(THEME.dimmed)),
+        ])
+    };
+
+    let block = Block::bordered()
+        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_style(Style::default().fg(THEME.help_border))
+        .title(title)
         .title_bottom(Line::from(vec![
             Span::styled(" ", Style::default()),
             Span::styled("Enter", Style::default().fg(THEME.dimmed)),
@@ -84,8 +154,7 @@ pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
     // Inner width: total width - 2 borders - 2 highlight symbol
     let inner_w = width.saturating_sub(4) as usize;
 
-    let items: Vec<ListItem> = picker
-        .models
+    let items: Vec<ListItem> = filtered
         .iter()
         .map(|m| {
             let price = pricing::model_pricing(m)
@@ -93,7 +162,7 @@ pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
                 .unwrap_or_default();
             let pad = inner_w.saturating_sub(m.len() + price.len());
             ListItem::new(Line::from(vec![
-                Span::styled(m.as_str(), Style::default().fg(THEME.text)),
+                Span::styled(*m, Style::default().fg(THEME.text)),
                 Span::raw(" ".repeat(pad)),
                 Span::styled(price, Style::default().fg(THEME.dimmed)),
             ]))

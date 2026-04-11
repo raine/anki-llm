@@ -439,8 +439,16 @@ impl App {
         // Model picker overlay intercepts all keys when visible
         if let Some(ref mut picker) = self.model_picker {
             match key.code {
-                KeyCode::Up | KeyCode::Char('k') => picker.move_up(),
-                KeyCode::Down | KeyCode::Char('j') => picker.move_down(),
+                KeyCode::Up => picker.move_up(),
+                KeyCode::Down => picker.move_down(),
+                KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    picker.move_down()
+                }
+                KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    picker.move_up()
+                }
+                KeyCode::Backspace => picker.remove_filter_char(),
+                KeyCode::Char(c) => picker.add_filter_char(c),
                 KeyCode::Enter => {
                     if let Some(model) = picker.selected().map(|s| s.to_string()) {
                         let changed = self
