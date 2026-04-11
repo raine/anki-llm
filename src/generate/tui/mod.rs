@@ -95,9 +95,6 @@ struct App {
     model_picker: Option<ModelPickerState>,
     /// Last term submitted, for retry.
     last_term: Option<String>,
-    /// Cards to prepend when the next RequestSelection arrives (used when
-    /// model change cancels the pipeline but existing cards should be kept).
-    retained_cards: Vec<ValidatedCard>,
     /// Model name to apply before the next pipeline run (deferred model change).
     pending_model: Option<String>,
     /// True after a Fatal error — worker is dead, no new runs possible.
@@ -159,7 +156,6 @@ impl App {
             show_help: false,
             model_picker: None,
             last_term,
-            retained_cards: Vec::new(),
             pending_model: None,
             is_fatal: false,
             glyphs,
@@ -276,13 +272,14 @@ impl App {
                     *st = status;
                 }
             }
-            BackendEvent::RequestSelection(mut cards) => {
-                if !self.retained_cards.is_empty() {
-                    let mut merged = std::mem::take(&mut self.retained_cards);
-                    merged.extend(cards);
-                    cards = merged;
+            BackendEvent::RequestSelection(cards) => {
+                if let AppMode::Selecting(ref mut state) = self.mode {
+                    // Already selecting (model-change refresh): append new cards
+                    state.cards.extend(cards);
+                    state.refresh_in_flight = false;
+                } else {
+                    self.mode = AppMode::Selecting(SelectionState::new(cards));
                 }
-                self.mode = AppMode::Selecting(SelectionState::new(cards));
             }
             BackendEvent::AppendCards(new_cards) => {
                 if let AppMode::Selecting(ref mut state) = self.mode {
@@ -639,12 +636,10 @@ impl App {
                         self.last_term = Some(term.clone());
                         if let Some(model) = self.pending_model.take() {
                             // Deferred model change: cancel, switch, start fresh.
-                            self.retained_cards = state.cards.clone();
+                            state.refresh_in_flight = true;
                             self.worker_tx.send(WorkerCommand::Cancel).ok();
                             self.pending_cancels += 1;
                             self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
-                            self.reset_for_new_run();
-                            self.mode = AppMode::Running;
                             self.worker_tx.send(WorkerCommand::Start(term)).ok();
                         } else {
                             state.refresh_in_flight = true;
@@ -675,14 +670,13 @@ impl App {
             KeyCode::Char('r') if !state.refresh_in_flight => {
                 if let Some(model) = self.pending_model.take() {
                     // Deferred model change: cancel current pipeline, switch
-                    // model, and start a fresh one. Existing cards are retained.
-                    self.retained_cards = state.cards.clone();
+                    // model, and start a fresh one. Stay in selection view —
+                    // new cards will be appended when they arrive.
+                    state.refresh_in_flight = true;
                     self.worker_tx.send(WorkerCommand::Cancel).ok();
                     self.pending_cancels += 1;
                     self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
-                    self.reset_for_new_run();
                     let term = self.last_term.clone().unwrap_or_default();
-                    self.mode = AppMode::Running;
                     self.worker_tx.send(WorkerCommand::Start(term)).ok();
                 } else {
                     state.refresh_in_flight = true;
