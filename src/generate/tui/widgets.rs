@@ -105,7 +105,13 @@ impl ModelPickerState {
 
 pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
     let filtered = picker.filtered_models();
-    let row_count = filtered.len() as u16;
+    // When no known model matches a non-empty filter, we show a synthetic
+    // "Use '<filter>'" row, so ensure at least 1 row for the height calc.
+    let row_count = if filtered.is_empty() && !picker.filter.is_empty() {
+        1u16
+    } else {
+        filtered.len() as u16
+    };
     let height = (row_count + 2).min(20); // borders
     let width: u16 = 48;
 

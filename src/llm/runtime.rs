@@ -26,29 +26,6 @@ pub struct RuntimeConfigArgs<'a> {
     pub dry_run: bool,
 }
 
-/// Returns true if the given base URL looks like a local server
-/// (localhost, 127.0.0.1, [::1]), where API keys are typically not needed.
-fn is_local_url(url: &str) -> bool {
-    // Strip scheme
-    let host_part = url
-        .strip_prefix("http://")
-        .or_else(|| url.strip_prefix("https://"))
-        .unwrap_or(url);
-    // Strip path, query, etc.
-    let host = host_part.split('/').next().unwrap_or(host_part);
-    // Strip port
-    let host_no_port = if host.starts_with('[') {
-        // IPv6: [::1]:8080
-        host.split(']').next().unwrap_or(host)
-    } else {
-        host.split(':').next().unwrap_or(host)
-    };
-    host_no_port == "localhost"
-        || host_no_port == "127.0.0.1"
-        || host_no_port == "[::1"
-        || host_no_port == "0.0.0.0"
-}
-
 /// Build a RuntimeConfig from CLI args and environment.
 /// Validates temperature range. Resolves API key and base URL with precedence:
 /// CLI flag > environment variable > config file > auto-detect.
@@ -62,17 +39,19 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
     }
 
     // Resolve base URL: CLI flag > ANKI_LLM_API_BASE_URL env > config file > provider auto-detect
-    let api_base_url = if let Some(url) = args.api_base_url {
-        Some(url.to_string())
+    // Track whether the user explicitly configured a custom endpoint, because
+    // custom endpoints don't require an API key (the server decides).
+    let (api_base_url, custom_endpoint) = if let Some(url) = args.api_base_url {
+        (Some(url.to_string()), true)
     } else if let Ok(url) = std::env::var("ANKI_LLM_API_BASE_URL") {
-        Some(url)
+        (Some(url), true)
     } else if let Ok(config) = crate::config::store::read_config()
         && let Some(ref url) = config.api_base_url
     {
-        Some(url.clone())
+        (Some(url.clone()), true)
     } else {
         // Fall back to provider auto-detection (Gemini, OpenAI)
-        provider::provider_config(&model).base_url
+        (provider::provider_config(&model).base_url, false)
     };
 
     // Resolve API key: CLI flag > ANKI_LLM_API_KEY env > provider-specific env var
@@ -90,18 +69,17 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
         api_key_for_model(&model)
     };
 
-    // Only require an API key for non-local, non-dry-run requests
-    if !args.dry_run && api_key.is_none() {
-        let is_local = api_base_url.as_deref().is_some_and(is_local_url);
-        if !is_local {
-            let provider = provider::provider_config(&model);
-            bail!(
-                "API key required: set ANKI_LLM_API_KEY, {} environment variable, or pass --api-key\n\
-                 Tip: for local servers (Ollama), set --api-base-url and no key is needed\n\
-                 Or use --dry-run to preview without an API key",
-                provider.api_key_env,
-            );
-        }
+    // Only require an API key for auto-detected providers (OpenAI, Gemini).
+    // Custom endpoints (user-configured base URL) are allowed without auth —
+    // the server decides whether to reject unauthenticated requests.
+    if !args.dry_run && api_key.is_none() && !custom_endpoint {
+        let provider = provider::provider_config(&model);
+        bail!(
+            "API key required: set ANKI_LLM_API_KEY, {} environment variable, or pass --api-key\n\
+             Tip: for custom endpoints, set --api-base-url and no key is needed\n\
+             Or use --dry-run to preview without an API key",
+            provider.api_key_env,
+        );
     }
 
     let temperature = if provider::omit_temperature(&model) {
@@ -162,9 +140,8 @@ mod tests {
     }
 
     #[test]
-    fn accepts_unknown_model_with_local_url() {
-        // Local URLs don't require an API key, even if one happens to be
-        // available in the environment (e.g. OPENAI_API_KEY).
+    fn accepts_unknown_model_with_custom_endpoint() {
+        // Custom endpoints don't require an API key.
         let result = build_runtime_config(RuntimeConfigArgs {
             model: Some("meta-llama/llama-3-8b-instruct"),
             api_base_url: Some("http://localhost:11434/v1"),
@@ -250,12 +227,27 @@ mod tests {
     }
 
     #[test]
-    fn local_url_detection() {
-        assert!(is_local_url("http://localhost:11434/v1"));
-        assert!(is_local_url("http://127.0.0.1:8080/v1"));
-        assert!(is_local_url("http://0.0.0.0:8000"));
-        assert!(!is_local_url("https://api.openai.com/v1"));
-        assert!(!is_local_url("https://openrouter.ai/api/v1"));
+    fn custom_endpoint_does_not_require_api_key() {
+        // Custom endpoints should never fail for missing API key, even when
+        // no provider-specific env var is set (the key may still be picked up
+        // from the environment, but that's fine — what matters is no error).
+        let result = build_runtime_config(RuntimeConfigArgs {
+            model: Some("llama3"),
+            api_base_url: Some("http://my-server.lan:8080/v1"),
+            api_key: None,
+            batch_size: None,
+            max_tokens: None,
+            temperature: None,
+            retries: 2,
+            dry_run: false,
+        });
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert_eq!(config.model, "llama3");
+        assert_eq!(
+            config.api_base_url.as_deref(),
+            Some("http://my-server.lan:8080/v1")
+        );
     }
 
     #[test]
