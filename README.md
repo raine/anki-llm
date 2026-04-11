@@ -606,6 +606,14 @@ The frontmatter is a YAML block at the top of the file enclosed by `---`.
 
 ##### Optional: Processing Steps
 
+Asking a single LLM call to generate content, format fields correctly, add
+furigana, and verify quality all at once tends to degrade each individual
+aspect. Processing steps let you split this work into a pipeline where each
+step handles one concern with a focused prompt. The generation prompt can
+concentrate on producing natural, diverse content, while separate steps handle
+mechanical tasks like furigana annotation or quality checks — optionally using
+cheaper, faster models for those steps.
+
 The `processing` config lets you run LLM steps in two phases:
 
 - **`pre_select`**: Runs after generation, before you choose cards. Useful for
