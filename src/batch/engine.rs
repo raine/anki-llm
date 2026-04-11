@@ -1,35 +1,14 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use indicatif::{ProgressBar, ProgressStyle};
-
 use crate::data::Row;
+use crate::data::rows::get_note_id;
 use crate::llm::pricing;
 
 use super::error::BatchError;
+use super::events::{BatchEvent, BatchSummary, FailedRowInfo, RowState, RowUpdate};
 use super::report::{RowOutcome, TokenStats};
-
-/// The progress bar for the currently running batch, used by the ctrlc handler
-/// to print the interrupt message without tearing the progress bar.
-static CURRENT_PB: LazyLock<Mutex<Option<ProgressBar>>> = LazyLock::new(|| Mutex::new(None));
-
-/// Global interrupted flag shared across all run_batch calls. The ctrlc
-/// handler is installed once on first use; subsequent calls to run_batch
-/// reuse the same flag and handler.
-static INTERRUPTED: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| {
-    let flag = Arc::new(AtomicBool::new(false));
-    let flag_clone = Arc::clone(&flag);
-    let _ = ctrlc::set_handler(move || {
-        flag_clone.store(true, Ordering::SeqCst);
-        let pb_guard = CURRENT_PB.lock().unwrap();
-        match pb_guard.as_ref() {
-            Some(pb) => pb.println("Interrupting... waiting for active requests to finish."),
-            None => eprintln!("Interrupting... waiting for active requests to finish."),
-        }
-    });
-    flag
-});
 
 /// Configuration for the batch engine.
 pub struct BatchConfig {
@@ -51,48 +30,28 @@ pub type ProcessFn =
 ///
 /// Returns (outcomes, token stats, interrupted). Outcomes are in completion
 /// order, not input order. When interrupted, only started rows are present.
+///
+/// Events are emitted to `event_tx` for UI rendering. All sends use `.ok()`
+/// so a dropped receiver (e.g. user quit TUI) won't panic the engine.
 pub fn run_batch(
     rows: Vec<Row>,
     process: ProcessFn,
     config: &BatchConfig,
     on_row_done: Option<OnRowDone>,
+    event_tx: mpsc::Sender<BatchEvent>,
+    cancel: Arc<AtomicBool>,
 ) -> (Vec<RowOutcome>, TokenStats, bool) {
     let total = rows.len();
-    // Reset the global flag at the start of each batch (previous batch may
-    // have been interrupted and left it set).
-    let interrupted = Arc::clone(&*INTERRUPTED);
-    interrupted.store(false, Ordering::SeqCst);
-
-    // Set up progress bar
-    let pb = ProgressBar::new(total as u64);
-    pb.set_style(
-        ProgressStyle::with_template(
-            "{spinner:.cyan} [{elapsed_precise}] {bar:28.cyan/dim} {pos}/{len}  {msg}",
-        )
-        .unwrap()
-        .progress_chars("━━─")
-        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
-    );
-
-    // Shared state — plain values behind Mutex/Atomic; scoped threads borrow
-    // them directly without Arc since the scope guarantees they don't outlive
-    // this stack frame. Only `interrupted` needs Arc because it's also held by
-    // the static ctrlc handler installed above.
     let tokens = Mutex::new(TokenStats::default());
     let completed: Mutex<Vec<RowOutcome>> = Mutex::new(Vec::new());
     let next_index = AtomicUsize::new(0);
-
-    // Register the current progress bar so the static ctrlc handler can print
-    // through it (avoids tearing the progress bar display on interrupt).
-    *CURRENT_PB.lock().unwrap() = Some(pb.clone());
-
     let start = Instant::now();
 
     std::thread::scope(|s| {
         for _ in 0..config.batch_size {
             s.spawn(|| {
                 loop {
-                    if interrupted.load(Ordering::SeqCst) {
+                    if cancel.load(Ordering::SeqCst) {
                         break;
                     }
 
@@ -102,22 +61,23 @@ pub fn run_batch(
                     }
 
                     let row = &rows[idx];
-                    let outcome = process_with_retry(row, &process, config.retries, &tokens, &pb);
+                    let outcome = process_with_retry(
+                        row,
+                        idx,
+                        &process,
+                        config.retries,
+                        &tokens,
+                        &event_tx,
+                        &cancel,
+                        &config.model,
+                    );
 
                     // Notify callback — abort if it returns true
                     if let Some(ref cb) = on_row_done
                         && cb(&outcome)
                     {
-                        interrupted.store(true, Ordering::SeqCst);
+                        cancel.store(true, Ordering::SeqCst);
                     }
-
-                    // Update progress
-                    {
-                        let t = tokens.lock().unwrap();
-                        let cost = pricing::calculate_cost(&config.model, t.input, t.output);
-                        pb.set_message(pricing::format_cost(cost));
-                    }
-                    pb.inc(1);
 
                     completed.lock().unwrap().push(outcome);
                 }
@@ -125,11 +85,8 @@ pub fn run_batch(
         }
     });
 
-    pb.finish_and_clear();
-    *CURRENT_PB.lock().unwrap() = None;
-
     let elapsed = start.elapsed();
-    let was_interrupted = interrupted.load(Ordering::SeqCst);
+    let was_interrupted = cancel.load(Ordering::SeqCst);
     let outcomes = completed.into_inner().unwrap();
     let tokens = tokens.into_inner().unwrap();
 
@@ -138,50 +95,147 @@ pub fn run_batch(
         .filter(|o| matches!(o, RowOutcome::Success(_)))
         .count();
     let failed = outcomes.len() - succeeded;
-    super::report::print_summary(&config.model, &tokens, succeeded, failed, elapsed);
 
-    if was_interrupted {
-        let s = crate::style::style();
-        eprintln!(
-            "{}",
-            s.yellow("Interrupted by user. Partial results saved.")
-        );
-    }
+    let cost = pricing::calculate_cost(&config.model, tokens.input, tokens.output);
+    let failed_rows: Vec<FailedRowInfo> = outcomes
+        .iter()
+        .filter_map(|o| match o {
+            RowOutcome::Failure { row, error } => Some(FailedRowInfo {
+                id: get_note_id(row).unwrap_or_default(),
+                error: error.clone(),
+                row_data: row.clone(),
+            }),
+            _ => None,
+        })
+        .collect();
+
+    event_tx
+        .send(BatchEvent::RunDone(BatchSummary {
+            total: outcomes.len(),
+            succeeded,
+            failed,
+            input_tokens: tokens.input,
+            output_tokens: tokens.output,
+            cost,
+            elapsed,
+            interrupted: was_interrupted,
+            output_path: String::new(), // filled by caller
+            model: config.model.clone(),
+            failed_rows,
+        }))
+        .ok();
 
     (outcomes, tokens, was_interrupted)
 }
 
 /// Process a single row with retry and exponential backoff.
 /// Token usage is accumulated into `tokens` on each successful attempt.
+/// Events are emitted for each state transition.
 fn process_with_retry(
     row: &Row,
+    index: usize,
     process: &ProcessFn,
     max_retries: u32,
     tokens: &Mutex<TokenStats>,
-    pb: &ProgressBar,
+    event_tx: &mpsc::Sender<BatchEvent>,
+    cancel: &AtomicBool,
+    model: &str,
 ) -> RowOutcome {
-    // Keep the inline loop (rather than retry_with_backoff) so retry messages
-    // go through pb.println and don't tear the live progress bar display.
+    let start = Instant::now();
+    let id = get_note_id(row).unwrap_or_default();
     let mut last_error = String::new();
 
+    event_tx
+        .send(BatchEvent::RowStateChanged(RowUpdate {
+            index,
+            id: id.clone(),
+            state: RowState::Running,
+            attempt: 1,
+            usage: None,
+            elapsed: Duration::ZERO,
+        }))
+        .ok();
+
     for attempt in 0..=max_retries {
+        if cancel.load(Ordering::SeqCst) {
+            event_tx
+                .send(BatchEvent::RowStateChanged(RowUpdate {
+                    index,
+                    id: id.clone(),
+                    state: RowState::Cancelled,
+                    attempt: attempt + 1,
+                    usage: None,
+                    elapsed: start.elapsed(),
+                }))
+                .ok();
+            return make_failure(row, "cancelled".to_string());
+        }
+
         if attempt > 0 {
             let backoff =
                 Duration::from_millis(1000 * 2u64.pow(attempt - 1)).min(Duration::from_secs(30));
-            let s = crate::style::style();
-            pb.println(format!(
-                "  {} {}",
-                s.yellow(format!("Retry {attempt}/{max_retries}:")),
-                s.muted(&last_error)
-            ));
+
+            event_tx
+                .send(BatchEvent::RowStateChanged(RowUpdate {
+                    index,
+                    id: id.clone(),
+                    state: RowState::Retrying {
+                        error: last_error.clone(),
+                    },
+                    attempt: attempt + 1,
+                    usage: None,
+                    elapsed: start.elapsed(),
+                }))
+                .ok();
+
+            event_tx
+                .send(BatchEvent::Log(format!(
+                    "Retry {attempt}/{max_retries}: {}",
+                    &last_error
+                )))
+                .ok();
+
             std::thread::sleep(backoff);
+
+            if cancel.load(Ordering::SeqCst) {
+                event_tx
+                    .send(BatchEvent::RowStateChanged(RowUpdate {
+                        index,
+                        id: id.clone(),
+                        state: RowState::Cancelled,
+                        attempt: attempt + 1,
+                        usage: None,
+                        elapsed: start.elapsed(),
+                    }))
+                    .ok();
+                return make_failure(row, "cancelled".to_string());
+            }
         }
 
         match process(row) {
             Ok((updated_row, usage)) => {
                 if let Some((input, output)) = usage {
-                    tokens.lock().unwrap().add(input, output);
+                    let mut t = tokens.lock().unwrap();
+                    t.add(input, output);
+                    let cost = pricing::calculate_cost(model, t.input, t.output);
+                    event_tx
+                        .send(BatchEvent::CostUpdate {
+                            input_tokens: t.input,
+                            output_tokens: t.output,
+                            cost,
+                        })
+                        .ok();
                 }
+                event_tx
+                    .send(BatchEvent::RowStateChanged(RowUpdate {
+                        index,
+                        id: id.clone(),
+                        state: RowState::Succeeded,
+                        attempt: attempt + 1,
+                        usage,
+                        elapsed: start.elapsed(),
+                    }))
+                    .ok();
                 return RowOutcome::Success(updated_row);
             }
             Err(e) => {
@@ -193,7 +247,23 @@ fn process_with_retry(
         }
     }
 
-    let error = last_error;
+    event_tx
+        .send(BatchEvent::RowStateChanged(RowUpdate {
+            index,
+            id: id.clone(),
+            state: RowState::Failed {
+                error: last_error.clone(),
+            },
+            attempt: max_retries + 1,
+            usage: None,
+            elapsed: start.elapsed(),
+        }))
+        .ok();
+
+    make_failure(row, last_error)
+}
+
+fn make_failure(row: &Row, error: String) -> RowOutcome {
     let mut failed_row = row.clone();
     failed_row.insert(
         super::report::ERROR_FIELD.to_string(),
@@ -226,6 +296,17 @@ mod tests {
         }
     }
 
+    fn test_run_batch(
+        rows: Vec<Row>,
+        process: ProcessFn,
+        config: &BatchConfig,
+        on_row_done: Option<OnRowDone>,
+    ) -> (Vec<RowOutcome>, TokenStats, bool) {
+        let (tx, _rx) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        run_batch(rows, process, config, on_row_done, tx, cancel)
+    }
+
     #[test]
     fn all_rows_succeed() {
         let rows = vec![make_row(1), make_row(2), make_row(3)];
@@ -235,7 +316,7 @@ mod tests {
             Ok((out, Some((10, 5))))
         });
 
-        let (outcomes, tokens, interrupted) = run_batch(rows, process, &config(0), None);
+        let (outcomes, tokens, interrupted) = test_run_batch(rows, process, &config(0), None);
 
         assert!(!interrupted);
         assert_eq!(outcomes.len(), 3);
@@ -249,7 +330,7 @@ mod tests {
         let rows = vec![make_row(1)];
         let process: ProcessFn = Box::new(|_| Err(BatchError::Processing("always fails".into())));
 
-        let (outcomes, _, _) = run_batch(rows, process, &config(0), None);
+        let (outcomes, _, _) = test_run_batch(rows, process, &config(0), None);
 
         assert_eq!(outcomes.len(), 1);
         assert!(
@@ -272,7 +353,7 @@ mod tests {
             }
         });
 
-        let (outcomes, tokens, _) = run_batch(rows, process, &config(1), None);
+        let (outcomes, tokens, _) = test_run_batch(rows, process, &config(1), None);
 
         assert_eq!(outcomes.len(), 1);
         assert!(matches!(&outcomes[0], RowOutcome::Success(_)));
@@ -290,7 +371,7 @@ mod tests {
             Err(BatchError::Fatal("bad template".into()))
         });
 
-        let (outcomes, _, _) = run_batch(rows, process, &config(3), None);
+        let (outcomes, _, _) = test_run_batch(rows, process, &config(3), None);
 
         assert_eq!(outcomes.len(), 1);
         assert!(matches!(&outcomes[0], RowOutcome::Failure { .. }));
@@ -303,7 +384,7 @@ mod tests {
         let rows = vec![make_row(1)];
         let process: ProcessFn = Box::new(|_| Err(BatchError::Processing("oops".into())));
 
-        let (outcomes, _, _) = run_batch(rows, process, &config(0), None);
+        let (outcomes, _, _) = test_run_batch(rows, process, &config(0), None);
 
         if let RowOutcome::Failure { row, .. } = &outcomes[0] {
             assert_eq!(row["_error"], json!("oops"));
@@ -324,7 +405,7 @@ mod tests {
             false
         });
 
-        run_batch(rows, process, &config(0), Some(on_done));
+        test_run_batch(rows, process, &config(0), Some(on_done));
 
         assert_eq!(count.load(Ordering::SeqCst), 2);
     }
@@ -334,8 +415,33 @@ mod tests {
         let rows = vec![make_row(1)];
         let process: ProcessFn = Box::new(|row| Ok((row.clone(), None)));
 
-        let (_, tokens, _) = run_batch(rows, process, &config(0), None);
+        let (_, tokens, _) = test_run_batch(rows, process, &config(0), None);
 
         assert_eq!(tokens.total(), 0);
+    }
+
+    #[test]
+    fn cancel_stops_processing() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_clone = Arc::clone(&cancel);
+        let processed = Arc::new(AtomicU32::new(0));
+        let processed_clone = Arc::clone(&processed);
+
+        let rows = vec![make_row(1), make_row(2), make_row(3)];
+        let process: ProcessFn = Box::new(move |row| {
+            let n = processed_clone.fetch_add(1, Ordering::SeqCst);
+            if n >= 1 {
+                cancel_clone.store(true, Ordering::SeqCst);
+            }
+            Ok((row.clone(), None))
+        });
+
+        let (tx, _rx) = mpsc::channel();
+        let (outcomes, _, interrupted) =
+            run_batch(rows, process, &config(0), None, tx, cancel);
+
+        assert!(interrupted);
+        // With batch_size=1, at most 2 rows processed before cancel takes effect
+        assert!(outcomes.len() <= 2);
     }
 }

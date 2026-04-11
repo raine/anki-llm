@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fs;
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 
 use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
@@ -245,8 +245,22 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         model: runtime.model.clone(),
     };
 
-    let (outcomes, _tokens, _interrupted) =
-        run_batch(rows, process_fn, &batch_config, Some(on_row_done));
+    let (event_tx, _event_rx) = mpsc::channel();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_for_ctrlc = Arc::clone(&cancel);
+    let _ = ctrlc::set_handler(move || {
+        cancel_for_ctrlc.store(true, Ordering::SeqCst);
+        eprintln!("Interrupting... waiting for active requests to finish.");
+    });
+
+    let (outcomes, _tokens, _interrupted) = run_batch(
+        rows,
+        process_fn,
+        &batch_config,
+        Some(on_row_done),
+        event_tx,
+        cancel,
+    );
 
     // Final flush
     if let Err(e) = writer.flush() {
