@@ -1,3 +1,14 @@
+## v2.0.6 (2026-04-11)
+
+- Added interactive batch TUI for `process-file` — live progress with elapsed
+  time, row previews, and a summary screen when done
+- Added `--query` flag to `process-deck` and `export` to filter which notes are
+  processed or exported
+- Added snapshot/rollback system for `process-deck` — use `history` to view past
+  runs and `rollback` to undo changes
+- Added support for any OpenAI-compatible LLM provider — configure a custom
+  endpoint and use any model
+
 ## v2.0.5 (2026-04-11)
 
 ## `generate`
