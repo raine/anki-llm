@@ -349,7 +349,9 @@ field) are updated, while new entries create new notes.
 Batch-process notes from a CSV/YAML file using an LLM and user-defined prompts.
 This command saves the transformed results to an output file and features
 automatic resume, allowing it to safely skip completed notes if interrupted or
-re-run.
+re-run. When run in a terminal, it displays an interactive TUI with a preflight
+confirmation screen, live progress with per-row status, cost tracking, and
+failure triage with retry. Falls back to a progress bar when output is piped.
 
 - `<input>`: Input file path (CSV or YAML).
 
@@ -410,6 +412,8 @@ anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.tx
 
 **Key features:**
 
+- ✅ **Interactive TUI**: Preflight confirmation, live per-row progress with
+  spinner and elapsed time, cost tracking, and failure triage with retry
 - ✅ **Automatic resume**: Skips already-processed notes
 - ✅ **Incremental saves**: Progress saved continuously
 - ✅ **Review before import**: You can inspect/edit the output file before
