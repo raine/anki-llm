@@ -378,12 +378,7 @@ fn draw_row_table(state: &RunState, frame: &mut Frame, area: Rect) {
             Constraint::Length(8),
         ],
     )
-    .header(header)
-    .block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(THEME.border)),
-    );
+    .header(header);
 
     frame.render_widget(table, area);
 }
