@@ -49,9 +49,18 @@ pub enum Commands {
 }
 
 #[derive(clap::Args)]
+#[command(group(
+    clap::ArgGroup::new("source")
+        .required(true)
+        .args(["deck", "query"])
+        .multiple(false)
+))]
 pub struct ExportArgs {
     /// Deck name to export
-    pub deck: String,
+    pub deck: Option<String>,
+    /// Anki search query (e.g. "tag:leech", "prop:lapses>3", "deck:Japanese -field:Audio")
+    #[arg(long, short = 'q')]
+    pub query: Option<String>,
     /// Output file path
     pub output: Option<PathBuf>,
     /// Filter by note type (required if deck contains multiple note types)
@@ -164,9 +173,19 @@ pub struct ProcessFileArgs {
         .args(["field", "json"])
         .multiple(false)
 ))]
+#[command(group(
+    clap::ArgGroup::new("source")
+        .required(true)
+        .args(["deck", "query"])
+        .multiple(false)
+))]
 pub struct ProcessDeckArgs {
     /// Deck name to process
-    pub deck: String,
+    pub deck: Option<String>,
+
+    /// Anki search query (e.g. "tag:leech", "prop:lapses>3", "deck:Japanese prop:lapses>5")
+    #[arg(long, short = 'q')]
+    pub query: Option<String>,
 
     /// Path to prompt template file (auto-resolved from prompts_dir if omitted)
     #[arg(long, short = 'p')]

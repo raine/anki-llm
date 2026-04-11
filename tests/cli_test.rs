@@ -206,7 +206,7 @@ fn process_deck_field_mode() {
     ]);
     match cli.command {
         Commands::ProcessDeck(args) => {
-            assert_eq!(args.deck, "MyDeck");
+            assert_eq!(args.deck, Some("MyDeck".into()));
             assert_eq!(args.field, Some("Translation".into()));
             assert!(!args.json);
             assert_eq!(args.batch_size, 5);

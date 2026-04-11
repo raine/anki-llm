@@ -23,21 +23,30 @@ use super::report::RowOutcome;
 
 pub fn run(args: ProcessDeckArgs) -> Result<()> {
     let anki = AnkiClient::new();
-    let deck_name = &args.deck;
 
-    // Build query — optionally filter by note type
-    eprintln!("Fetching notes from deck...");
-    let mut query = format!("deck:{}", anki_quote(deck_name));
+    // Build query from either deck name or raw query
+    eprintln!("Fetching notes...");
+    let mut query = if let Some(ref q) = args.query {
+        q.clone()
+    } else {
+        format!("deck:{}", anki_quote(args.deck.as_ref().unwrap()))
+    };
     if let Some(ref nt) = args.note_type {
         query.push_str(&format!(" note:{}", anki_quote(nt)));
     }
+
+    let source_label = args
+        .deck
+        .as_deref()
+        .map(|d| format!("deck '{d}'"))
+        .unwrap_or_else(|| format!("query '{query}'"));
 
     let mut note_ids = anki
         .find_notes(&query)
         .context("failed to query Anki for notes")?;
 
     if note_ids.is_empty() {
-        eprintln!("No notes found in deck '{deck_name}'.");
+        eprintln!("No notes found for {source_label}.");
         return Ok(());
     }
     eprintln!("Found {} notes", note_ids.len());
@@ -165,7 +174,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     })?;
 
     eprintln!("\n{}", "=".repeat(60));
-    eprintln!("Deck: {deck_name}");
+    eprintln!("Source: {source_label}");
     eprintln!("Model: {}", runtime.model);
     eprintln!("Batch size: {}", runtime.batch_size);
     eprintln!("Retries: {}", runtime.retries);
@@ -220,7 +229,11 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     });
 
     // Set up deck writer. Pass the existing AnkiClient (no need for a second one).
-    let slug = slugify_deck_name(deck_name);
+    let slug = args
+        .deck
+        .as_deref()
+        .map(slugify_deck_name)
+        .unwrap_or_else(|| "query-results".to_string());
     let error_log_path = format!("{slug}-errors.jsonl").into();
     let run_id = store::generate_run_id();
     let writer = Arc::new(DeckWriter::new(
