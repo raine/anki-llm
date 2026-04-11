@@ -58,7 +58,8 @@ interactively, and add selected cards to your deck.
 - **Batch processing workflows**: File-based (with resume) or direct-to-Anki
   (one command).
 - **Export** Anki decks to clean CSV or YAML files.
-- **Batch process** note fields using OpenAI or Google Gemini models.
+- **Batch process** note fields using any OpenAI-compatible LLM (OpenAI, Gemini,
+  OpenRouter, Ollama, and more).
 - **Custom prompts**: Use flexible template files to define exactly how the LLM
   should process your cards.
 - **Concurrent processing**: Make multiple parallel API requests to speed up
@@ -96,14 +97,91 @@ cargo install anki-llm
 - The [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on must be
   installed in Anki.
 
-## API Configuration
+## LLM Configuration
 
-`anki-llm` uses LLM APIs to process your notes. You need to configure an API key
-for the model provider you want to use.
+`anki-llm` works with any LLM that exposes an OpenAI-compatible chat completions
+API. This includes OpenAI, Google Gemini, OpenRouter, Ollama, and many other
+providers.
 
-### Supported models
+### Quick start: OpenAI or Gemini
 
-The tool supports two API providers:
+Set the appropriate environment variable and you're ready to go:
+
+```bash
+# OpenAI
+export OPENAI_API_KEY="your-api-key-here"
+
+# Google Gemini
+export GEMINI_API_KEY="your-api-key-here"
+```
+
+Get your API key from [OpenAI](https://platform.openai.com/api-keys) or
+[Google AI Studio](https://aistudio.google.com/api-keys).
+
+OpenAI and Gemini models are auto-detected from the model name prefix and work
+with zero additional configuration.
+
+### Using OpenRouter
+
+[OpenRouter](https://openrouter.ai) provides access to hundreds of models
+through a single API key:
+
+```bash
+export ANKI_LLM_API_KEY="your-openrouter-key"
+anki-llm generate "今日" \
+  --api-base-url https://openrouter.ai/api/v1 \
+  --model anthropic/claude-sonnet-4
+```
+
+Or configure it persistently:
+
+```bash
+anki-llm config set api_base_url https://openrouter.ai/api/v1
+anki-llm config set model anthropic/claude-sonnet-4
+export ANKI_LLM_API_KEY="your-openrouter-key"
+```
+
+### Using Ollama or local servers
+
+For local inference servers (Ollama, llama.cpp, vLLM, etc.), point to your
+server's URL. No API key is needed:
+
+```bash
+anki-llm generate "今日" \
+  --api-base-url http://localhost:11434/v1 \
+  --model llama3
+```
+
+### Any OpenAI-compatible API
+
+Any service that exposes the OpenAI `/v1/chat/completions` endpoint works
+(Together, Fireworks, Groq, etc.):
+
+```bash
+anki-llm process-file input.yaml -o output.yaml --field Translation \
+  --api-base-url https://api.together.xyz/v1 \
+  --api-key your-key \
+  --model meta-llama/Llama-3-70b-chat-hf
+```
+
+### Provider configuration options
+
+| Setting        | CLI flag           | Environment variable      | Config key       |
+| -------------- | ------------------ | ------------------------- | ---------------- |
+| API base URL   | `--api-base-url`   | `ANKI_LLM_API_BASE_URL`  | `api_base_url`   |
+| API key        | `--api-key`        | `ANKI_LLM_API_KEY`        | —                |
+| Model          | `--model` / `-m`   | —                          | `model`          |
+
+**Precedence:** CLI flag > environment variable > config file > auto-detect.
+
+For built-in providers (OpenAI, Gemini), the provider-specific environment
+variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`) are used as a fallback when
+`ANKI_LLM_API_KEY` is not set.
+
+### Known models with pricing
+
+Cost estimates are displayed for known models. Any model name is accepted — cost
+display is simply skipped for models without pricing data.
 
 <details>
 <summary>Pricing table</summary>
@@ -139,34 +217,15 @@ website to be sure.
 
 </details>
 
-### Setting up API Keys
-
-Set the appropriate environment variable for your chosen model provider:
-
-**For OpenAI models:**
-
-```bash
-export OPENAI_API_KEY="your-api-key-here"
-```
-
-Get your API key from: https://platform.openai.com/api-keys
-
-**For Gemini models:**
-
-```bash
-export GEMINI_API_KEY="your-api-key-here"
-```
-
-Get your API key from: https://aistudio.google.com/api-keys
-
 ## Configuration
 
-Use `anki-llm config` to store defaults (for example, the model) so you don't
-have to repeat flags on every command.
+Use `anki-llm config` to store defaults (for example, the model and API base
+URL) so you don't have to repeat flags on every command.
 
 ```bash
 # Set or override defaults
 anki-llm config set model gpt-4o-mini
+anki-llm config set api_base_url https://openrouter.ai/api/v1
 ```
 
 Config file lives at `~/.config/anki-llm/config.json`.
