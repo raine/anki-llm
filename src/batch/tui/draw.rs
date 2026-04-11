@@ -147,12 +147,13 @@ fn draw_preflight(plan: &BatchPlan, frame: &mut Frame) {
 fn draw_running(state: &RunState, plan: &BatchPlan, frame: &mut Frame) {
     let area = frame.area();
 
-    // Main layout: footer at bottom
+    // Main layout: footer at bottom, log strip only when there are entries
+    let log_height = if state.log.is_empty() { 0 } else { 3 };
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(1),
-            Constraint::Length(3),
+            Constraint::Length(log_height),
             Constraint::Length(1),
         ])
         .split(area);
