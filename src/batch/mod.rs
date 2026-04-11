@@ -5,5 +5,6 @@ pub mod engine;
 pub mod error;
 pub mod events;
 pub mod file_mode;
+pub mod plain;
 pub mod process_row;
 pub mod report;

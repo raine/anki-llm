@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
+use std::thread;
 
 use anyhow::{Context, Result, bail};
 
@@ -15,6 +16,7 @@ use crate::template::fill_template;
 
 use super::engine::{BatchConfig, run_batch};
 use super::file_mode::FileWriter;
+use super::plain::run_plain_renderer;
 use super::process_row::{ProcessRowConfig, build_process_fn};
 use super::report::{ERROR_FIELD, RowOutcome};
 
@@ -115,7 +117,8 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         return Ok(());
     }
 
-    eprintln!("\n{} rows to process", rows_to_process.len());
+    let num_to_process = rows_to_process.len();
+    eprintln!("\n{num_to_process} rows to process");
 
     // Dry run
     if args.dry_run {
@@ -169,29 +172,37 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         false
     });
 
-    // Run batch
+    // Run batch with plain renderer
     let batch_config = BatchConfig {
         batch_size: runtime.batch_size,
         retries: runtime.retries,
         model: runtime.model.clone(),
     };
 
-    let (event_tx, _event_rx) = mpsc::channel();
+    let (event_tx, event_rx) = mpsc::channel();
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_for_ctrlc = Arc::clone(&cancel);
     let _ = ctrlc::set_handler(move || {
         cancel_for_ctrlc.store(true, Ordering::SeqCst);
-        eprintln!("Interrupting... waiting for active requests to finish.");
     });
 
-    let (outcomes, _tokens, _interrupted) = run_batch(
-        rows_to_process,
-        process_fn,
-        &batch_config,
-        Some(on_row_done),
-        event_tx,
-        cancel,
-    );
+    // Spawn engine on background thread
+    let engine_handle = thread::spawn(move || {
+        run_batch(
+            rows_to_process,
+            process_fn,
+            &batch_config,
+            Some(on_row_done),
+            event_tx,
+            cancel,
+        )
+    });
+
+    // Run plain renderer on main thread (consumes events until RunDone)
+    run_plain_renderer(event_rx, num_to_process);
+
+    // Wait for engine to finish
+    let (outcomes, _tokens, _interrupted) = engine_handle.join().unwrap();
 
     // Final flush
     writer.flush().context("failed to write final output")?;
@@ -199,7 +210,7 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
 
     let failures = outcomes
         .iter()
-        .filter(|o| matches!(o, super::report::RowOutcome::Failure { .. }))
+        .filter(|o| matches!(o, RowOutcome::Failure { .. }))
         .count();
 
     if failures > 0 {
