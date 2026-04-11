@@ -1170,114 +1170,59 @@ file tailored to your collection.
 anki-llm generate-init
 ```
 
-Follow the interactive prompts. The wizard will use an AI model (defaults to
-`gpt-5` or `gemini-2.5-flash` depending on your API key) to analyze existing
-cards in your deck and create a smart prompt that matches their style and
-formatting. When it's done, it will save a new file, for example
-`japanese-vocabulary-prompt.md`.
+Follow the interactive prompts. The wizard will use an AI model to analyze
+existing cards in your deck and create a smart prompt that matches their style
+and formatting. When it's done, it will save a prompt file for use with
+`generate`.
 
-The generated file will look something like this:
+You can edit the generated file to further refine the instructions for the AI.
 
-**File: `japanese-vocabulary-prompt.md`**
+### Step 2: Launch the generate TUI
 
-````markdown
----
-deck: Japanese::Vocabulary
-note_type: Japanese (recognition)
-field_map:
-  en: English
-  jp: Japanese
-  context: Context
----
-
-You are an expert Japanese language assistant. Your goal is to create {count}
-distinct, high-quality, contextual Anki flashcards for a vocabulary term. The
-term to create cards for is: **{term}**
-
-IMPORTANT: Your output must be a single, valid JSON array of objects and nothing
-else. Each object in the array should represent a unique flashcard. All field
-values must be strings. Use `<b>` tags to highlight the term in the example
-sentence.
-
-Follow the structure shown in this example precisely:
-
-```json
-[
-  {
-    "en": "The <b>meeting</b> is scheduled for 3 PM.",
-    "jp": "<b>会議</b>は午後3時に予定されています。",
-    "context": "Used in a formal business context."
-  }
-]
-```
-
-Return only a valid JSON array matching this structure. Ensure you generate
-{count} varied cards that highlight different nuances, contexts, or usage
-examples of the term.
-````
-
-You can now edit this file to further refine the instructions for the AI.
-
-### Step 2: Generate cards for your term
-
-Now, use the `generate` command with your new prompt file to create card
-examples for `会議`.
+Start the interactive TUI:
 
 ```bash
-anki-llm generate "会議" -p japanese-vocabulary-prompt.md -m gemini-2.5-flash
+anki-llm generate
 ```
 
-The tool will make a single API call asking the LLM to generate 3 distinct cards
-and show progress:
+If you have multiple prompt files, a prompt picker appears first. Otherwise, you
+land directly on the term input screen. You can switch the model at any time with
+<kbd>Ctrl+O</kbd>, which opens a filterable model picker with pricing info.
 
-```
-🔄 Generating 3 card candidates for "会議"...
-✓ Generation complete: 3 succeeded, 0 failed
-  Cost: $0.0027 (930 input + 954 output tokens)
+### Step 3: Enter terms
 
-🔍 Checking for duplicates...
-```
+Type a term like `会議` and press <kbd>Enter</kbd> to generate cards for it.
 
-### Step 3: Select which cards to import
+To generate cards for multiple terms at once, press <kbd>Tab</kbd> after each
+term to queue it, then <kbd>Enter</kbd> on the last one to start batch
+processing. You can also paste multiple newline-separated terms and they will
+be split automatically.
 
-After generation, an interactive checklist appears in your terminal. You can use
-the arrow keys and spacebar to select the cards you want to add to Anki.
+### Step 4: Select and review cards
 
-```
-📋 Select cards to add to Anki (use Space to select, Enter to confirm):
+After generation, the TUI moves to the selection screen. The top panel lists
+all generated cards with checkboxes, while the bottom panel shows a full preview
+of the currently focused card.
 
-❯ ◯ Card 1
-│     English: The *meeting* was very productive.
-│     Japanese: その*会議*は非常に生産的でした。
-│     Context: General business context.
-│
-│ ◯ Card 2
-│     English: I have a *meeting* with a client tomorrow.
-│     Japanese: 明日、クライアントとの*会議*があります。
-│     Context: A common phrase for scheduling.
-│
-│ ◯ Card 3 (⚠️  Duplicate)
-│     English: The *meeting* is scheduled for 3 PM.
-│     Japanese: *会議*は午後3時に予定されています。
-│     Context: Used in a formal business context.
-```
+- <kbd>Space</kbd> — toggle card selection
+- <kbd>a</kbd> / <kbd>n</kbd> — select all / none
+- <kbd>e</kbd> — edit card in `$EDITOR`
+- <kbd>r</kbd> — generate more cards for the same term
+- <kbd>t</kbd> — generate more cards for a new term
+- <kbd>R</kbd> — regenerate a card with feedback
+- <kbd>d</kbd> — remove a card from the list
+- <kbd>c</kbd> — copy card to clipboard
 
-Here, we see three options. Card 3 has been flagged as a potential duplicate
-because a similar card already exists in the deck. Let's select the first two
-cards and press Enter.
+Duplicate cards are flagged with `[dup]` and shown as a diff against the
+existing Anki card. Press <kbd>f</kbd> to force-select a duplicate if needed.
 
-### Step 4: Confirm the import
+Press <kbd>Enter</kbd> to confirm your selection and import the cards into Anki.
 
-The selected cards are immediately added to your Anki deck.
+### Step 5: Continue or quit
 
-```
-📥 Adding 2 card(s) to Anki...
-
-✓ Successfully added 2 new note(s) to "Japanese::Vocabulary"
-```
-
-That's it! You have successfully generated, reviewed, and imported multiple
-high-quality, contextual Anki cards from a single command.
+After import, you can press <kbd>n</kbd> to start a new term, <kbd>r</kbd> to
+retry, or <kbd>q</kbd> to quit. Session cost is tracked in the sidebar
+throughout.
 
 ## Development
 
