@@ -14,6 +14,9 @@ pub struct AppConfig {
     pub nerd_font: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompts_dir: Option<PathBuf>,
+    /// Custom API base URL (e.g. OpenRouter, Ollama, or any OpenAI-compatible endpoint).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_base_url: Option<String>,
 }
 
 impl AppConfig {
@@ -23,6 +26,7 @@ impl AppConfig {
             "model" => self.model.clone(),
             "nerd_font" => self.nerd_font.map(|b| b.to_string()),
             "prompts_dir" => self.prompts_dir.as_ref().map(|p| p.display().to_string()),
+            "api_base_url" => self.api_base_url.clone(),
             _ => None,
         }
     }
@@ -42,6 +46,10 @@ impl AppConfig {
                 self.prompts_dir = Some(PathBuf::from(value));
                 true
             }
+            "api_base_url" => {
+                self.api_base_url = Some(value.to_string());
+                true
+            }
             _ => false,
         }
     }
@@ -57,6 +65,9 @@ impl AppConfig {
         }
         if let Some(ref v) = self.prompts_dir {
             out.push(("prompts_dir".into(), v.display().to_string()));
+        }
+        if let Some(ref v) = self.api_base_url {
+            out.push(("api_base_url".into(), v.clone()));
         }
         out
     }

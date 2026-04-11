@@ -70,9 +70,16 @@ impl ModelPickerState {
         }
     }
 
-    pub(super) fn selected(&self) -> Option<&str> {
+    pub(super) fn selected(&self) -> Option<String> {
         let filtered = self.filtered_models();
-        filtered.get(self.cursor).copied()
+        if let Some(m) = filtered.get(self.cursor) {
+            Some(m.to_string())
+        } else if !self.filter.is_empty() {
+            // No match — use the filter text as a custom model name
+            Some(self.filter.clone())
+        } else {
+            None
+        }
     }
 
     pub(super) fn add_filter_char(&mut self, c: char) {
@@ -154,20 +161,31 @@ pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
     // Inner width: total width - 2 borders - 2 highlight symbol
     let inner_w = width.saturating_sub(4) as usize;
 
-    let items: Vec<ListItem> = filtered
-        .iter()
-        .map(|m| {
-            let price = pricing::model_pricing(m)
-                .map(|p| format_model_price(p.input_cost_per_million, p.output_cost_per_million))
-                .unwrap_or_default();
-            let pad = inner_w.saturating_sub(m.len() + price.len());
-            ListItem::new(Line::from(vec![
-                Span::styled(*m, Style::default().fg(THEME.text)),
-                Span::raw(" ".repeat(pad)),
-                Span::styled(price, Style::default().fg(THEME.dimmed)),
-            ]))
-        })
-        .collect();
+    let items: Vec<ListItem> = if filtered.is_empty() && !picker.filter.is_empty() {
+        // No known model matches — show the filter text as a custom model option
+        let label = format!("Use '{}'", picker.filter);
+        vec![ListItem::new(Line::from(vec![Span::styled(
+            label,
+            Style::default().fg(THEME.info),
+        )]))]
+    } else {
+        filtered
+            .iter()
+            .map(|m| {
+                let price = pricing::model_pricing(m)
+                    .map(|p| {
+                        format_model_price(p.input_cost_per_million, p.output_cost_per_million)
+                    })
+                    .unwrap_or_default();
+                let pad = inner_w.saturating_sub(m.len() + price.len());
+                ListItem::new(Line::from(vec![
+                    Span::styled(*m, Style::default().fg(THEME.text)),
+                    Span::raw(" ".repeat(pad)),
+                    Span::styled(price, Style::default().fg(THEME.dimmed)),
+                ]))
+            })
+            .collect()
+    };
 
     let list = List::new(items)
         .block(block)

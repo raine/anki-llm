@@ -69,7 +69,7 @@ pub struct ChatCompletionResult {
 
 pub struct LlmClient {
     base_url: String,
-    api_key: String,
+    api_key: Option<String>,
     agent: ureq::Agent,
 }
 
@@ -97,10 +97,10 @@ impl LlmClient {
     }
 
     /// Create a client for a specific model, resolving the correct provider
-    /// base URL and API key. Returns `None` if no API key is available.
+    /// base URL and API key. The API key may be `None` for local servers.
     pub fn for_model(model: &str) -> Option<Self> {
         let config = provider::provider_config(model);
-        let api_key = provider::api_key_for_model(model)?;
+        let api_key = provider::api_key_for_model(model);
         let base_url = config
             .base_url
             .unwrap_or_else(|| DEFAULT_OPENAI_BASE.to_string());
@@ -160,26 +160,29 @@ impl LlmClient {
             response_format,
         };
 
-        let mut response = self
+        let mut request = self
             .agent
             .post(&url)
-            .header("Authorization", &format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .send_json(&body)
-            .map_err(|e| match e {
-                // 429 and 5xx are transient; other 4xx are permanent (bad key,
-                // invalid model, malformed request) and should not be retried.
-                ureq::Error::StatusCode(429) => {
-                    LlmError::Http("HTTP 429: rate limited".to_string())
-                }
-                ureq::Error::StatusCode(code) if code >= 500 => {
-                    LlmError::Http(format!("HTTP {code}: server error"))
-                }
-                ureq::Error::StatusCode(code) => {
-                    LlmError::Api(format!("HTTP {code}: non-retryable error"))
-                }
-                other => LlmError::Http(other.to_string()),
-            })?;
+            .header("Content-Type", "application/json");
+
+        // Only send Authorization header when we have an API key.
+        // Local servers (Ollama, llama.cpp) often reject unexpected auth headers.
+        if let Some(ref key) = self.api_key {
+            request = request.header("Authorization", &format!("Bearer {key}"));
+        }
+
+        let mut response = request.send_json(&body).map_err(|e| match e {
+            // 429 and 5xx are transient; other 4xx are permanent (bad key,
+            // invalid model, malformed request) and should not be retried.
+            ureq::Error::StatusCode(429) => LlmError::Http("HTTP 429: rate limited".to_string()),
+            ureq::Error::StatusCode(code) if code >= 500 => {
+                LlmError::Http(format!("HTTP {code}: server error"))
+            }
+            ureq::Error::StatusCode(code) => {
+                LlmError::Api(format!("HTTP {code}: non-retryable error"))
+            }
+            other => LlmError::Http(other.to_string()),
+        })?;
 
         let resp: ChatResponse = response
             .body_mut()

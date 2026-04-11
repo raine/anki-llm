@@ -64,8 +64,10 @@ pub fn format_cost_display(total_cost: f64, input_tokens: u64, output_tokens: u6
     )
 }
 
-/// List of all known supported model names.
-pub const SUPPORTED_MODELS: &[&str] = &[
+/// List of known models with pricing data.
+/// This is NOT a whitelist — any model name is accepted. These are models
+/// for which we can display cost estimates and show in the TUI model picker.
+pub const KNOWN_MODELS: &[&str] = &[
     "gpt-4.1",
     "gpt-4.1-mini",
     "gpt-4.1-nano",
@@ -125,7 +127,7 @@ mod tests {
 
     #[test]
     fn all_supported_models_have_pricing() {
-        for model in SUPPORTED_MODELS {
+        for model in KNOWN_MODELS {
             assert!(
                 model_pricing(model).is_some(),
                 "missing pricing for {model}"

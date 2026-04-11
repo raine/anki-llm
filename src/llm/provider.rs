@@ -34,18 +34,28 @@ pub fn api_key_for_model(model: &str) -> Option<String> {
         .filter(|k| !k.trim().is_empty())
 }
 
-/// Returns models from `SUPPORTED_MODELS` for which an API key is available.
-/// If `include_all` is true (e.g. dry-run mode), returns all models.
-pub fn available_models(include_all: bool) -> Vec<&'static str> {
-    use crate::llm::pricing::SUPPORTED_MODELS;
-    if include_all {
-        return SUPPORTED_MODELS.to_vec();
+/// Returns known models for which an API key is available, plus the
+/// currently configured model (which may be a custom/unknown model).
+/// If `include_all` is true (e.g. dry-run mode), returns all known models.
+pub fn available_models(include_all: bool) -> Vec<String> {
+    use crate::llm::pricing::KNOWN_MODELS;
+    let mut models: Vec<String> = if include_all {
+        KNOWN_MODELS.iter().map(|s| s.to_string()).collect()
+    } else {
+        KNOWN_MODELS
+            .iter()
+            .filter(|model| api_key_for_model(model).is_some())
+            .map(|s| s.to_string())
+            .collect()
+    };
+
+    // Include the configured model even if it's not in KNOWN_MODELS
+    let configured = resolve_model(None);
+    if !models.iter().any(|m| m == &configured) {
+        models.insert(0, configured);
     }
-    SUPPORTED_MODELS
-        .iter()
-        .copied()
-        .filter(|model| api_key_for_model(model).is_some())
-        .collect()
+
+    models
 }
 
 /// Resolve which model to use.

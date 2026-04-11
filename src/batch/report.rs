@@ -61,7 +61,6 @@ pub fn print_summary(
     elapsed: std::time::Duration,
 ) {
     let total = succeeded + failed;
-    let cost = pricing::calculate_cost(model, tokens.input, tokens.output);
     let s = style();
 
     eprintln!("\n{}", s.dim("─".repeat(50)));
@@ -83,6 +82,7 @@ pub fn print_summary(
     eprintln!("\n{}", s.bold("Cost"));
     eprintln!("  Model      {model}");
     if let Some(p) = pricing::model_pricing(model) {
+        let cost = pricing::calculate_cost(model, tokens.input, tokens.output);
         eprintln!(
             "  Input      {} {}",
             pricing::format_cost((tokens.input as f64 / 1_000_000.0) * p.input_cost_per_million),
@@ -93,8 +93,10 @@ pub fn print_summary(
             pricing::format_cost((tokens.output as f64 / 1_000_000.0) * p.output_cost_per_million),
             s.muted(format!("(${:.2}/M)", p.output_cost_per_million))
         );
+        eprintln!("  Total      {}", s.accent(pricing::format_cost(cost)));
+    } else {
+        eprintln!("  {}", s.muted("(pricing unavailable for this model)"));
     }
-    eprintln!("  Total      {}", s.accent(pricing::format_cost(cost)));
 
     eprintln!("\n{}", s.bold("Performance"));
     eprintln!("  Time       {:.1}s", elapsed.as_secs_f64());

@@ -106,6 +106,8 @@ fn prepare_session(
     let logger = LlmLogger::new(args.log.as_deref(), very_verbose)?;
     let runtime = build_runtime_config(RuntimeConfigArgs {
         model: args.model.as_deref(),
+        api_base_url: args.api_base_url.as_deref(),
+        api_key: args.api_key.as_deref(),
         batch_size: None,
         max_tokens: args.max_tokens,
         temperature: args.temperature,
@@ -264,10 +266,7 @@ pub fn run_pipeline(
         session.validation.note_type_fields.join(", ")
     );
 
-    let models: Vec<String> = available_models(args.dry_run)
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect();
+    let models: Vec<String> = available_models(args.dry_run);
 
     tx.send(BackendEvent::SessionReady(SessionInfo {
         deck: session.frontmatter.deck.clone(),
@@ -351,6 +350,8 @@ pub fn run_pipeline(
             Ok(WorkerCommand::SetModel(model)) => {
                 match build_runtime_config(RuntimeConfigArgs {
                     model: Some(&model),
+                    api_base_url: args.api_base_url.as_deref(),
+                    api_key: args.api_key.as_deref(),
                     batch_size: None,
                     max_tokens: args.max_tokens,
                     temperature: args.temperature,

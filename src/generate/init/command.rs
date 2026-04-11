@@ -44,6 +44,8 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
     // Skip API key validation in copy mode — no LLM call will be made.
     let runtime = build_runtime_config(RuntimeConfigArgs {
         model: args.model.as_deref(),
+        api_base_url: args.api_base_url.as_deref(),
+        api_key: args.api_key.as_deref(),
         batch_size: None,
         max_tokens: None,
         temperature: args.temperature,

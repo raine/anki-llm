@@ -450,7 +450,7 @@ impl App {
                 KeyCode::Backspace => picker.remove_filter_char(),
                 KeyCode::Char(c) => picker.add_filter_char(c),
                 KeyCode::Enter => {
-                    if let Some(model) = picker.selected().map(|s| s.to_string()) {
+                    if let Some(model) = picker.selected() {
                         let changed = self
                             .session_info
                             .as_ref()
@@ -1979,6 +1979,8 @@ pub fn run_tui(mut args: GenerateArgs) -> anyhow::Result<()> {
             term: initial_term.clone(),
             count: args.count,
             model: args.model.clone(),
+            api_base_url: args.api_base_url.clone(),
+            api_key: args.api_key.clone(),
             dry_run: args.dry_run,
             retries: args.retries,
             max_tokens: args.max_tokens,

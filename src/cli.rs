@@ -104,6 +104,14 @@ pub struct ProcessFileArgs {
     #[arg(long, short = 'm')]
     pub model: Option<String>,
 
+    /// Custom API base URL (e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1)
+    #[arg(long)]
+    pub api_base_url: Option<String>,
+
+    /// API key (overrides environment variables)
+    #[arg(long)]
+    pub api_key: Option<String>,
+
     /// Number of concurrent requests
     #[arg(long, short = 'b', default_value_t = DEFAULT_BATCH_SIZE, value_parser = clap::value_parser!(u32).range(1..))]
     pub batch_size: u32,
@@ -175,6 +183,14 @@ pub struct ProcessDeckArgs {
     /// Model name
     #[arg(long, short = 'm')]
     pub model: Option<String>,
+
+    /// Custom API base URL (e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1)
+    #[arg(long)]
+    pub api_base_url: Option<String>,
+
+    /// API key (overrides environment variables)
+    #[arg(long)]
+    pub api_key: Option<String>,
 
     /// Number of concurrent requests
     #[arg(long, short = 'b', default_value_t = DEFAULT_BATCH_SIZE, value_parser = clap::value_parser!(u32).range(1..))]
@@ -264,6 +280,14 @@ pub struct GenerateArgs {
     #[arg(long, short = 'm')]
     pub model: Option<String>,
 
+    /// Custom API base URL (e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1)
+    #[arg(long)]
+    pub api_base_url: Option<String>,
+
+    /// API key (overrides environment variables)
+    #[arg(long)]
+    pub api_key: Option<String>,
+
     /// Preview without importing to Anki
     #[arg(long, short = 'd')]
     pub dry_run: bool,
@@ -305,6 +329,14 @@ pub struct GenerateInitArgs {
     /// Model name
     #[arg(long, short = 'm')]
     pub model: Option<String>,
+
+    /// Custom API base URL (e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1)
+    #[arg(long)]
+    pub api_base_url: Option<String>,
+
+    /// API key (overrides environment variables)
+    #[arg(long)]
+    pub api_key: Option<String>,
 
     /// LLM temperature (0-2)
     #[arg(long, short = 't')]
