@@ -8,6 +8,21 @@ use crate::llm::pricing;
 
 use super::theme::THEME;
 
+/// An entry in the model picker's visible list.
+#[derive(Clone)]
+pub(super) enum PickerEntry {
+    Known(String),
+    Custom(String),
+}
+
+impl PickerEntry {
+    pub(super) fn model_name(&self) -> &str {
+        match self {
+            PickerEntry::Known(s) | PickerEntry::Custom(s) => s,
+        }
+    }
+}
+
 pub(super) struct ModelPickerState {
     pub(super) models: Vec<String>,
     pub(super) filter: String,
@@ -30,9 +45,14 @@ impl ModelPickerState {
         }
     }
 
-    pub(super) fn filtered_models(&self) -> Vec<&str> {
-        if self.filter.is_empty() {
-            self.models.iter().map(|s| s.as_str()).collect()
+    /// Build the visible entries: filtered known models, plus a custom entry
+    /// at the bottom when the filter doesn't exactly match a listed model.
+    pub(super) fn visible_entries(&self) -> Vec<PickerEntry> {
+        let mut entries: Vec<PickerEntry> = if self.filter.is_empty() {
+            self.models
+                .iter()
+                .map(|s| PickerEntry::Known(s.clone()))
+                .collect()
         } else {
             let normalized_filter: String = self
                 .filter
@@ -50,9 +70,20 @@ impl ModelPickerState {
                         .collect();
                     normalized.contains(&normalized_filter)
                 })
-                .map(|s| s.as_str())
+                .map(|s| PickerEntry::Known(s.clone()))
                 .collect()
+        };
+
+        // Append a custom entry if the filter is non-empty and doesn't exactly
+        // match any visible model.
+        if !self.filter.is_empty() {
+            let exact_match = entries.iter().any(|e| e.model_name() == self.filter);
+            if !exact_match {
+                entries.push(PickerEntry::Custom(self.filter.clone()));
+            }
         }
+
+        entries
     }
 
     pub(super) fn move_up(&mut self) {
@@ -63,23 +94,16 @@ impl ModelPickerState {
     }
 
     pub(super) fn move_down(&mut self) {
-        let filtered = self.filtered_models();
-        if self.cursor + 1 < filtered.len() {
+        let count = self.visible_entries().len();
+        if self.cursor + 1 < count {
             self.cursor += 1;
             self.list_state.select(Some(self.cursor));
         }
     }
 
     pub(super) fn selected(&self) -> Option<String> {
-        let filtered = self.filtered_models();
-        if let Some(m) = filtered.get(self.cursor) {
-            Some(m.to_string())
-        } else if !self.filter.is_empty() {
-            // No match — use the filter text as a custom model name
-            Some(self.filter.clone())
-        } else {
-            None
-        }
+        let entries = self.visible_entries();
+        entries.get(self.cursor).map(|e| e.model_name().to_string())
     }
 
     pub(super) fn add_filter_char(&mut self, c: char) {
@@ -93,7 +117,7 @@ impl ModelPickerState {
     }
 
     fn clamp_cursor(&mut self) {
-        let len = self.filtered_models().len();
+        let len = self.visible_entries().len();
         if len == 0 {
             self.cursor = 0;
         } else if self.cursor >= len {
@@ -104,14 +128,8 @@ impl ModelPickerState {
 }
 
 pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
-    let filtered = picker.filtered_models();
-    // When no known model matches a non-empty filter, we show a synthetic
-    // "Use '<filter>'" row, so ensure at least 1 row for the height calc.
-    let row_count = if filtered.is_empty() && !picker.filter.is_empty() {
-        1u16
-    } else {
-        filtered.len() as u16
-    };
+    let entries = picker.visible_entries();
+    let row_count = entries.len() as u16;
     let height = (row_count + 2).min(20); // borders
     let width: u16 = 48;
 
@@ -167,17 +185,10 @@ pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
     // Inner width: total width - 2 borders - 2 highlight symbol
     let inner_w = width.saturating_sub(4) as usize;
 
-    let items: Vec<ListItem> = if filtered.is_empty() && !picker.filter.is_empty() {
-        // No known model matches — show the filter text as a custom model option
-        let label = format!("Use '{}'", picker.filter);
-        vec![ListItem::new(Line::from(vec![Span::styled(
-            label,
-            Style::default().fg(THEME.info),
-        )]))]
-    } else {
-        filtered
-            .iter()
-            .map(|m| {
+    let items: Vec<ListItem> = entries
+        .iter()
+        .map(|entry| match entry {
+            PickerEntry::Known(m) => {
                 let price = pricing::model_pricing(m)
                     .map(|p| {
                         format_model_price(p.input_cost_per_million, p.output_cost_per_million)
@@ -185,13 +196,20 @@ pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
                     .unwrap_or_default();
                 let pad = inner_w.saturating_sub(m.len() + price.len());
                 ListItem::new(Line::from(vec![
-                    Span::styled(*m, Style::default().fg(THEME.text)),
+                    Span::styled(m.as_str(), Style::default().fg(THEME.text)),
                     Span::raw(" ".repeat(pad)),
                     Span::styled(price, Style::default().fg(THEME.dimmed)),
                 ]))
-            })
-            .collect()
-    };
+            }
+            PickerEntry::Custom(name) => {
+                let label = format!("Use '{name}'");
+                ListItem::new(Line::from(vec![Span::styled(
+                    label,
+                    Style::default().fg(THEME.info),
+                )]))
+            }
+        })
+        .collect();
 
     let list = List::new(items)
         .block(block)
