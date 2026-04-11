@@ -686,27 +686,41 @@ impl App {
             KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.open_model_picker();
             }
+            KeyCode::Tab => {
+                // Add current term to batch queue and clear input for next term
+                let term = input.value().trim().to_string();
+                if !term.is_empty() {
+                    self.batch_queue.push(term);
+                    input.reset();
+                    self.history.reset_browse();
+                }
+            }
             KeyCode::Enter => {
                 let term = input.value().trim().to_string();
                 if !term.is_empty() {
-                    self.history.push(&term);
                     self.history.reset_browse();
-                    self.last_term = Some(term.clone());
 
-                    // Set up batch progress if we have queued terms
-                    if !self.batch_queue.is_empty() {
-                        let total = 1 + self.batch_queue.len();
-                        self.batch_progress = Some((1, total));
-                        // Push all batch terms to history
+                    if self.batch_queue.is_empty() {
+                        // Single term
+                        self.history.push(&term);
+                        self.last_term = Some(term.clone());
+                        self.batch_progress = None;
+                        self.mode = AppMode::Running;
+                        self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                    } else {
+                        // Batch: queue has earlier terms, input has the last one
+                        self.batch_queue.push(term);
+                        let total = self.batch_queue.len();
+                        // Push all terms to history
                         for t in &self.batch_queue {
                             self.history.push(t);
                         }
-                    } else {
-                        self.batch_progress = None;
+                        let first = self.batch_queue.remove(0);
+                        self.last_term = Some(first.clone());
+                        self.batch_progress = Some((1, total));
+                        self.mode = AppMode::Running;
+                        self.worker_tx.send(WorkerCommand::Start(first)).ok();
                     }
-
-                    self.mode = AppMode::Running;
-                    self.worker_tx.send(WorkerCommand::Start(term)).ok();
                 }
             }
             _ => {
@@ -1240,6 +1254,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
     let shortcuts: Vec<(&str, &str)> = match &app.mode {
         AppMode::Input(_) => vec![
             ("Enter", "Generate"),
+            ("Tab", "Queue term"),
             ("Ctrl+O", "Model"),
             ("↑ / ↓", "History"),
             ("Ctrl+P", "Switch prompt"),
@@ -1527,6 +1542,8 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         AppMode::Input(_) => {
             s.extend(footer_cmd("Enter", "Generate"));
             s.push(footer_pipe());
+            s.extend(footer_cmd("Tab", "Queue term"));
+            s.push(footer_pipe());
             s.extend(footer_cmd("Ctrl+O", "Model"));
             s.push(footer_pipe());
             s.extend(footer_cmd("↑↓", "History"));
@@ -1719,7 +1736,7 @@ fn draw_input(
     let scroll = input.visual_scroll(inner_width);
 
     let title = if batch_queued > 0 {
-        format!(" Enter term (1 of {}) ", 1 + batch_queued)
+        format!(" Enter term ({} queued) ", batch_queued)
     } else {
         " Enter term ".to_string()
     };
