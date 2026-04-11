@@ -280,6 +280,8 @@ field_map:
   AI
 - [`process-deck`](#anki-llm-process-deck-deck) - Process notes from deck with
   AI
+- [`history`](#anki-llm-history) - List past process-deck runs
+- [`rollback`](#anki-llm-rollback-run-id) - Undo a process-deck run
 - [`generate-init`](#anki-llm-generate-init-output) - Create prompt template for
   generate
 - [`generate`](#anki-llm-generate-term) - Generate new cards for a term
@@ -490,8 +492,55 @@ anki-llm process-deck "Spanish" --field Translation -p prompt.txt
 - ✅ **No intermediate files**: Process and update in one step
 - ✅ **Batch updates**: Efficient bulk updates to Anki
 - ✅ **Error logging**: Failed notes logged to `[deck-name]-errors.jsonl`
+- ✅ **Automatic snapshots**: Every run is saved so you can rollback later
 - ❌ **No resume support**: Must complete in one run (use `process-file` for
   large datasets)
+
+---
+
+### `anki-llm history`
+
+Lists past `process-deck` runs that have snapshot data available.
+
+```
+$ anki-llm history
+Run ID                   Deck                     Model              Notes  Status
+──────────────────────────────────────────────────────────────────────────────────
+20260411T153000_123Z     Japanese Core            gpt-5-mini           142  ok
+20260410T091500_456Z     Japanese Core            gpt-5-mini            50  rolled back
+```
+
+Snapshots are stored in `~/.local/state/anki-llm/snapshots/`.
+
+---
+
+### `anki-llm rollback <run-id>`
+
+Restores notes to their state before a `process-deck` run. The run ID is shown
+after each `process-deck` completes and can be found via `anki-llm history`.
+
+```bash
+anki-llm rollback 20260411T153000_123Z
+```
+
+Before restoring, the command checks each note for conflicts: if a field was
+manually edited in Anki after the run, that note is skipped. Use `--force` to
+override conflict detection.
+
+**Options:**
+
+- `--force`: Rollback even if notes were modified after the run.
+- `-d, --dry-run`: Preview what would be restored without making changes.
+
+**Examples:**
+
+```bash
+# Preview what would be rolled back
+anki-llm rollback 20260411T153000_123Z --dry-run
+
+# Force rollback despite conflicts
+anki-llm rollback 20260411T153000_123Z --force
+```
 
 ---
 
