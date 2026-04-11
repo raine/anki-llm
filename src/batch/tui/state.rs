@@ -34,6 +34,7 @@ impl RunState {
                 attempt: 0,
                 max_attempts: plan.retries + 1,
                 elapsed: Duration::ZERO,
+                started_at: None,
             })
             .collect();
         let row_order: Vec<usize> = (0..rows.len()).collect();
@@ -52,6 +53,9 @@ impl RunState {
     pub fn apply_row_update(&mut self, update: RowUpdate) {
         if update.index < self.rows.len() {
             let row = &mut self.rows[update.index];
+            if matches!(update.state, RowState::Running) && row.started_at.is_none() {
+                row.started_at = Some(Instant::now());
+            }
             row.state = update.state.clone();
             row.attempt = update.attempt;
             row.elapsed = update.elapsed;
@@ -167,6 +171,8 @@ pub struct RowStatus {
     pub attempt: u32,
     pub max_attempts: u32,
     pub elapsed: Duration,
+    /// When the row started running, for live elapsed display.
+    pub started_at: Option<Instant>,
 }
 
 pub struct DoneState {

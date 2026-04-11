@@ -353,7 +353,11 @@ fn draw_row_table(state: &RunState, frame: &mut Frame, area: Rect) {
 
             let attempt_str = format!("{}/{}", row.attempt, row.max_attempts);
             let elapsed_str = if row.elapsed > Duration::ZERO {
+                // Finished row — show final elapsed
                 format_duration_short(row.elapsed)
+            } else if let Some(started) = row.started_at {
+                // Running row — show live elapsed
+                format_duration_short(started.elapsed())
             } else {
                 String::new()
             };
