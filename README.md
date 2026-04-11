@@ -166,11 +166,11 @@ anki-llm process-file input.yaml -o output.yaml --field Translation \
 
 ### Provider configuration options
 
-| Setting        | CLI flag           | Environment variable      | Config key       |
-| -------------- | ------------------ | ------------------------- | ---------------- |
-| API base URL   | `--api-base-url`   | `ANKI_LLM_API_BASE_URL`  | `api_base_url`   |
-| API key        | `--api-key`        | `ANKI_LLM_API_KEY`        | —                |
-| Model          | `--model` / `-m`   | —                          | `model`          |
+| Setting      | CLI flag         | Environment variable    | Config key     |
+| ------------ | ---------------- | ----------------------- | -------------- |
+| API base URL | `--api-base-url` | `ANKI_LLM_API_BASE_URL` | `api_base_url` |
+| API key      | `--api-key`      | `ANKI_LLM_API_KEY`      | —              |
+| Model        | `--model` / `-m` | —                       | `model`        |
 
 **Precedence:** CLI flag > environment variable > config file > auto-detect.
 
@@ -297,8 +297,8 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 
 **Options:**
 
-- `-o, --output`: Output file path. When using a deck name, this is optional —
-  a filename is auto-generated from the deck name (e.g., `"My Deck"` →
+- `-o, --output`: Output file path. When using a deck name, this is optional — a
+  filename is auto-generated from the deck name (e.g., `"My Deck"` →
   `my-deck.yaml`). When using `--query`, an output path is required.
 - `-n, --note-type`: Filter by note type (required if results contain multiple
   note types).
@@ -699,8 +699,8 @@ existing Anki note; press `f` to force-select a duplicate for import. Press `r`
 to generate more cards for the same term, or `t` to generate for a different
 term — both keep your current selection. Press `R` to regenerate the focused
 card with feedback (e.g. "make the definition simpler"). Press `e` to edit a
-card in your `$EDITOR`. Press `d` to remove a card from the list, `c` to copy
-to clipboard. Switch model with `Ctrl+O` (type to filter, `Ctrl+N`/`Ctrl+P` to
+card in your `$EDITOR`. Press `d` to remove a card from the list, `c` to copy to
+clipboard. Switch model with `Ctrl+O` (type to filter, `Ctrl+N`/`Ctrl+P` to
 navigate). When cards from multiple models are present, each card shows its
 model. Confirm with `Enter`.
 
@@ -737,11 +737,11 @@ The frontmatter is a YAML block at the top of the file enclosed by `---`.
 
 Asking a single LLM call to generate content, format fields correctly, add
 furigana, and verify quality all at once tends to degrade each individual
-aspect. Processing steps let you split this work into a pipeline where each
-step handles one concern with a focused prompt. The generation prompt can
-concentrate on producing natural, diverse content, while separate steps handle
-mechanical tasks like furigana annotation or quality checks — optionally using
-cheaper, faster models for those steps.
+aspect. Processing steps let you split this work into a pipeline where each step
+handles one concern with a focused prompt. The generation prompt can concentrate
+on producing natural, diverse content, while separate steps handle mechanical
+tasks like furigana annotation or quality checks — optionally using cheaper,
+faster models for those steps.
 
 The `processing` config lets you run LLM steps in two phases:
 
@@ -1323,8 +1323,8 @@ anki-llm generate
 ```
 
 If you have multiple prompt files, a prompt picker appears first. Otherwise, you
-land directly on the term input screen. You can switch the model at any time with
-<kbd>Ctrl+O</kbd>, which opens a filterable model picker with pricing info.
+land directly on the term input screen. You can switch the model at any time
+with <kbd>Ctrl+O</kbd>, which opens a filterable model picker with pricing info.
 
 ### Step 3: Enter terms
 
@@ -1332,8 +1332,8 @@ Type a term like `会議` and press <kbd>Enter</kbd> to generate cards for it.
 
 To generate cards for multiple terms at once, press <kbd>Tab</kbd> after each
 term to queue it, then <kbd>Enter</kbd> on the last one to start batch
-processing. You can also paste multiple newline-separated terms and they will
-be split automatically.
+processing. You can also paste multiple newline-separated terms and they will be
+split automatically.
 
 ### Step 4: Select and review cards
 
@@ -1343,9 +1343,8 @@ After generation, the TUI moves to the selection screen.
   <img src="meta/anki-llm-selection.webp" alt="anki-llm card selection screen" width="756">
 </p>
 
- The top panel lists
-all generated cards with checkboxes, while the bottom panel shows a full preview
-of the currently focused card.
+The top panel lists all generated cards with checkboxes, while the bottom panel
+shows a full preview of the currently focused card.
 
 - <kbd>Space</kbd> — toggle card selection
 - <kbd>a</kbd> / <kbd>n</kbd> — select all / none
@@ -1366,33 +1365,3 @@ Press <kbd>Enter</kbd> to confirm your selection and import the cards into Anki.
 After import, you can press <kbd>n</kbd> to start a new term, <kbd>r</kbd> to
 retry, or <kbd>q</kbd> to quit. Session cost is tracked in the sidebar
 throughout.
-
-## Development
-
-### Running locally
-
-Use `tsx` to run the CLI directly from TypeScript source without rebuilding:
-
-```bash
-pnpm tsx src/cli.ts export "My Deck" notes.yaml
-```
-
-### Testing the global CLI
-
-Use `pnpm link` to test the command globally:
-
-```bash
-pnpm link --global
-anki-llm export "My Deck" -o notes.yaml
-```
-
-Note: The linked command uses compiled JavaScript from `dist/`. Run
-`pnpm run build` after making changes to see them reflected.
-
-To unlink: `pnpm unlink --global`
-
-### Code quality
-
-```bash
-pnpm run check
-```
