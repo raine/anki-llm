@@ -1,3 +1,23 @@
+## v2.0.5 (2026-04-11)
+
+## `generate`
+
+- Added batch/multi-term input — paste multiple terms or press Tab to queue
+  them, then process all at once into a single selection view
+- Added single-card regeneration with feedback — press R on a card to regenerate
+  it with custom guidance (e.g. "make the definition simpler")
+- Added duplicate diffing — duplicate cards now show a field-by-field diff
+  against the existing Anki note, and pressing F force-selects them when the new
+  version is better
+- Added $EDITOR integration — press E in the selection screen to edit a card's
+  fields in your editor
+- Added inline term input — press N in the selection screen to generate cards
+  for a new term without leaving the view
+- Added card removal — press X to remove unwanted cards from the selection
+- Model picker now supports type-to-filter and Ctrl-N/Ctrl-P navigation
+- Model changes in the selection screen are now deferred, showing which model
+  generated each card
+
 ## v2.0.4 (2026-04-10)
 
 - Added prompt picker — prompts in the prompts directory are auto-discovered,
