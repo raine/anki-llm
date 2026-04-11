@@ -1200,7 +1200,13 @@ be split automatically.
 
 ### Step 4: Select and review cards
 
-After generation, the TUI moves to the selection screen. The top panel lists
+After generation, the TUI moves to the selection screen.
+
+<p align="center">
+  <img src="meta/anki-llm-selection.webp" alt="anki-llm card selection screen" width="756">
+</p>
+
+ The top panel lists
 all generated cards with checkboxes, while the bottom panel shows a full preview
 of the currently focused card.
 
