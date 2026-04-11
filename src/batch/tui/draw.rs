@@ -320,6 +320,7 @@ fn draw_row_table(state: &RunState, frame: &mut Frame, area: Rect) {
 
     let header = Row::new(vec![
         Cell::from(Span::styled("ID", Style::default().fg(THEME.header))),
+        Cell::from(Span::styled("Preview", Style::default().fg(THEME.header))),
         Cell::from(Span::styled("Status", Style::default().fg(THEME.header))),
         Cell::from(Span::styled("Attempt", Style::default().fg(THEME.header))),
         Cell::from(Span::styled("Elapsed", Style::default().fg(THEME.header))),
@@ -363,17 +364,14 @@ fn draw_row_table(state: &RunState, frame: &mut Frame, area: Rect) {
             };
 
             Row::new(vec![
-                Cell::from(Line::from(if row.preview.is_empty() {
-                    vec![Span::styled(
-                        row.id.clone(),
-                        Style::default().fg(THEME.text),
-                    )]
-                } else {
-                    vec![
-                        Span::styled(format!("{} ", row.id), Style::default().fg(THEME.dimmed)),
-                        Span::styled(row.preview.clone(), Style::default().fg(THEME.text)),
-                    ]
-                })),
+                Cell::from(Span::styled(
+                    row.id.clone(),
+                    Style::default().fg(THEME.dimmed),
+                )),
+                Cell::from(Span::styled(
+                    row.preview.clone(),
+                    Style::default().fg(THEME.text),
+                )),
                 Cell::from(Span::styled(status_str, status_style)),
                 Cell::from(Span::styled(attempt_str, Style::default().fg(THEME.dimmed))),
                 Cell::from(Span::styled(elapsed_str, Style::default().fg(THEME.dimmed))),
@@ -384,7 +382,8 @@ fn draw_row_table(state: &RunState, frame: &mut Frame, area: Rect) {
     let table = Table::new(
         rows,
         [
-            Constraint::Min(16),
+            Constraint::Length(12),
+            Constraint::Min(10),
             Constraint::Length(8),
             Constraint::Length(8),
             Constraint::Length(8),
