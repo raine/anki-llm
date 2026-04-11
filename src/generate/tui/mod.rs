@@ -12,17 +12,16 @@ mod events;
 mod history;
 mod prompt_picker;
 mod screens;
-mod theme;
 mod widgets;
 
 pub use events::{BackendEvent, SessionInfo, StepStatus, WorkerCommand};
 use history::InputHistory;
 use screens::review::{ReviewState, draw_reviewing};
 use screens::selection::{SelectionState, draw_selecting};
-use theme::{Glyphs, SPINNER_FRAMES, THEME, footer_cmd, footer_pipe};
 use widgets::{ModelPickerState, draw_log_panel, draw_model_picker, draw_step_logs};
 
-use super::line_input::LineInput;
+use crate::tui::line_input::LineInput;
+use crate::tui::theme::{Glyphs, SPINNER_FRAMES, THEME, footer_cmd, footer_pipe};
 
 use crate::anki::client::AnkiClient;
 use crate::cli::GenerateArgs;

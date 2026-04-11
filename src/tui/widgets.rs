@@ -6,32 +6,17 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragra
 
 use crate::llm::pricing;
 
-use crate::tui::theme::THEME;
+use super::theme::THEME;
 
-/// An entry in the model picker's visible list.
-#[derive(Clone)]
-pub(super) enum PickerEntry {
-    Known(String),
-    Custom(String),
-}
-
-impl PickerEntry {
-    pub(super) fn model_name(&self) -> &str {
-        match self {
-            PickerEntry::Known(s) | PickerEntry::Custom(s) => s,
-        }
-    }
-}
-
-pub(super) struct ModelPickerState {
-    pub(super) models: Vec<String>,
-    pub(super) filter: String,
-    pub(super) cursor: usize,
-    pub(super) list_state: ListState,
+pub struct ModelPickerState {
+    pub models: Vec<String>,
+    pub filter: String,
+    pub cursor: usize,
+    pub list_state: ListState,
 }
 
 impl ModelPickerState {
-    pub(super) fn new(models: Vec<String>, current_model: Option<&str>) -> Self {
+    pub fn new(models: Vec<String>, current_model: Option<&str>) -> Self {
         let cursor = current_model
             .and_then(|m| models.iter().position(|s| s == m))
             .unwrap_or(0);
@@ -45,14 +30,9 @@ impl ModelPickerState {
         }
     }
 
-    /// Build the visible entries: filtered known models, plus a custom entry
-    /// at the bottom when the filter doesn't exactly match a listed model.
-    pub(super) fn visible_entries(&self) -> Vec<PickerEntry> {
-        let mut entries: Vec<PickerEntry> = if self.filter.is_empty() {
-            self.models
-                .iter()
-                .map(|s| PickerEntry::Known(s.clone()))
-                .collect()
+    pub fn filtered_models(&self) -> Vec<&str> {
+        if self.filter.is_empty() {
+            self.models.iter().map(|s| s.as_str()).collect()
         } else {
             let normalized_filter: String = self
                 .filter
@@ -70,54 +50,43 @@ impl ModelPickerState {
                         .collect();
                     normalized.contains(&normalized_filter)
                 })
-                .map(|s| PickerEntry::Known(s.clone()))
+                .map(|s| s.as_str())
                 .collect()
-        };
-
-        // Append a custom entry if the filter is non-empty and doesn't exactly
-        // match any visible model.
-        if !self.filter.is_empty() {
-            let exact_match = entries.iter().any(|e| e.model_name() == self.filter);
-            if !exact_match {
-                entries.push(PickerEntry::Custom(self.filter.clone()));
-            }
         }
-
-        entries
     }
 
-    pub(super) fn move_up(&mut self) {
+    pub fn move_up(&mut self) {
         if self.cursor > 0 {
             self.cursor -= 1;
             self.list_state.select(Some(self.cursor));
         }
     }
 
-    pub(super) fn move_down(&mut self) {
-        let count = self.visible_entries().len();
-        if self.cursor + 1 < count {
+    pub fn move_down(&mut self) {
+        let filtered = self.filtered_models();
+        if self.cursor + 1 < filtered.len() {
             self.cursor += 1;
             self.list_state.select(Some(self.cursor));
         }
     }
 
-    pub(super) fn selected(&self) -> Option<String> {
-        let entries = self.visible_entries();
-        entries.get(self.cursor).map(|e| e.model_name().to_string())
+    pub fn selected(&self) -> Option<&str> {
+        let filtered = self.filtered_models();
+        filtered.get(self.cursor).copied()
     }
 
-    pub(super) fn add_filter_char(&mut self, c: char) {
+    pub fn add_filter_char(&mut self, c: char) {
         self.filter.push(c);
         self.clamp_cursor();
     }
 
-    pub(super) fn remove_filter_char(&mut self) {
+    pub fn remove_filter_char(&mut self) {
         self.filter.pop();
         self.clamp_cursor();
     }
 
     fn clamp_cursor(&mut self) {
-        let len = self.visible_entries().len();
+        let len = self.filtered_models().len();
         if len == 0 {
             self.cursor = 0;
         } else if self.cursor >= len {
@@ -127,9 +96,9 @@ impl ModelPickerState {
     }
 }
 
-pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
-    let entries = picker.visible_entries();
-    let row_count = entries.len() as u16;
+pub fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
+    let filtered = picker.filtered_models();
+    let row_count = filtered.len() as u16;
     let height = (row_count + 2).min(20); // borders
     let width: u16 = 48;
 
@@ -185,29 +154,18 @@ pub(super) fn draw_model_picker(frame: &mut Frame, picker: &ModelPickerState) {
     // Inner width: total width - 2 borders - 2 highlight symbol
     let inner_w = width.saturating_sub(4) as usize;
 
-    let items: Vec<ListItem> = entries
+    let items: Vec<ListItem> = filtered
         .iter()
-        .map(|entry| match entry {
-            PickerEntry::Known(m) => {
-                let price = pricing::model_pricing(m)
-                    .map(|p| {
-                        format_model_price(p.input_cost_per_million, p.output_cost_per_million)
-                    })
-                    .unwrap_or_default();
-                let pad = inner_w.saturating_sub(m.len() + price.len());
-                ListItem::new(Line::from(vec![
-                    Span::styled(m.as_str(), Style::default().fg(THEME.text)),
-                    Span::raw(" ".repeat(pad)),
-                    Span::styled(price, Style::default().fg(THEME.dimmed)),
-                ]))
-            }
-            PickerEntry::Custom(name) => {
-                let label = format!("Use '{name}'");
-                ListItem::new(Line::from(vec![Span::styled(
-                    label,
-                    Style::default().fg(THEME.info),
-                )]))
-            }
+        .map(|m| {
+            let price = pricing::model_pricing(m)
+                .map(|p| format_model_price(p.input_cost_per_million, p.output_cost_per_million))
+                .unwrap_or_default();
+            let pad = inner_w.saturating_sub(m.len() + price.len());
+            ListItem::new(Line::from(vec![
+                Span::styled(*m, Style::default().fg(THEME.text)),
+                Span::raw(" ".repeat(pad)),
+                Span::styled(price, Style::default().fg(THEME.dimmed)),
+            ]))
         })
         .collect();
 
@@ -241,7 +199,7 @@ fn format_model_price(input: f64, output: f64) -> String {
     format!("{}/{}", fmt(input), fmt(output))
 }
 
-pub(super) fn draw_log_panel(frame: &mut Frame, logs: &[String], log_scroll: u16, area: Rect) {
+pub fn draw_log_panel(frame: &mut Frame, logs: &[String], log_scroll: u16, area: Rect) {
     let visible_height = area.height.saturating_sub(2) as usize;
     let total_logs = logs.len();
     let scroll_pos = log_scroll as usize;
@@ -262,51 +220,5 @@ pub(super) fn draw_log_panel(frame: &mut Frame, logs: &[String], log_scroll: u16
     let log_para = Paragraph::new(log_text)
         .block(log_block)
         .wrap(Wrap { trim: false });
-    frame.render_widget(log_para, area);
-}
-
-pub(super) fn draw_step_logs(
-    frame: &mut Frame,
-    step_label: &str,
-    logs: &[String],
-    browse_scroll: u16,
-    area: Rect,
-) {
-    let title = format!(" {step_label} ");
-
-    if logs.is_empty() {
-        let lines = vec![
-            Line::from(""),
-            Line::from(Span::styled(
-                "  No log entries for this step.",
-                Style::default().fg(THEME.dimmed),
-            )),
-        ];
-        let para = Paragraph::new(Text::from(lines))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL.difference(Borders::LEFT))
-                    .title(title)
-                    .border_style(Style::default().fg(THEME.border)),
-            )
-            .wrap(Wrap { trim: false });
-        frame.render_widget(para, area);
-        return;
-    }
-
-    let log_text: Text = logs
-        .iter()
-        .map(|l| Line::from(l.as_str()))
-        .collect::<Vec<_>>()
-        .into();
-
-    let log_block = Block::default()
-        .borders(Borders::ALL.difference(Borders::LEFT))
-        .title(title)
-        .border_style(Style::default().fg(THEME.border));
-    let log_para = Paragraph::new(log_text)
-        .block(log_block)
-        .wrap(Wrap { trim: false })
-        .scroll((browse_scroll, 0));
     frame.render_widget(log_para, area);
 }

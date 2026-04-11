@@ -1,4 +1,5 @@
 pub mod anki;
+pub mod batch;
 pub mod cli;
 pub mod config;
 pub mod data;
@@ -8,4 +9,5 @@ pub mod snapshot;
 pub mod spinner;
 pub mod style;
 pub mod template;
+pub mod tui;
 pub mod workspace;

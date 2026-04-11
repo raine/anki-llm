@@ -3,7 +3,6 @@ pub mod cards;
 pub mod command_generate;
 pub mod exporter;
 pub mod init;
-pub mod line_input;
 pub mod manual;
 pub mod pipeline;
 pub mod process;

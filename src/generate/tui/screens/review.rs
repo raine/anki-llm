@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 use crate::generate::process::FlaggedCard;
 
-use super::super::theme::THEME;
+use crate::tui::theme::THEME;
 
 pub(in crate::generate::tui) struct ReviewState {
     pub(in crate::generate::tui) flagged: Vec<FlaggedCard>,

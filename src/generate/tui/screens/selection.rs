@@ -8,9 +8,8 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::generate::cards::ValidatedCard;
-use crate::generate::line_input::LineInput;
-
-use super::super::theme::{Glyphs, SPINNER_FRAMES, THEME};
+use crate::tui::line_input::LineInput;
+use crate::tui::theme::{Glyphs, SPINNER_FRAMES, THEME};
 
 pub(in crate::generate::tui) struct SelectionState {
     pub(in crate::generate::tui) cards: Vec<ValidatedCard>,

@@ -8,7 +8,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 
-use super::theme::{Glyphs, THEME};
+use crate::tui::theme::{Glyphs, THEME};
 
 pub(super) fn run_prompt_picker(
     mut terminal: DefaultTerminal,
