@@ -274,12 +274,11 @@ field_map:
 
 ## Commands reference
 
-- [`export`](#anki-llm-export-deck-output) - Export deck to file
+- [`export`](#anki-llm-export) - Export deck to file
 - [`import`](#anki-llm-import-input) - Import data to deck
 - [`process-file`](#anki-llm-process-file-input) - Process notes from file with
   AI
-- [`process-deck`](#anki-llm-process-deck-deck) - Process notes from deck with
-  AI
+- [`process-deck`](#anki-llm-process-deck) - Process notes from deck with AI
 - [`history`](#anki-llm-history) - List past process-deck runs
 - [`rollback`](#anki-llm-rollback-run-id) - Undo a process-deck run
 - [`generate-init`](#anki-llm-generate-init-output) - Create prompt template for
@@ -287,30 +286,41 @@ field_map:
 - [`generate`](#anki-llm-generate-term) - Generate new cards for a term
 - [`query`](#anki-llm-query-action-params) - Query AnkiConnect API
 
-### `anki-llm export <deck> [output]`
+### `anki-llm export`
 
-Exports notes from an Anki deck.
+Exports notes from Anki. Select notes by deck name or by an Anki search query.
 
-- `<deck>`: The name of the Anki deck to export (must be in quotes if it
-  contains spaces).
-- `[output]`: Optional output file path. If omitted, automatically generates a
-  filename from the deck name (e.g., `"My Deck"` → `my-deck.yaml`). You can also
-  provide just a file extension (e.g., `.csv`) to auto-generate the filename
-  with your preferred format.
+- `<deck>`: The name of the Anki deck to export.
+- `-q, --query`: Anki search query to select notes (alternative to deck name).
+
+One of `<deck>` or `--query` is required (mutually exclusive).
+
+**Options:**
+
+- `-o, --output`: Output file path. When using a deck name, this is optional —
+  a filename is auto-generated from the deck name (e.g., `"My Deck"` →
+  `my-deck.yaml`). When using `--query`, an output path is required.
+- `-n, --note-type`: Filter by note type (required if results contain multiple
+  note types).
 
 **Examples:**
 
 ```bash
-# Auto-generate filename with default .yaml format
+# Export a deck (auto-generate filename)
 anki-llm export "Japanese Core 1k"
 # → japanese-core-1k.yaml
 
-# Auto-generate filename with .csv format
-anki-llm export "Japanese Core 1k" .csv
-# → japanese-core-1k.csv
+# Export a deck to CSV
+anki-llm export "Japanese Core 1k" -o japanese.csv
 
-# Specify custom filename
-anki-llm export "Japanese Core 1k" my-custom-name.yaml
+# Export only cards missing an audio field
+anki-llm export --query "deck:Japanese -field:Audio" -o missing-audio.yaml
+
+# Export leeches across all decks
+anki-llm export --query "tag:leech" -o leeches.yaml
+
+# Export cards failed in the last 7 days
+anki-llm export --query "rated:7:1" -o recent-failures.yaml
 ```
 
 ### `anki-llm import <input>`
@@ -374,7 +384,7 @@ re-run.
 
 **Workflow:**
 
-1. Export deck to file: `anki-llm export "My Deck" notes.yaml`
+1. Export deck to file: `anki-llm export "My Deck" -o notes.yaml`
 2. Process file:
    `anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini`
 3. Import results: `anki-llm import output.yaml -d "My Deck"`
@@ -424,15 +434,16 @@ Use `process-file` instead of `process-deck` when you:
 
 ---
 
-### `anki-llm process-deck <deck>`
+### `anki-llm process-deck`
 
-Batch-process notes directly from an Anki deck using an LLM and user-defined
-prompts, updating them in-place. No intermediate files needed. This is faster
-and more convenient when you've tested your prompt and know the end result is
-safe to run.
+Batch-process notes directly in Anki using an LLM and user-defined prompts,
+updating them in-place. No intermediate files needed. Select notes by deck name
+or by an Anki search query.
 
-- `<deck>`: Name of the Anki deck to process (must be in quotes if it contains
-  spaces).
+- `<deck>`: Name of the Anki deck to process.
+- `-q, --query`: Anki search query to select notes (alternative to deck name).
+
+One of `<deck>` or `--query` is required (mutually exclusive).
 
 **Required options:**
 
@@ -483,8 +494,14 @@ anki-llm process-deck "Vocabulary" --json -p prompt.txt
 # Test on 10 notes first (recommended before processing entire deck)
 anki-llm process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run
 
-# Use a different model for a specific run
-anki-llm process-deck "Spanish" --field Translation -p prompt.txt
+# Rewrite explanations only for cards you keep failing
+anki-llm process-deck --query "deck:Japanese prop:lapses>5" --field Explanation -p prompt.txt
+
+# Add mnemonics to leeches
+anki-llm process-deck --query "tag:leech" --field Mnemonic -p prompt.txt
+
+# Fix cards you got wrong in the last 7 days
+anki-llm process-deck --query "rated:7:1" --field Notes -p prompt.txt
 ```
 
 **Key features:**
@@ -989,7 +1006,7 @@ multiline text fields and for using `git diff` to see what has changed after
 processing is complete.
 
 ```bash
-anki-llm export "Japanese Core 1k" notes.yaml
+anki-llm export "Japanese Core 1k" -o notes.yaml
 ```
 
 This command will connect to Anki, find all notes in that deck, and save them to
@@ -1362,7 +1379,7 @@ Use `pnpm link` to test the command globally:
 
 ```bash
 pnpm link --global
-anki-llm export "My Deck" notes.yaml
+anki-llm export "My Deck" -o notes.yaml
 ```
 
 Note: The linked command uses compiled JavaScript from `dist/`. Run
