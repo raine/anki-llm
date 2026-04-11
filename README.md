@@ -17,6 +17,10 @@
 
 ---
 
+<p align="center">
+  <img src="meta/anki-llm-generate.webp" alt="anki-llm generate demo" width="830">
+</p>
+
 ## Example workflows
 
 - **Bulk-verify translations** – End-to-end pipeline for cleaning large decks.
