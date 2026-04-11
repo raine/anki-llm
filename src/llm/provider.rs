@@ -39,7 +39,14 @@ pub fn api_key_for_model(model: &str) -> Option<String> {
 /// If `include_all` is true (e.g. dry-run mode), returns all known models.
 pub fn available_models(include_all: bool) -> Vec<String> {
     use crate::llm::pricing::KNOWN_MODELS;
-    let mut models: Vec<String> = if include_all {
+
+    // If a global API key is set, all known models are reachable (e.g. via OpenRouter)
+    let has_global_key = std::env::var("ANKI_LLM_API_KEY")
+        .ok()
+        .filter(|k| !k.trim().is_empty())
+        .is_some();
+
+    let mut models: Vec<String> = if include_all || has_global_key {
         KNOWN_MODELS.iter().map(|s| s.to_string()).collect()
     } else {
         KNOWN_MODELS

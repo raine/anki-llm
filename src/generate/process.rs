@@ -80,13 +80,10 @@ pub fn run_processors(
         let model = step.model.as_deref().unwrap_or(default_model);
         let total_cards = current_cards.len();
 
-        // If the step overrides the model, we may need a different provider client
-        let step_client = if step.model.is_some() {
-            LlmClient::for_model(model)
-        } else {
-            None
-        };
-        let effective_client = step_client.as_ref().unwrap_or(client);
+        // Step model overrides only change the model name sent in the request.
+        // The transport (base URL, API key) always comes from the main client,
+        // so custom endpoints (OpenRouter, Ollama, etc.) work correctly.
+        let effective_client = client;
 
         if total_cards == 0 {
             break;

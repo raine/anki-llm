@@ -54,7 +54,10 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
         (provider::provider_config(&model).base_url, false)
     };
 
-    // Resolve API key: CLI flag > ANKI_LLM_API_KEY env > provider-specific env var
+    // Resolve API key: CLI flag > ANKI_LLM_API_KEY env > provider-specific env var.
+    // When a custom endpoint is configured, never fall through to provider-specific
+    // env vars (OPENAI_API_KEY, GEMINI_API_KEY) — that would leak credentials to
+    // a third-party server.
     let api_key = if args.dry_run {
         None
     } else if let Some(key) = args.api_key {
@@ -65,6 +68,8 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
         } else {
             Some(key)
         }
+    } else if custom_endpoint {
+        None
     } else {
         api_key_for_model(&model)
     };
