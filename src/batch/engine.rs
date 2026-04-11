@@ -69,7 +69,10 @@ pub fn run_batch(
                         cancel: &cancel,
                         model: &config.model,
                     };
-                    let outcome = process_with_retry(row, idx, &ctx);
+                    let Some(outcome) = process_with_retry(row, idx, &ctx) else {
+                        // Row was cancelled — don't record it as a result
+                        break;
+                    };
 
                     // Notify callback — abort if it returns true
                     if let Some(ref cb) = on_row_done
@@ -140,7 +143,8 @@ struct RetryCtx<'a> {
 /// Process a single row with retry and exponential backoff.
 /// Token usage is accumulated into `tokens` on each successful attempt.
 /// Events are emitted for each state transition.
-fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> RowOutcome {
+/// Returns `None` if the row was cancelled (not a real failure).
+fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> Option<RowOutcome> {
     let start = Instant::now();
     let id = get_note_id(row).unwrap_or_default();
     let mut last_error = String::new();
@@ -168,7 +172,7 @@ fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> RowOutcome
                     elapsed: start.elapsed(),
                 }))
                 .ok();
-            return make_failure(row, "cancelled".to_string());
+            return None;
         }
 
         if attempt > 0 {
@@ -208,7 +212,7 @@ fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> RowOutcome
                         elapsed: start.elapsed(),
                     }))
                     .ok();
-                return make_failure(row, "cancelled".to_string());
+                return None;
             }
         }
 
@@ -236,7 +240,7 @@ fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> RowOutcome
                         elapsed: start.elapsed(),
                     }))
                     .ok();
-                return RowOutcome::Success(updated_row);
+                return Some(RowOutcome::Success(updated_row));
             }
             Err(e) => {
                 last_error = e.to_string();
@@ -260,7 +264,7 @@ fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> RowOutcome
         }))
         .ok();
 
-    make_failure(row, last_error)
+    Some(make_failure(row, last_error))
 }
 
 fn make_failure(row: &Row, error: String) -> RowOutcome {

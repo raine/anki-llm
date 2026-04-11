@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 
 use super::events::{BatchEvent, BatchPlan};
@@ -59,52 +59,56 @@ fn run_app(
             if key.kind != KeyEventKind::Press {
                 continue;
             }
+            let is_ctrl_c =
+                key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL);
             match &mut mode {
-                AppMode::Preflight => match key.code {
-                    KeyCode::Enter => {
-                        // Signal engine to start
+                AppMode::Preflight => {
+                    if is_ctrl_c || key.code == KeyCode::Esc {
+                        drop(start_tx.take());
+                        return Ok(TuiResult::Cancelled);
+                    } else if key.code == KeyCode::Enter {
                         if let Some(tx) = start_tx.take() {
                             tx.send(()).ok();
                         }
                         mode = AppMode::Running(RunState::from_plan(&plan));
                     }
-                    KeyCode::Esc => {
-                        // Drop start_tx → engine sees recv error → exits
-                        drop(start_tx.take());
-                        return Ok(TuiResult::Cancelled);
-                    }
-                    _ => {}
-                },
-                AppMode::Running(state) => match key.code {
-                    KeyCode::Esc | KeyCode::Char('q') => {
+                }
+                AppMode::Running(state) => {
+                    if is_ctrl_c || key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
                         cancel.store(true, Ordering::SeqCst);
                         state.cancelling = true;
-                        // Don't quit yet — wait for RunDone
-                    }
-                    KeyCode::Char('j') | KeyCode::Down => state.scroll_down(),
-                    KeyCode::Char('k') | KeyCode::Up => state.scroll_up(),
-                    _ => {}
-                },
-                AppMode::Done(state) => match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => {
-                        should_quit = true;
-                    }
-                    KeyCode::Char('r') if !state.summary.failed_rows.is_empty() => {
-                        retry_requested = true;
-                        should_quit = true;
-                    }
-                    KeyCode::Char('j') | KeyCode::Down => {
-                        if state.cursor + 1 < state.summary.failed_rows.len() {
-                            state.cursor += 1;
+                    } else {
+                        match key.code {
+                            KeyCode::Char('j') | KeyCode::Down => state.scroll_down(),
+                            KeyCode::Char('k') | KeyCode::Up => state.scroll_up(),
+                            _ => {}
                         }
                     }
-                    KeyCode::Char('k') | KeyCode::Up => {
-                        state.cursor = state.cursor.saturating_sub(1);
+                }
+                AppMode::Done(state) => {
+                    if is_ctrl_c || key.code == KeyCode::Char('q') || key.code == KeyCode::Esc {
+                        should_quit = true;
+                    } else if key.code == KeyCode::Char('r')
+                        && !state.summary.failed_rows.is_empty()
+                    {
+                        retry_requested = true;
+                        should_quit = true;
+                    } else {
+                        match key.code {
+                            KeyCode::Char('j') | KeyCode::Down => {
+                                if state.cursor + 1 < state.summary.failed_rows.len() {
+                                    state.cursor += 1;
+                                }
+                            }
+                            KeyCode::Char('k') | KeyCode::Up => {
+                                state.cursor = state.cursor.saturating_sub(1);
+                            }
+                            _ => {}
+                        }
                     }
-                    _ => {}
-                },
+                }
                 AppMode::Error(_) => {
-                    if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
+                    if is_ctrl_c || matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
                         should_quit = true;
                     }
                 }

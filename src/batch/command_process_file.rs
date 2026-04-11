@@ -300,7 +300,7 @@ fn run_with_tui(
 
         let (event_tx, event_rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
-        let (start_tx, start_rx) = mpsc::sync_channel::<()>(0);
+        let (start_tx, start_rx) = mpsc::sync_channel::<()>(1);
 
         let cancel_for_engine = Arc::clone(&cancel);
         let writer_cb = Arc::clone(&writer);
