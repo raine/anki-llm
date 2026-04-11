@@ -62,6 +62,7 @@ pub struct ExportArgs {
     #[arg(long, short = 'q')]
     pub query: Option<String>,
     /// Output file path
+    #[arg(long, short = 'o')]
     pub output: Option<PathBuf>,
     /// Filter by note type (required if deck contains multiple note types)
     #[arg(long, short = 'n')]

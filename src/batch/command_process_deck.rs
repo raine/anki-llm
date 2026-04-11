@@ -83,7 +83,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
             .collect();
         if !mixed.is_empty() {
             bail!(
-                "deck contains multiple note types: '{}' and {}. \
+                "results contain multiple note types: '{}' and {}. \
                  Use --note-type to filter.",
                 first_model,
                 mixed
@@ -229,11 +229,8 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     });
 
     // Set up deck writer. Pass the existing AnkiClient (no need for a second one).
-    let slug = args
-        .deck
-        .as_deref()
-        .map(slugify_deck_name)
-        .unwrap_or_else(|| "query-results".to_string());
+    let source_name = args.deck.as_deref().or(args.query.as_deref()).unwrap();
+    let slug = slugify_deck_name(source_name);
     let error_log_path = format!("{slug}-errors.jsonl").into();
     let run_id = store::generate_run_id();
     let writer = Arc::new(DeckWriter::new(
@@ -295,7 +292,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         let snapshot = Snapshot {
             run_id: run_id.clone(),
             timestamp: store::generate_timestamp(),
-            deck: deck_name.to_string(),
+            deck: source_name.to_string(),
             model: runtime.model.clone(),
             note_count: revisions.len(),
             rolled_back: false,
