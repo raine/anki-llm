@@ -6,14 +6,16 @@ field_map:
   kanji: Kanji
   reading: Reading
   explanation: Explanation
-quality_check:
-  field: front
-  prompt: >
-    Does this English definition accurately describe the Japanese word shown in
-    the "kanji" field? Reply with only "yes" or "no".
+processing:
+  pre_select:
+    - type: check
+      target: front
+      prompt: >
+        Does this English definition accurately describe the Japanese word shown in
+        the "kanji" field? Reply with only "yes" or "no".
 
-    Definition: {front}
-    Japanese: {kanji}
+        Definition: {front}
+        Japanese: {kanji}
 ---
 
 Generate {count} Anki flashcards for the Japanese word or phrase "{term}".
