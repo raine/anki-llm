@@ -15,6 +15,7 @@ pub struct BatchConfig {
     pub batch_size: u32,
     pub retries: u32,
     pub model: String,
+    pub output_path: String,
 }
 
 /// Callback invoked after each row completes (success or failure).
@@ -121,7 +122,7 @@ pub fn run_batch(
             cost,
             elapsed,
             interrupted: was_interrupted,
-            output_path: String::new(), // filled by caller
+            output_path: config.output_path.clone(),
             model: config.model.clone(),
             failed_rows,
         }))
@@ -297,6 +298,7 @@ mod tests {
             batch_size: 1,
             retries,
             model: "test-model".into(),
+            output_path: String::new(),
         }
     }
 

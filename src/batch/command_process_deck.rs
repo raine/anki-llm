@@ -243,6 +243,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         batch_size: runtime.batch_size,
         retries: runtime.retries,
         model: runtime.model.clone(),
+        output_path: String::new(),
     };
 
     let (event_tx, _event_rx) = mpsc::channel();

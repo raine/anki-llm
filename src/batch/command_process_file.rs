@@ -234,6 +234,7 @@ fn run_with_plain(
         batch_size: runtime.batch_size,
         retries: runtime.retries,
         model: runtime.model.clone(),
+        output_path: plan.output_path.clone(),
     };
 
     let (event_tx, event_rx) = mpsc::channel();
@@ -296,6 +297,7 @@ fn run_with_tui(
             batch_size: runtime.batch_size,
             retries: runtime.retries,
             model: runtime.model.clone(),
+            output_path: plan.output_path.clone(),
         };
 
         let (event_tx, event_rx) = mpsc::channel();
