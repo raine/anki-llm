@@ -1715,8 +1715,7 @@ fn draw_input(
         .split(area);
 
     let col = h_chunks[1];
-    // Extra line below input for batch indicator
-    let input_height: u16 = if batch_queued > 0 { 4 } else { 3 };
+    let input_height: u16 = 3;
     let v_pad = col.height.saturating_sub(input_height) / 2;
 
     let v_chunks = Layout::default()
@@ -1757,24 +1756,6 @@ fn draw_input(
         .block(block)
         .scroll((0, scroll as u16));
     frame.render_widget(para, input_block_area);
-
-    // Batch indicator below the input box
-    if batch_queued > 0 {
-        let hint_area = Rect {
-            x: input_block_area.x,
-            y: input_block_area.y + 3,
-            width: input_block_area.width,
-            height: 1,
-        };
-        let hint = Paragraph::new(Line::from(vec![Span::styled(
-            format!(
-                " +{batch_queued} more term{}",
-                if batch_queued == 1 { "" } else { "s" }
-            ),
-            Style::default().fg(THEME.dimmed),
-        )]));
-        frame.render_widget(hint, hint_area);
-    }
 
     if show_cursor {
         frame.set_cursor_position((
