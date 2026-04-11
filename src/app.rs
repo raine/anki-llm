@@ -12,5 +12,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::ProcessDeck(args) => crate::batch::command_process_deck::run(args),
         Commands::Generate(args) => crate::generate::command_generate::run(args),
         Commands::GenerateInit(args) => crate::generate::init::command::run(args),
+        Commands::History => crate::snapshot::command_history::run(),
+        Commands::Rollback(args) => crate::snapshot::command_rollback::run(args),
     }
 }

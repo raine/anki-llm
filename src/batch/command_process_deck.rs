@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use anyhow::{Context, Result, bail};
+use indexmap::IndexMap;
 use serde_json::Value;
 
 use crate::anki::client::{AnkiClient, anki_quote};
@@ -12,6 +13,7 @@ use crate::data::slug::slugify_deck_name;
 use crate::llm::client::LlmClient;
 use crate::llm::logger::LlmLogger;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
+use crate::snapshot::store::{self, Snapshot};
 use crate::template::fill_template;
 
 use super::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
@@ -99,6 +101,31 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
                 row.insert(field_name, Value::String(value));
             }
             row
+        })
+        .collect();
+
+    // Capture before_fields for snapshot (keyed by note_id)
+    let before_fields: IndexMap<i64, IndexMap<String, String>> = rows
+        .iter()
+        .filter_map(|row| {
+            let note_id = row.get(ANKI_NOTE_ID_KEY).and_then(|v| match v {
+                Value::Number(n) => n.as_i64(),
+                Value::String(s) => s.parse().ok(),
+                _ => None,
+            })?;
+            let fields: IndexMap<String, String> = row
+                .iter()
+                .filter(|(k, _)| !k.starts_with('_'))
+                .map(|(k, v)| {
+                    let s = match v {
+                        Value::String(s) => s.clone(),
+                        Value::Null => String::new(),
+                        other => other.to_string(),
+                    };
+                    (k.clone(), s)
+                })
+                .collect();
+            Some((note_id, fields))
         })
         .collect();
 
@@ -195,10 +222,12 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     // Set up deck writer. Pass the existing AnkiClient (no need for a second one).
     let slug = slugify_deck_name(deck_name);
     let error_log_path = format!("{slug}-errors.jsonl").into();
+    let run_id = store::generate_run_id();
     let writer = Arc::new(DeckWriter::new(
         anki,
         runtime.batch_size as usize,
         error_log_path,
+        before_fields,
     )?);
 
     let writer_cb = Arc::clone(&writer);
@@ -234,6 +263,32 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
 
     let anki_updates = writer.success_count();
     eprintln!("\nSuccessfully updated {anki_updates} notes in Anki.");
+
+    // Save snapshot for rollback
+    let revisions = writer.take_revisions();
+    if !revisions.is_empty() {
+        let snapshot = Snapshot {
+            run_id: run_id.clone(),
+            timestamp: store::generate_timestamp(),
+            deck: deck_name.to_string(),
+            model: runtime.model.clone(),
+            note_count: revisions.len(),
+            rolled_back: false,
+            notes: revisions,
+        };
+        match store::save_snapshot(&snapshot) {
+            Ok(path) => {
+                eprintln!(
+                    "Snapshot saved: {} (use `anki-llm rollback {}` to undo)",
+                    path.display(),
+                    run_id
+                );
+            }
+            Err(e) => {
+                eprintln!("Warning: failed to save snapshot: {e}");
+            }
+        }
+    }
 
     let failures = outcomes
         .iter()

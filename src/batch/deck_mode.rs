@@ -5,10 +5,12 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Context;
+use indexmap::IndexMap;
 use serde_json::{Value, json};
 
 use crate::anki::client::AnkiClient;
 use crate::data::rows::Row;
+use crate::snapshot::store::NoteRevision;
 
 use super::report::RowOutcome;
 
@@ -30,6 +32,10 @@ pub struct DeckWriter {
     success_count: Mutex<usize>,
     /// Set to true if any Anki flush fails — prevents further writes.
     pub has_flush_error: AtomicBool,
+    /// Original field values keyed by note_id, for snapshot diffing.
+    before_fields: IndexMap<i64, IndexMap<String, String>>,
+    /// Collected note revisions from successful updates.
+    revisions: Mutex<Vec<NoteRevision>>,
 }
 
 impl DeckWriter {
@@ -37,6 +43,7 @@ impl DeckWriter {
         anki: AnkiClient,
         flush_threshold: usize,
         error_log_path: PathBuf,
+        before_fields: IndexMap<i64, IndexMap<String, String>>,
     ) -> anyhow::Result<Self> {
         // Truncate error log from prior runs. Fail early if the path is unwritable.
         File::create(&error_log_path)
@@ -49,6 +56,8 @@ impl DeckWriter {
             error_log_path,
             success_count: Mutex::new(0),
             has_flush_error: AtomicBool::new(false),
+            before_fields,
+            revisions: Mutex::new(Vec::new()),
         })
     }
 
@@ -63,6 +72,9 @@ impl DeckWriter {
         match outcome {
             RowOutcome::Success(row) => {
                 if let Some(action) = build_update_action(row) {
+                    // Record the note revision for snapshot
+                    self.record_revision(row);
+
                     let should_flush = {
                         let mut queue = self.queue.lock().unwrap();
                         queue.push(action);
@@ -77,6 +89,56 @@ impl DeckWriter {
                 self.append_error_log(row, error);
             }
         }
+    }
+
+    /// Extract the note ID from a row.
+    fn extract_note_id(row: &Row) -> Option<i64> {
+        row.get(ANKI_NOTE_ID_KEY).and_then(|v| match v {
+            Value::Number(n) => n.as_i64(),
+            Value::String(s) => s.parse().ok(),
+            _ => None,
+        })
+    }
+
+    /// Record a note revision by diffing the updated row against stored before_fields.
+    fn record_revision(&self, row: &Row) {
+        let Some(note_id) = Self::extract_note_id(row) else {
+            return;
+        };
+        let Some(before) = self.before_fields.get(&note_id) else {
+            return;
+        };
+
+        // Compute sparse after_fields: only fields that changed
+        let mut after_fields = IndexMap::new();
+        for (key, value) in row {
+            if key.starts_with('_') {
+                continue;
+            }
+            let current = match value {
+                Value::String(s) => s.clone(),
+                Value::Null => String::new(),
+                other => other.to_string(),
+            };
+            if let Some(original) = before.get(key)
+                && &current != original {
+                    after_fields.insert(key.clone(), current);
+                }
+        }
+
+        // Only record if something actually changed
+        if !after_fields.is_empty() {
+            self.revisions.lock().unwrap().push(NoteRevision {
+                note_id,
+                before_fields: before.clone(),
+                after_fields,
+            });
+        }
+    }
+
+    /// Take the collected revisions out of the writer.
+    pub fn take_revisions(&self) -> Vec<NoteRevision> {
+        std::mem::take(&mut *self.revisions.lock().unwrap())
     }
 
     /// Flush all queued updates to Anki via `multi`.

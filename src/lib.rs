@@ -4,6 +4,7 @@ pub mod config;
 pub mod data;
 pub mod generate;
 pub mod llm;
+pub mod snapshot;
 pub mod spinner;
 pub mod style;
 pub mod template;

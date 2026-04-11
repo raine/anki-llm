@@ -14,6 +14,7 @@ use anki_llm::config;
 use anki_llm::data;
 use anki_llm::generate;
 use anki_llm::llm;
+use anki_llm::snapshot;
 use anki_llm::style;
 use anki_llm::template;
 use anki_llm::workspace;

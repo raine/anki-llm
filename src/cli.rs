@@ -42,6 +42,10 @@ pub enum Commands {
     /// Create a prompt template by querying your Anki collection
     #[command(name = "generate-init")]
     GenerateInit(GenerateInitArgs),
+    /// List past process-deck runs with snapshot data
+    History,
+    /// Rollback a previous process-deck run
+    Rollback(RollbackArgs),
 }
 
 #[derive(clap::Args)]
@@ -345,4 +349,18 @@ pub struct GenerateInitArgs {
     /// Copy prompt to clipboard for manual LLM mode
     #[arg(long)]
     pub copy: bool,
+}
+
+#[derive(clap::Args)]
+pub struct RollbackArgs {
+    /// Run ID to rollback (from `history` command)
+    pub run_id: String,
+
+    /// Force rollback even if notes were modified after the run
+    #[arg(long)]
+    pub force: bool,
+
+    /// Preview without making changes
+    #[arg(long, short = 'd')]
+    pub dry_run: bool,
 }
