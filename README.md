@@ -534,6 +534,26 @@ anki-llm process-deck --query "tag:leech" --field Mnemonic -p prompt.txt
 anki-llm process-deck --query "rated:7:1" --field Notes -p prompt.txt
 ```
 
+**Undoing a run:**
+
+Every `process-deck` run automatically saves a snapshot of the original field
+values. The run ID is printed at the end of the run, e.g.:
+
+```
+Snapshot saved: ~/.local/state/anki-llm/snapshots/20260411T153000_123Z.json
+(use `anki-llm rollback 20260411T153000_123Z` to undo)
+```
+
+To revert all changes from that run:
+
+```bash
+anki-llm rollback 20260411T153000_123Z
+```
+
+Use [`anki-llm history`](#anki-llm-history) to list past runs if you forgot
+the ID, or [`anki-llm rollback`](#anki-llm-rollback-run-id) for the full
+rollback options (dry-run, conflict handling).
+
 **Key features:**
 
 - ✅ **Interactive TUI**: Preflight confirmation, live per-row progress with
