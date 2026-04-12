@@ -2,6 +2,7 @@ mod draw;
 pub mod state;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::TryRecvError;
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
@@ -38,8 +39,20 @@ pub fn run_tui(
 
         // Drain pending batch events (only when running)
         if matches!(mode, AppMode::Running(_)) {
-            while let Ok(evt) = event_rx.try_recv() {
-                handle_batch_event(&mut mode, evt);
+            loop {
+                match event_rx.try_recv() {
+                    Ok(evt) => handle_batch_event(&mut mode, evt),
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        // Worker thread dropped the sender without emitting
+                        // RunDone or Fatal — treat as a fatal engine crash
+                        // so the user isn't trapped watching a frozen spinner.
+                        mode = AppMode::Error(
+                            "Engine thread exited unexpectedly without finalizing.".into(),
+                        );
+                        break;
+                    }
+                }
             }
         }
 
@@ -69,9 +82,12 @@ pub fn run_tui(
                     if is_ctrl_c || key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
                         if state.cancelling {
                             // Force-quit escape hatch — second press while
-                            // cancellation is in flight bails out without
-                            // waiting for the engine to drain.
-                            return Ok(TuiResult::Cancelled);
+                            // cancellation is in flight exits the process
+                            // immediately. Returning would still block on
+                            // engine_handle.join() in the controller, which
+                            // is exactly the deadlock we want to escape.
+                            crate::tui::terminal::restore();
+                            std::process::exit(130);
                         }
                         cancel.store(true, Ordering::SeqCst);
                         state.cancelling = true;
