@@ -383,6 +383,31 @@ failure triage with retry. Falls back to a progress bar when output is piped.
   enables `--log`). Useful for debugging prompts and understanding model
   outputs.
 
+**Prompt template:**
+
+The prompt file is a plain text file containing the instructions sent to the
+LLM for each note. Use `{field_name}` placeholders to inject values from the
+input file — for every row, each placeholder is replaced with that note's
+field value before the prompt is sent. Field names are case-insensitive, and
+unknown placeholders cause an error.
+
+For example, given an input row with `Japanese` and `English` fields:
+
+```
+You are an expert Japanese-to-English translator.
+
+Translate this sentence: {Japanese}
+
+Existing translation for reference: {English}
+
+Wrap your final answer in <result></result> tags.
+```
+
+Combined with `--require-result-tag`, only the content inside `<result>` tags
+is saved, letting the model "think out loud" before committing to an answer.
+See the [translation walkthrough](#example-use-case-fixing-1000-japanese-translations)
+and [`examples/`](examples/) for complete prompts.
+
 **Workflow:**
 
 1. Export deck to file: `anki-llm export "My Deck" -o notes.yaml`
