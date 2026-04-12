@@ -383,6 +383,8 @@ failure triage with retry. Falls back to a progress bar when output is piped.
   enables `--log`). Useful for debugging prompts and understanding model
   outputs.
 
+<a id="prompt-template"></a>
+
 **Prompt template:**
 
 The prompt file is a plain text file containing the instructions sent to the
@@ -501,6 +503,13 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 - `--very-verbose`: Log full LLM responses to the log file (automatically
   enables `--log`). Useful for debugging prompts and understanding model
   outputs.
+
+**Prompt template:**
+
+A plain text file with `{field_name}` placeholders that are replaced with each
+note's field values before being sent to the LLM. See
+[Prompt template](#prompt-template) under `process-file` for the full
+explanation and an example.
 
 **Prerequisites:**
 
