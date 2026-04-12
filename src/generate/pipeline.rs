@@ -166,24 +166,8 @@ fn regenerate_single_card(
     }
 
     let content = result.content.trim();
-    // Try parsing as a single JSON object, or extract from an array/code block
-    let obj: serde_json::Map<String, serde_json::Value> =
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(content) {
-            val.as_object()
-                .cloned()
-                .or_else(|| {
-                    // If it's an array, take the first element
-                    val.as_array()
-                        .and_then(|arr| arr.first())
-                        .and_then(|v| v.as_object().cloned())
-                })
-                .ok_or_else(|| anyhow::anyhow!("Regenerated card is not a JSON object"))?
-        } else {
-            // Try extracting JSON from markdown code blocks
-            crate::llm::parse_json::try_parse_json_array(content)
-                .and_then(|arr| arr.into_iter().next())
-                .ok_or_else(|| anyhow::anyhow!("Failed to parse regenerated card"))?
-        };
+    let obj = crate::llm::parse_json::try_parse_single_json_object(content)
+        .ok_or_else(|| anyhow::anyhow!("Regenerated card is not a valid JSON object"))?;
 
     // Build CardCandidate fields
     let mut fields = std::collections::HashMap::new();

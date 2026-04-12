@@ -55,6 +55,8 @@ pulldown-cmark = "0.12"
 ammonia = "4"
 
 # JSON repair
+# Note: the similarly named `json-repair` crate is not usable on stable Rust —
+# its transitive dep `named-item` requires a nightly-only feature.
 jsonrepair = "0.1"
 
 # Terminal UI

@@ -18,31 +18,29 @@ fn repair(text: &str) -> String {
     repair_json(text, &Options::default()).unwrap_or_else(|_| text.to_string())
 }
 
-/// Try to parse text as a JSON object. Also tries extracting from markdown
-/// fenced code blocks. Returns None if the text is not a JSON object.
-pub fn try_parse_json_object(text: &str) -> Option<serde_json::Map<String, Value>> {
+/// Try to parse text as any JSON value. Runs `jsonrepair` on the input and
+/// then falls back to scanning markdown fenced code blocks — some LLMs emit a
+/// non-JSON block (e.g. a markdown explanation) before the JSON block.
+fn try_parse_json_value(text: &str) -> Option<Value> {
     let repaired = repair(text.trim());
-
-    // Try direct parse first
-    if let Some(map) = try_parse_object(&repaired) {
-        return Some(map);
+    if let Ok(value) = serde_json::from_str::<Value>(&repaired) {
+        return Some(value);
     }
 
-    // Try all fenced code blocks in order — some LLMs emit a non-JSON block
-    // (e.g. markdown explanation) before the JSON block.
     for caps in FENCED_JSON_RE.captures_iter(text) {
         let repaired_cap = repair(caps[1].trim());
-        if let Some(map) = try_parse_object(&repaired_cap) {
-            return Some(map);
+        if let Ok(value) = serde_json::from_str::<Value>(&repaired_cap) {
+            return Some(value);
         }
     }
 
     None
 }
 
-fn try_parse_object(text: &str) -> Option<serde_json::Map<String, Value>> {
-    let value: Value = serde_json::from_str(text).ok()?;
-    match value {
+/// Try to parse text as a JSON object. Also tries extracting from markdown
+/// fenced code blocks. Returns None if the text is not a JSON object.
+pub fn try_parse_json_object(text: &str) -> Option<serde_json::Map<String, Value>> {
+    match try_parse_json_value(text)? {
         Value::Object(map) => Some(map),
         _ => None,
     }
@@ -51,37 +49,33 @@ fn try_parse_object(text: &str) -> Option<serde_json::Map<String, Value>> {
 /// Try to parse text as a JSON array of objects. Also tries extracting from
 /// markdown fenced code blocks. Returns None if the text is not a JSON array.
 pub fn try_parse_json_array(text: &str) -> Option<Vec<serde_json::Map<String, Value>>> {
-    let repaired = repair(text.trim());
-
-    // Try direct parse first
-    if let Some(arr) = try_parse_array(&repaired) {
-        return Some(arr);
-    }
-
-    // Try fenced code blocks
-    for caps in FENCED_JSON_RE.captures_iter(text) {
-        let repaired_cap = repair(caps[1].trim());
-        if let Some(arr) = try_parse_array(&repaired_cap) {
-            return Some(arr);
-        }
-    }
-
-    None
-}
-
-fn try_parse_array(text: &str) -> Option<Vec<serde_json::Map<String, Value>>> {
-    let value: Value = serde_json::from_str(text).ok()?;
-    match value {
+    match try_parse_json_value(text)? {
         Value::Array(arr) => {
             let mut result = Vec::new();
             for item in arr {
                 match item {
                     Value::Object(map) => result.push(map),
-                    _ => return None, // All items must be objects
+                    _ => return None,
                 }
             }
             Some(result)
         }
+        _ => None,
+    }
+}
+
+/// Try to parse text as a single JSON object. Accepts either a top-level
+/// object or a singleton array containing exactly one object (some LLMs
+/// ignore "return a single object" instructions and wrap it in an array).
+/// Rejects arrays with more than one element — callers that expect a single
+/// item should not silently drop extras.
+pub fn try_parse_single_json_object(text: &str) -> Option<serde_json::Map<String, Value>> {
+    match try_parse_json_value(text)? {
+        Value::Object(map) => Some(map),
+        Value::Array(mut arr) if arr.len() == 1 => match arr.remove(0) {
+            Value::Object(map) => Some(map),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -247,5 +241,63 @@ mod tests {
     #[test]
     fn parse_json_array_non_objects_returns_none() {
         assert!(try_parse_json_array("[1, 2, 3]").is_none());
+    }
+
+    #[test]
+    fn repair_trailing_comma_object() {
+        let map = try_parse_json_object(r#"{"a": "1", "b": "2",}"#).unwrap();
+        assert_eq!(map["a"], json!("1"));
+        assert_eq!(map["b"], json!("2"));
+    }
+
+    #[test]
+    fn repair_unquoted_keys() {
+        let map = try_parse_json_object(r#"{a: "1", b: "2"}"#).unwrap();
+        assert_eq!(map["a"], json!("1"));
+        assert_eq!(map["b"], json!("2"));
+    }
+
+    #[test]
+    fn repair_truncated_object() {
+        // Missing closing brace — jsonrepair should close it.
+        let map = try_parse_json_object(r#"{"a": "1", "b": "2""#).unwrap();
+        assert_eq!(map["a"], json!("1"));
+        assert_eq!(map["b"], json!("2"));
+    }
+
+    #[test]
+    fn repair_fenced_block_with_trailing_comma() {
+        let text = "Here you go:\n```json\n{\"a\": \"1\",}\n```";
+        let map = try_parse_json_object(text).unwrap();
+        assert_eq!(map["a"], json!("1"));
+    }
+
+    #[test]
+    fn parse_single_object_top_level() {
+        let map = try_parse_single_json_object(r#"{"a": "1"}"#).unwrap();
+        assert_eq!(map["a"], json!("1"));
+    }
+
+    #[test]
+    fn parse_single_object_from_singleton_array() {
+        let map = try_parse_single_json_object(r#"[{"a": "1"}]"#).unwrap();
+        assert_eq!(map["a"], json!("1"));
+    }
+
+    #[test]
+    fn parse_single_object_rejects_multi_element_array() {
+        assert!(try_parse_single_json_object(r#"[{"a": "1"}, {"a": "2"}]"#).is_none());
+    }
+
+    #[test]
+    fn parse_single_object_from_fenced_singleton_array() {
+        let text = "```json\n[{\"a\": \"1\"}]\n```";
+        let map = try_parse_single_json_object(text).unwrap();
+        assert_eq!(map["a"], json!("1"));
+    }
+
+    #[test]
+    fn parse_single_object_rejects_non_object_array_item() {
+        assert!(try_parse_single_json_object("[42]").is_none());
     }
 }
