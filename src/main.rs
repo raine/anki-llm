@@ -18,7 +18,6 @@ use anki_llm::snapshot;
 use anki_llm::style;
 use anki_llm::template;
 use anki_llm::tui;
-use anki_llm::workspace;
 
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();

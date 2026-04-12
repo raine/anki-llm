@@ -98,9 +98,9 @@ pub struct ProcessFileArgs {
     /// Input file path (CSV or YAML)
     pub input: PathBuf,
 
-    /// Path to prompt template file (auto-resolved from prompts_dir if omitted)
+    /// Path to prompt template file
     #[arg(long, short = 'p')]
-    pub prompt: Option<PathBuf>,
+    pub prompt: PathBuf,
 
     /// Output file path (CSV or YAML)
     #[arg(long, short = 'o')]
@@ -188,9 +188,9 @@ pub struct ProcessDeckArgs {
     #[arg(long, short = 'q')]
     pub query: Option<String>,
 
-    /// Path to prompt template file (auto-resolved from prompts_dir if omitted)
+    /// Path to prompt template file
     #[arg(long, short = 'p')]
-    pub prompt: Option<PathBuf>,
+    pub prompt: PathBuf,
 
     /// Field name to update with LLM response (mutually exclusive with --json)
     #[arg(long)]

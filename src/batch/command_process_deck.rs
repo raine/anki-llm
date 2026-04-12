@@ -154,8 +154,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         }
     }
 
-    // Resolve prompt path
-    let prompt_path = crate::workspace::resolver::resolve_prompt_path(args.prompt)?;
+    let prompt_path = args.prompt;
 
     // Read prompt template
     let prompt_template = fs::read_to_string(&prompt_path)

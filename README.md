@@ -367,8 +367,7 @@ failure triage with retry. Falls back to a progress bar when output is piped.
 
 **Common options:**
 
-- `-p, --prompt`: Path to the prompt template text file. If omitted,
-  auto-resolved from your [prompts directory](#prompts-directory).
+- `-p, --prompt`: Path to the prompt template text file (required).
 - `-m, --model`: AI model to use (required unless set via `config set model`).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
@@ -460,8 +459,7 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 
 **Common options:**
 
-- `-p, --prompt`: Path to the prompt template text file. If omitted,
-  auto-resolved from your [prompts directory](#prompts-directory).
+- `-p, --prompt`: Path to the prompt template text file (required).
 - `-m, --model`: AI model to use (required unless set via `config set model`).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
