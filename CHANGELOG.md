@@ -1,3 +1,8 @@
+## v2.0.7 (2026-04-12)
+
+- Added interactive batch TUI for `process-deck` — same live progress, row
+  previews, and summary screen as `process-file`
+
 ## v2.0.6 (2026-04-11)
 
 - Added interactive batch TUI for `process-file` — live progress with elapsed
