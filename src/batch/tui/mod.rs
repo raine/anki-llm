@@ -40,13 +40,22 @@ pub fn run_tui(
         // Drain pending batch events (only when running)
         if matches!(mode, AppMode::Running(_)) {
             loop {
+                // A successful event may have transitioned us out of Running
+                // (RunDone -> Done, Fatal -> Error). The worker drops its
+                // sender right after, so the next try_recv would report
+                // Disconnected — that's the expected shutdown sequence and
+                // must NOT be treated as a crash.
+                if !matches!(mode, AppMode::Running(_)) {
+                    break;
+                }
                 match event_rx.try_recv() {
                     Ok(evt) => handle_batch_event(&mut mode, evt),
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
-                        // Worker thread dropped the sender without emitting
-                        // RunDone or Fatal — treat as a fatal engine crash
-                        // so the user isn't trapped watching a frozen spinner.
+                        // Worker dropped the sender while we were still in
+                        // Running mode — meaning it never sent RunDone or
+                        // Fatal. Treat as a fatal engine crash so the user
+                        // isn't trapped watching a frozen spinner.
                         mode = AppMode::Error(
                             "Engine thread exited unexpectedly without finalizing.".into(),
                         );
