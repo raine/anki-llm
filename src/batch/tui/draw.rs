@@ -9,7 +9,7 @@ use ratatui::widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table, Wrap}
 use crate::llm::pricing;
 use crate::tui::theme::{SPINNER_FRAMES, THEME, footer_cmd, footer_pipe};
 
-use super::super::events::{BatchPlan, RowState};
+use super::super::events::{BatchPlan, BatchSummary, InfoField, OutputMode, RowState};
 use super::state::{AppMode, DoneState, RunState};
 
 pub fn draw(mode: &AppMode, plan: &BatchPlan, frame: &mut Frame) {
@@ -35,23 +35,21 @@ fn draw_preflight(plan: &BatchPlan, frame: &mut Frame) {
     let label_style = Style::default().fg(THEME.dimmed);
     let value_style = Style::default().fg(THEME.text);
 
-    let fields: Vec<(&str, String)> = vec![
+    let fixed_fields: Vec<(&str, String)> = vec![
         ("Prompt", plan.prompt_path.clone()),
         ("Model", plan.model.clone()),
         (
             "Mode",
             match &plan.output_mode {
-                super::super::events::OutputMode::SingleField(f) => {
-                    format!("single field ({f})")
-                }
-                super::super::events::OutputMode::JsonMerge => "JSON merge".to_string(),
+                OutputMode::SingleField(f) => format!("single field ({f})"),
+                OutputMode::JsonMerge => "JSON merge".to_string(),
             },
         ),
         ("Batch size", plan.batch_size.to_string()),
         ("Retries", plan.retries.to_string()),
     ];
 
-    for (label, value) in &fields {
+    for (label, value) in &fixed_fields {
         let pad = 12usize.saturating_sub(label.len());
         lines.push(Line::from(vec![
             Span::styled(format!("  {label}"), label_style),
@@ -62,10 +60,7 @@ fn draw_preflight(plan: &BatchPlan, frame: &mut Frame) {
 
     lines.push(Line::from(""));
 
-    let input_label = format!("{} ({} rows)", plan.output_path, plan.input_total);
-    let file_fields: Vec<(&str, String)> =
-        vec![("Input", input_label), ("Output", plan.output_path.clone())];
-    for (label, value) in &file_fields {
+    for InfoField { label, value } in &plan.preflight_fields {
         let pad = 12usize.saturating_sub(label.len());
         lines.push(Line::from(vec![
             Span::styled(format!("  {label}"), label_style),
@@ -74,22 +69,11 @@ fn draw_preflight(plan: &BatchPlan, frame: &mut Frame) {
         ]));
     }
 
-    if plan.resume_skipped > 0 {
-        lines.push(Line::from(vec![
-            Span::styled("  Resuming", label_style),
-            Span::raw("    "),
-            Span::styled(
-                format!("{} rows from prior output", plan.resume_skipped),
-                Style::default().fg(THEME.info),
-            ),
-        ]));
-    }
-
     lines.push(Line::from(vec![
         Span::styled("  To process", label_style),
         Span::raw("  "),
         Span::styled(
-            format!("{} rows", plan.run_total),
+            format!("{} {}", plan.run_total, plan.item_name_plural),
             Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
         ),
     ]));
@@ -341,6 +325,7 @@ fn draw_row_table(state: &RunState, frame: &mut Frame, area: Rect) {
         .map(|&idx| {
             let row = &state.rows[idx];
             let (status_str, status_style) = match &row.state {
+                RowState::Pending => ("·".to_string(), Style::default().fg(THEME.dimmed)),
                 RowState::Running => {
                     let frame_idx = (state.tick as usize) % SPINNER_FRAMES.len();
                     (
@@ -444,7 +429,8 @@ fn draw_done(state: &DoneState, plan: &BatchPlan, frame: &mut Frame) {
             .min(area.height / 2)
             .max(8)
     } else {
-        5
+        // Headline + per-completion field + padding
+        (summary.completion_fields.len() as u16 + 4).max(5)
     };
 
     let main_chunks = Layout::default()
@@ -478,33 +464,30 @@ fn draw_done(state: &DoneState, plan: &BatchPlan, frame: &mut Frame) {
 
     // --- Footer ---
     let footer_spans: Vec<Span> = if has_failures {
-        [
-            footer_cmd("r", "Retry failed"),
-            vec![footer_pipe()],
-            footer_cmd("j/k", "Browse"),
-            vec![footer_pipe()],
-            footer_cmd("q", "Quit"),
-        ]
-        .concat()
+        let mut spans: Vec<Span> = Vec::new();
+        if summary.can_retry_failed {
+            spans.extend(footer_cmd("r", "Retry failed"));
+            spans.push(footer_pipe());
+        }
+        spans.extend(footer_cmd("j/k", "Browse"));
+        spans.push(footer_pipe());
+        spans.extend(footer_cmd("q", "Quit"));
+        spans
     } else {
         footer_cmd("q", "Quit")
     };
     frame.render_widget(Line::from(footer_spans), footer_area);
 }
 
-fn draw_success_banner(
-    summary: &super::super::events::BatchSummary,
-    frame: &mut Frame,
-    area: Rect,
-) {
+fn draw_success_banner(summary: &BatchSummary, frame: &mut Frame, area: Rect) {
     let label_style = Style::default().fg(THEME.dimmed);
     let value_style = Style::default().fg(THEME.text);
 
     let total_tokens = summary.input_tokens + summary.output_tokens;
-    let avg_per_row = if summary.total > 0 {
+    let avg_per_item = if summary.processed_total > 0 {
         format!(
-            "{:.1}s avg/row",
-            summary.elapsed.as_secs_f64() / summary.total as f64
+            "  {:.1}s avg",
+            summary.elapsed.as_secs_f64() / summary.processed_total as f64
         )
     } else {
         String::new()
@@ -512,36 +495,37 @@ fn draw_success_banner(
 
     let banner = Line::from(vec![
         Span::styled(
-            " \u{2713} Batch complete ",
+            format!(" \u{2713} {} ", summary.headline),
             Style::default()
                 .fg(THEME.success)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
             format!(
-                " {} rows  {} tokens  {}  {} ({})",
-                summary.total,
+                " {} tokens  {}  {}{}",
                 format_number(total_tokens),
                 pricing::format_cost(summary.cost),
                 format_duration(summary.elapsed),
-                avg_per_row,
+                avg_per_item,
             ),
             value_style,
         ),
     ]);
 
-    let output_line = Line::from(vec![
-        Span::styled(" Output written to ", label_style),
-        Span::styled(&summary.output_path, value_style),
-    ]);
+    let mut lines: Vec<Line> = vec![Line::from(""), banner];
+    for InfoField { label, value } in &summary.completion_fields {
+        lines.push(Line::from(vec![
+            Span::styled(format!(" {label}: "), label_style),
+            Span::styled(value.clone(), value_style),
+        ]));
+    }
+    lines.push(Line::from(""));
 
     let block = Block::default()
         .borders(Borders::TOP)
         .border_style(Style::default().fg(THEME.success));
 
-    let text = Text::from(vec![Line::from(""), banner, output_line, Line::from("")]);
-
-    let para = Paragraph::new(text).block(block);
+    let para = Paragraph::new(Text::from(lines)).block(block);
     frame.render_widget(para, area);
 }
 

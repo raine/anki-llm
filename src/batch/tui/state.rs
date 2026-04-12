@@ -31,7 +31,7 @@ impl RunState {
             .map(|rd| RowStatus {
                 id: rd.id.clone(),
                 preview: rd.preview.clone(),
-                state: RowState::Succeeded, // placeholder — will be Pending-like
+                state: RowState::Pending,
                 attempt: 0,
                 max_attempts: plan.retries + 1,
                 elapsed: Duration::ZERO,
@@ -64,6 +64,9 @@ impl RunState {
 
         // Update stats
         match &update.state {
+            RowState::Pending => {
+                // Initial placeholder — engine never emits this.
+            }
             RowState::Running => {
                 self.stats.running += 1;
                 self.stats.queued = self.stats.queued.saturating_sub(1);

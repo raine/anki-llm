@@ -6,6 +6,7 @@ use indexmap::IndexMap;
 use crate::data::io::{atomic_write_file, serialize_rows};
 use crate::data::rows::{Row, get_note_id};
 
+use super::engine::OnRowDoneAction;
 use super::report::RowOutcome;
 
 /// Maintains output state and writes incrementally to disk.
@@ -48,7 +49,9 @@ impl FileWriter {
     }
 
     /// Record a completed row and flush to disk if threshold reached.
-    pub fn on_row_done(&self, outcome: &RowOutcome) {
+    /// Returns `Abort` if the threshold-triggered flush failed so the engine
+    /// can stop early instead of burning more LLM tokens on unwriteable output.
+    pub fn on_row_done(&self, outcome: &RowOutcome) -> OnRowDoneAction {
         let row = match outcome {
             RowOutcome::Success(row) => row,
             RowOutcome::Failure { row, .. } => row,
@@ -56,7 +59,7 @@ impl FileWriter {
 
         let id = get_note_id(row).unwrap_or_default();
         if id.is_empty() {
-            return;
+            return OnRowDoneAction::Continue;
         }
 
         {
@@ -76,8 +79,9 @@ impl FileWriter {
         };
 
         if should_flush && let Err(e) = self.flush() {
-            eprintln!("Warning: failed to flush output: {e}");
+            return OnRowDoneAction::Abort(e.to_string());
         }
+        OnRowDoneAction::Continue
     }
 
     /// Number of rows currently stored.

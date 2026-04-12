@@ -3,11 +3,10 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use crate::data::Row;
-use crate::data::rows::get_note_id;
 use crate::llm::pricing;
 
 use super::error::BatchError;
-use super::events::{BatchEvent, BatchSummary, FailedRowInfo, RowState, RowUpdate};
+use super::events::{BatchEvent, RowState, RowUpdate};
 use super::report::{RowOutcome, TokenStats};
 
 /// Configuration for the batch engine.
@@ -15,36 +14,59 @@ pub struct BatchConfig {
     pub batch_size: u32,
     pub retries: u32,
     pub model: String,
-    pub output_path: String,
+}
+
+/// Action returned by the per-row callback. `Abort` stops the engine and
+/// surfaces the message to the controller via `EngineRunResult.abort_reason`.
+pub enum OnRowDoneAction {
+    Continue,
+    Abort(String),
 }
 
 /// Callback invoked after each row completes (success or failure).
-/// Returns true to abort the batch (e.g. when an Anki flush fails).
-pub type OnRowDone = Box<dyn Fn(&RowOutcome) -> bool + Send + Sync>;
+pub type OnRowDone = Arc<dyn Fn(&RowOutcome) -> OnRowDoneAction + Send + Sync>;
 
 /// The function that processes a single row. Returns the updated row and
 /// optional token usage. Errors are retried unless they are `BatchError::Fatal`.
 pub type ProcessFn =
-    Box<dyn Fn(&Row) -> Result<(Row, Option<(u64, u64)>), BatchError> + Send + Sync>;
+    Arc<dyn Fn(&Row) -> Result<(Row, Option<(u64, u64)>), BatchError> + Send + Sync>;
+
+/// Extracts a stable display ID from a row. Different commands store IDs
+/// under different keys (file mode uses `noteId`/`id`/`Id`; deck mode uses
+/// the private `__note_id` field).
+pub type IdExtractor = Arc<dyn Fn(&Row) -> String + Send + Sync>;
+
+/// Pure result returned from `run_batch`. Contains all data needed by the
+/// controller to drive sink finalization and build a `BatchSummary`. The
+/// planned total isn't included here — the controller already knows it from
+/// the `BatchPlan`, so duplicating it would invite drift.
+pub struct EngineRunResult {
+    pub outcomes: Vec<RowOutcome>,
+    pub tokens: TokenStats,
+    pub elapsed: Duration,
+    pub interrupted: bool,
+    pub abort_reason: Option<String>,
+}
 
 /// Run batch processing over a set of rows with bounded concurrency and retries.
 ///
-/// Returns (outcomes, token stats, interrupted). Outcomes are in completion
-/// order, not input order. When interrupted, only started rows are present.
-///
-/// Events are emitted to `event_tx` for UI rendering. All sends use `.ok()`
-/// so a dropped receiver (e.g. user quit TUI) won't panic the engine.
+/// Emits `RowStateChanged`, `Log`, and `CostUpdate` events to `event_tx` for
+/// UI rendering. **Does not** emit `RunDone` or `Fatal` — the controller is
+/// responsible for those after sink finalization. All sends use `.ok()` so a
+/// dropped receiver won't panic the engine.
 pub fn run_batch(
     rows: Vec<Row>,
     process: ProcessFn,
     config: &BatchConfig,
     on_row_done: Option<OnRowDone>,
+    id_extractor: IdExtractor,
     event_tx: mpsc::Sender<BatchEvent>,
     cancel: Arc<AtomicBool>,
-) -> (Vec<RowOutcome>, TokenStats, bool) {
+) -> EngineRunResult {
     let total = rows.len();
     let tokens = Mutex::new(TokenStats::default());
     let completed: Mutex<Vec<RowOutcome>> = Mutex::new(Vec::new());
+    let abort_reason: Mutex<Option<String>> = Mutex::new(None);
     let next_index = AtomicUsize::new(0);
     let start = Instant::now();
 
@@ -69,16 +91,18 @@ pub fn run_batch(
                         event_tx: &event_tx,
                         cancel: &cancel,
                         model: &config.model,
+                        id_extractor: &id_extractor,
                     };
                     let Some(outcome) = process_with_retry(row, idx, &ctx) else {
                         // Row was cancelled — don't record it as a result
                         break;
                     };
 
-                    // Notify callback — abort if it returns true
+                    // Notify callback — abort if it returns Abort
                     if let Some(ref cb) = on_row_done
-                        && cb(&outcome)
+                        && let OnRowDoneAction::Abort(msg) = cb(&outcome)
                     {
+                        *abort_reason.lock().unwrap() = Some(msg);
                         cancel.store(true, Ordering::SeqCst);
                     }
 
@@ -92,43 +116,15 @@ pub fn run_batch(
     let was_interrupted = cancel.load(Ordering::SeqCst);
     let outcomes = completed.into_inner().unwrap();
     let tokens = tokens.into_inner().unwrap();
+    let abort_reason = abort_reason.into_inner().unwrap();
 
-    let succeeded = outcomes
-        .iter()
-        .filter(|o| matches!(o, RowOutcome::Success(_)))
-        .count();
-    let failed = outcomes.len() - succeeded;
-
-    let cost = pricing::calculate_cost(&config.model, tokens.input, tokens.output);
-    let failed_rows: Vec<FailedRowInfo> = outcomes
-        .iter()
-        .filter_map(|o| match o {
-            RowOutcome::Failure { row, error } => Some(FailedRowInfo {
-                id: get_note_id(row).unwrap_or_default(),
-                error: error.clone(),
-                row_data: row.clone(),
-            }),
-            _ => None,
-        })
-        .collect();
-
-    event_tx
-        .send(BatchEvent::RunDone(BatchSummary {
-            total: outcomes.len(),
-            succeeded,
-            failed,
-            input_tokens: tokens.input,
-            output_tokens: tokens.output,
-            cost,
-            elapsed,
-            interrupted: was_interrupted,
-            output_path: config.output_path.clone(),
-            model: config.model.clone(),
-            failed_rows,
-        }))
-        .ok();
-
-    (outcomes, tokens, was_interrupted)
+    EngineRunResult {
+        outcomes,
+        tokens,
+        elapsed,
+        interrupted: was_interrupted,
+        abort_reason,
+    }
 }
 
 /// Shared context for retry processing, bundled to avoid too many arguments.
@@ -139,6 +135,7 @@ struct RetryCtx<'a> {
     event_tx: &'a mpsc::Sender<BatchEvent>,
     cancel: &'a AtomicBool,
     model: &'a str,
+    id_extractor: &'a IdExtractor,
 }
 
 /// Process a single row with retry and exponential backoff.
@@ -147,7 +144,7 @@ struct RetryCtx<'a> {
 /// Returns `None` if the row was cancelled (not a real failure).
 fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> Option<RowOutcome> {
     let start = Instant::now();
-    let id = get_note_id(row).unwrap_or_default();
+    let id = (ctx.id_extractor)(row);
     let mut last_error = String::new();
 
     ctx.event_tx
@@ -283,6 +280,7 @@ fn make_failure(row: &Row, error: String) -> RowOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::rows::get_note_id;
     use serde_json::json;
     use std::sync::atomic::AtomicU32;
 
@@ -298,8 +296,11 @@ mod tests {
             batch_size: 1,
             retries,
             model: "test-model".into(),
-            output_path: String::new(),
         }
+    }
+
+    fn default_id_extractor() -> IdExtractor {
+        Arc::new(|row| get_note_id(row).unwrap_or_default())
     }
 
     fn test_run_batch(
@@ -307,40 +308,53 @@ mod tests {
         process: ProcessFn,
         config: &BatchConfig,
         on_row_done: Option<OnRowDone>,
-    ) -> (Vec<RowOutcome>, TokenStats, bool) {
+    ) -> EngineRunResult {
         let (tx, _rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
-        run_batch(rows, process, config, on_row_done, tx, cancel)
+        run_batch(
+            rows,
+            process,
+            config,
+            on_row_done,
+            default_id_extractor(),
+            tx,
+            cancel,
+        )
     }
 
     #[test]
     fn all_rows_succeed() {
         let rows = vec![make_row(1), make_row(2), make_row(3)];
-        let process: ProcessFn = Box::new(|row| {
+        let process: ProcessFn = Arc::new(|row| {
             let mut out = row.clone();
             out.insert("Back".into(), json!("done"));
             Ok((out, Some((10, 5))))
         });
 
-        let (outcomes, tokens, interrupted) = test_run_batch(rows, process, &config(0), None);
+        let result = test_run_batch(rows, process, &config(0), None);
 
-        assert!(!interrupted);
-        assert_eq!(outcomes.len(), 3);
-        assert!(outcomes.iter().all(|o| matches!(o, RowOutcome::Success(_))));
-        assert_eq!(tokens.input, 30);
-        assert_eq!(tokens.output, 15);
+        assert!(!result.interrupted);
+        assert_eq!(result.outcomes.len(), 3);
+        assert!(
+            result
+                .outcomes
+                .iter()
+                .all(|o| matches!(o, RowOutcome::Success(_)))
+        );
+        assert_eq!(result.tokens.input, 30);
+        assert_eq!(result.tokens.output, 15);
     }
 
     #[test]
     fn all_rows_fail() {
         let rows = vec![make_row(1)];
-        let process: ProcessFn = Box::new(|_| Err(BatchError::Processing("always fails".into())));
+        let process: ProcessFn = Arc::new(|_| Err(BatchError::Processing("always fails".into())));
 
-        let (outcomes, _, _) = test_run_batch(rows, process, &config(0), None);
+        let result = test_run_batch(rows, process, &config(0), None);
 
-        assert_eq!(outcomes.len(), 1);
+        assert_eq!(result.outcomes.len(), 1);
         assert!(
-            matches!(&outcomes[0], RowOutcome::Failure { error, .. } if error == "always fails")
+            matches!(&result.outcomes[0], RowOutcome::Failure { error, .. } if error == "always fails")
         );
     }
 
@@ -350,7 +364,7 @@ mod tests {
         let attempts_clone = Arc::clone(&attempts);
 
         let rows = vec![make_row(1)];
-        let process: ProcessFn = Box::new(move |row| {
+        let process: ProcessFn = Arc::new(move |row| {
             let n = attempts_clone.fetch_add(1, Ordering::SeqCst);
             if n == 0 {
                 Err(BatchError::Processing("transient".into()))
@@ -359,11 +373,11 @@ mod tests {
             }
         });
 
-        let (outcomes, tokens, _) = test_run_batch(rows, process, &config(1), None);
+        let result = test_run_batch(rows, process, &config(1), None);
 
-        assert_eq!(outcomes.len(), 1);
-        assert!(matches!(&outcomes[0], RowOutcome::Success(_)));
-        assert_eq!(tokens.input, 10);
+        assert_eq!(result.outcomes.len(), 1);
+        assert!(matches!(&result.outcomes[0], RowOutcome::Success(_)));
+        assert_eq!(result.tokens.input, 10);
     }
 
     #[test]
@@ -372,15 +386,15 @@ mod tests {
         let attempts_clone = Arc::clone(&attempts);
 
         let rows = vec![make_row(1)];
-        let process: ProcessFn = Box::new(move |_| {
+        let process: ProcessFn = Arc::new(move |_| {
             attempts_clone.fetch_add(1, Ordering::SeqCst);
             Err(BatchError::Fatal("bad template".into()))
         });
 
-        let (outcomes, _, _) = test_run_batch(rows, process, &config(3), None);
+        let result = test_run_batch(rows, process, &config(3), None);
 
-        assert_eq!(outcomes.len(), 1);
-        assert!(matches!(&outcomes[0], RowOutcome::Failure { .. }));
+        assert_eq!(result.outcomes.len(), 1);
+        assert!(matches!(&result.outcomes[0], RowOutcome::Failure { .. }));
         // Fatal should not retry — only 1 attempt
         assert_eq!(attempts.load(Ordering::SeqCst), 1);
     }
@@ -388,11 +402,11 @@ mod tests {
     #[test]
     fn failure_row_has_error_field() {
         let rows = vec![make_row(1)];
-        let process: ProcessFn = Box::new(|_| Err(BatchError::Processing("oops".into())));
+        let process: ProcessFn = Arc::new(|_| Err(BatchError::Processing("oops".into())));
 
-        let (outcomes, _, _) = test_run_batch(rows, process, &config(0), None);
+        let result = test_run_batch(rows, process, &config(0), None);
 
-        if let RowOutcome::Failure { row, .. } = &outcomes[0] {
+        if let RowOutcome::Failure { row, .. } = &result.outcomes[0] {
             assert_eq!(row["_error"], json!("oops"));
         } else {
             panic!("expected failure");
@@ -405,10 +419,10 @@ mod tests {
         let count_clone = Arc::clone(&count);
 
         let rows = vec![make_row(1), make_row(2)];
-        let process: ProcessFn = Box::new(|row| Ok((row.clone(), None)));
-        let on_done: OnRowDone = Box::new(move |_| {
+        let process: ProcessFn = Arc::new(|row| Ok((row.clone(), None)));
+        let on_done: OnRowDone = Arc::new(move |_| {
             count_clone.fetch_add(1, Ordering::SeqCst);
-            false
+            OnRowDoneAction::Continue
         });
 
         test_run_batch(rows, process, &config(0), Some(on_done));
@@ -419,11 +433,11 @@ mod tests {
     #[test]
     fn no_usage_means_zero_tokens() {
         let rows = vec![make_row(1)];
-        let process: ProcessFn = Box::new(|row| Ok((row.clone(), None)));
+        let process: ProcessFn = Arc::new(|row| Ok((row.clone(), None)));
 
-        let (_, tokens, _) = test_run_batch(rows, process, &config(0), None);
+        let result = test_run_batch(rows, process, &config(0), None);
 
-        assert_eq!(tokens.total(), 0);
+        assert_eq!(result.tokens.total(), 0);
     }
 
     #[test]
@@ -434,7 +448,7 @@ mod tests {
         let processed_clone = Arc::clone(&processed);
 
         let rows = vec![make_row(1), make_row(2), make_row(3)];
-        let process: ProcessFn = Box::new(move |row| {
+        let process: ProcessFn = Arc::new(move |row| {
             let n = processed_clone.fetch_add(1, Ordering::SeqCst);
             if n >= 1 {
                 cancel_clone.store(true, Ordering::SeqCst);
@@ -443,10 +457,30 @@ mod tests {
         });
 
         let (tx, _rx) = mpsc::channel();
-        let (outcomes, _, interrupted) = run_batch(rows, process, &config(0), None, tx, cancel);
+        let result = run_batch(
+            rows,
+            process,
+            &config(0),
+            None,
+            default_id_extractor(),
+            tx,
+            cancel,
+        );
 
-        assert!(interrupted);
+        assert!(result.interrupted);
         // With batch_size=1, at most 2 rows processed before cancel takes effect
-        assert!(outcomes.len() <= 2);
+        assert!(result.outcomes.len() <= 2);
+    }
+
+    #[test]
+    fn abort_callback_stops_processing() {
+        let rows = vec![make_row(1), make_row(2), make_row(3)];
+        let process: ProcessFn = Arc::new(|row| Ok((row.clone(), None)));
+        let on_done: OnRowDone = Arc::new(|_| OnRowDoneAction::Abort("sink failed".into()));
+
+        let result = test_run_batch(rows, process, &config(0), Some(on_done));
+        assert!(result.interrupted);
+        assert_eq!(result.abort_reason.as_deref(), Some("sink failed"));
+        assert!(!result.outcomes.is_empty());
     }
 }

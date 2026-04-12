@@ -5,7 +5,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use crate::llm::pricing;
 use crate::style::style;
 
-use super::events::{BatchEvent, BatchSummary, RowState};
+use super::events::{BatchEvent, BatchSummary, InfoField, RowState};
 
 /// Consume BatchEvents and render via indicatif progress bar.
 /// Prints the end-of-run summary to stderr.
@@ -60,10 +60,10 @@ pub fn run_plain_renderer(rx: mpsc::Receiver<BatchEvent>, total: usize) {
 
 fn print_plain_summary(summary: &BatchSummary) {
     let s = style();
-    let total = summary.succeeded + summary.failed;
+    let total = summary.processed_total;
 
     eprintln!("\n{}", s.dim("─".repeat(50)));
-    eprintln!("{}", s.bold("Summary"));
+    eprintln!("{}", s.bold(&summary.headline));
     eprintln!("{}", s.dim("─".repeat(50)));
 
     eprintln!("\n{}", s.bold("Results"));
@@ -109,5 +109,12 @@ fn print_plain_summary(summary: &BatchSummary) {
     if total > 0 {
         let avg = summary.elapsed.as_millis() as f64 / total as f64;
         eprintln!("  Avg/row    {avg:.0}ms");
+    }
+
+    if !summary.completion_fields.is_empty() {
+        eprintln!();
+        for InfoField { label, value } in &summary.completion_fields {
+            eprintln!("  {label:<10} {value}");
+        }
     }
 }

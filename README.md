@@ -466,7 +466,10 @@ Use `process-file` instead of `process-deck` when you:
 
 Batch-process notes directly in Anki using an LLM and user-defined prompts,
 updating them in-place. No intermediate files needed. Select notes by deck name
-or by an Anki search query.
+or by an Anki search query. When run in a terminal, it displays an interactive
+TUI with a preflight confirmation screen, live progress with per-row status,
+cost tracking, and failure triage with retry. Falls back to a progress bar when
+output is piped.
 
 - `<deck>`: Name of the Anki deck to process.
 - `-q, --query`: Anki search query to select notes (alternative to deck name).
@@ -533,6 +536,8 @@ anki-llm process-deck --query "rated:7:1" --field Notes -p prompt.txt
 
 **Key features:**
 
+- ✅ **Interactive TUI**: Preflight confirmation, live per-row progress with
+  spinner and elapsed time, cost tracking, and failure triage with retry
 - ✅ **No intermediate files**: Process and update in one step
 - ✅ **Batch updates**: Efficient bulk updates to Anki
 - ✅ **Error logging**: Failed notes logged to `[deck-name]-errors.jsonl`

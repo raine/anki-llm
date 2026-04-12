@@ -29,7 +29,7 @@ pub struct ProcessRowConfig {
 /// Build the closure that processes a single row through the LLM.
 /// Used by both process-file and process-deck commands.
 pub fn build_process_fn(config: ProcessRowConfig) -> ProcessFn {
-    Box::new(move |row: &Row| {
+    Arc::new(move |row: &Row| {
         // Fill template
         let prompt =
             fill_template(&config.template, row).map_err(|e| BatchError::Fatal(e.to_string()))?;

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fs;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
@@ -9,17 +9,197 @@ use serde_json::Value;
 
 use crate::anki::client::{AnkiClient, anki_quote};
 use crate::cli::ProcessDeckArgs;
+use crate::data::Row;
 use crate::data::slug::slugify_deck_name;
 use crate::llm::client::LlmClient;
 use crate::llm::logger::LlmLogger;
+use crate::llm::pricing;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use crate::snapshot::store::{self, Snapshot};
 use crate::template::fill_template;
 
+use super::controller::run_batch_controller;
 use super::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
-use super::engine::{BatchConfig, run_batch};
+use super::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
+use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, OutputMode, RowDescriptor};
 use super::process_row::{ProcessRowConfig, build_process_fn};
 use super::report::RowOutcome;
+use super::session::{BatchSession, SharedSession};
+
+fn deck_row_id(row: &Row) -> String {
+    row.get(ANKI_NOTE_ID_KEY)
+        .and_then(|v| match v {
+            Value::Number(n) => n.as_i64().map(|n| n.to_string()),
+            Value::String(s) => Some(s.clone()),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
+fn deck_row_preview(row: &Row) -> String {
+    row.iter()
+        .filter(|(k, _)| !k.starts_with('_'))
+        .find_map(|(_, v)| v.as_str().filter(|s| !s.is_empty()))
+        .unwrap_or("")
+        .chars()
+        .take(40)
+        .collect()
+}
+
+fn deck_row_descriptors(rows: &[Row]) -> Vec<RowDescriptor> {
+    rows.iter()
+        .enumerate()
+        .map(|(i, row)| RowDescriptor {
+            index: i,
+            id: deck_row_id(row),
+            preview: deck_row_preview(row),
+        })
+        .collect()
+}
+
+struct DeckSession {
+    writer: Arc<DeckWriter>,
+    process: ProcessFn,
+    source_name: String,
+    model: String,
+    slug: String,
+    run_id: String,
+    /// Snapshot path is set by `finish_run` and reported in the iteration
+    /// summary's completion fields if available.
+    snapshot_path: Mutex<Option<String>>,
+}
+
+impl BatchSession for DeckSession {
+    fn process_fn(&self) -> ProcessFn {
+        Arc::clone(&self.process)
+    }
+
+    fn on_row_done(&self) -> Option<OnRowDone> {
+        let writer = Arc::clone(&self.writer);
+        Some(Arc::new(move |outcome| writer.on_row_done(outcome)))
+    }
+
+    fn id_extractor(&self) -> IdExtractor {
+        Arc::new(deck_row_id)
+    }
+
+    fn row_descriptors(&self, rows: &[Row]) -> Vec<RowDescriptor> {
+        deck_row_descriptors(rows)
+    }
+
+    fn finish_iteration(
+        &self,
+        result: &EngineRunResult,
+        plan_run_total: usize,
+    ) -> Result<BatchSummary> {
+        // Final flush — short-circuits if a previous flush already failed.
+        self.writer.flush()?;
+
+        // Build failed_rows from outcomes
+        let failed_rows: Vec<FailedRowInfo> = result
+            .outcomes
+            .iter()
+            .filter_map(|o| match o {
+                RowOutcome::Failure { row, error } => Some(FailedRowInfo {
+                    id: deck_row_id(row),
+                    error: error.clone(),
+                    row_data: row.clone(),
+                }),
+                _ => None,
+            })
+            .collect();
+
+        // Rewrite the error log with the current iteration's failures so
+        // retries can supersede earlier failures cleanly.
+        self.writer.rewrite_error_log(&failed_rows)?;
+
+        let succeeded = result
+            .outcomes
+            .iter()
+            .filter(|o| matches!(o, RowOutcome::Success(_)))
+            .count();
+        let failed = failed_rows.len();
+        let updated = self.writer.success_count();
+        let cost = pricing::calculate_cost(&self.model, result.tokens.input, result.tokens.output);
+
+        let interrupted = result.interrupted || result.abort_reason.is_some();
+        let can_retry_failed = failed > 0 && !interrupted && result.abort_reason.is_none();
+
+        let mut completion_fields = vec![
+            InfoField {
+                label: "Source".into(),
+                value: self.source_name.clone(),
+            },
+            InfoField {
+                label: "Updated".into(),
+                value: format!("{updated} notes in Anki"),
+            },
+        ];
+        if let Some(ref path) = *self.snapshot_path.lock().unwrap() {
+            completion_fields.push(InfoField {
+                label: "Snapshot".into(),
+                value: path.clone(),
+            });
+            completion_fields.push(InfoField {
+                label: "Rollback".into(),
+                value: format!("anki-llm rollback {}", self.run_id),
+            });
+        }
+        if failed > 0 {
+            completion_fields.push(InfoField {
+                label: "Errors".into(),
+                value: format!("{}-errors.jsonl", self.slug),
+            });
+        }
+
+        Ok(BatchSummary {
+            planned_total: plan_run_total,
+            processed_total: result.outcomes.len(),
+            succeeded,
+            failed,
+            interrupted,
+            input_tokens: result.tokens.input,
+            output_tokens: result.tokens.output,
+            cost,
+            elapsed: result.elapsed,
+            model: self.model.clone(),
+            headline: format!("Updated {updated} notes in Anki"),
+            completion_fields,
+            failed_rows,
+            can_retry_failed,
+        })
+    }
+
+    fn finish_run(&self) -> Result<()> {
+        let revisions = self.writer.take_revisions();
+        if revisions.is_empty() {
+            return Ok(());
+        }
+        let snapshot = Snapshot {
+            run_id: self.run_id.clone(),
+            timestamp: store::generate_timestamp(),
+            deck: self.source_name.clone(),
+            model: self.model.clone(),
+            note_count: revisions.len(),
+            rolled_back: false,
+            notes: revisions,
+        };
+        match store::save_snapshot(&snapshot) {
+            Ok(path) => {
+                let path_str = path.display().to_string();
+                eprintln!(
+                    "Snapshot saved: {} (use `anki-llm rollback {}` to undo)",
+                    path_str, self.run_id
+                );
+                *self.snapshot_path.lock().unwrap() = Some(path_str);
+            }
+            Err(e) => {
+                eprintln!("Warning: failed to save snapshot: {e}");
+            }
+        }
+        Ok(())
+    }
+}
 
 pub fn run(args: ProcessDeckArgs) -> Result<()> {
     let anki = AnkiClient::new();
@@ -98,7 +278,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     // Convert to Row format. The note ID is stored under ANKI_NOTE_ID_KEY (a
     // private _-prefixed key) so it cannot collide with real Anki field names
     // or be overwritten by a case-insensitive JSON merge.
-    let rows: Vec<_> = notes_info
+    let rows: Vec<Row> = notes_info
         .into_iter()
         .map(|note| {
             let mut row = indexmap::IndexMap::new();
@@ -172,23 +352,6 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         dry_run: args.dry_run,
     })?;
 
-    eprintln!("\n{}", "=".repeat(60));
-    eprintln!("Source: {source_label}");
-    eprintln!("Model: {}", runtime.model);
-    eprintln!("Batch size: {}", runtime.batch_size);
-    eprintln!("Retries: {}", runtime.retries);
-    if let Some(t) = runtime.temperature {
-        eprintln!("Temperature: {t}");
-    }
-    if let Some(field) = &args.field {
-        eprintln!("Mode: single field ({field})");
-    } else {
-        eprintln!("Mode: JSON merge");
-    }
-    eprintln!("{}", "=".repeat(60));
-
-    eprintln!("\n{} notes to process", rows.len());
-
     // Dry run
     if args.dry_run {
         eprintln!("\n--- DRY RUN MODE ---");
@@ -215,7 +378,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
     let logger = Arc::new(logger);
 
-    // Build processing closure (shared with process-file)
+    // Build processing closure
     let process_fn = build_process_fn(ProcessRowConfig {
         client: Arc::new(LlmClient::from_config(&runtime)),
         model: runtime.model.clone(),
@@ -227,9 +390,12 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         logger: Some(logger),
     });
 
-    // Set up deck writer. Pass the existing AnkiClient (no need for a second one).
-    let source_name = args.deck.as_deref().or(args.query.as_deref()).unwrap();
-    let slug = slugify_deck_name(source_name);
+    let source_name = args
+        .deck
+        .clone()
+        .or_else(|| args.query.clone())
+        .unwrap_or_default();
+    let slug = slugify_deck_name(&source_name);
     let error_log_path = format!("{slug}-errors.jsonl").into();
     let run_id = store::generate_run_id();
     let writer = Arc::new(DeckWriter::new(
@@ -239,92 +405,63 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         before_fields,
     )?);
 
-    let writer_cb = Arc::clone(&writer);
-    let on_row_done: super::engine::OnRowDone = Box::new(move |outcome| {
-        writer_cb.on_row_done(outcome);
-        // Signal the engine to abort if an Anki flush has failed — no point
-        // burning more LLM tokens when results cannot be saved.
-        writer_cb.has_flush_error.load(Ordering::Relaxed)
-    });
+    // Build sample prompt for preflight
+    let sample_prompt = rows
+        .first()
+        .and_then(|row| fill_template(&prompt_template, row).ok());
 
-    // Run batch
-    let batch_config = BatchConfig {
+    let plan = BatchPlan {
+        item_name_singular: "note",
+        item_name_plural: "notes",
+        rows: deck_row_descriptors(&rows),
+        run_total: rows.len(),
+        model: runtime.model.clone(),
+        prompt_path: prompt_path.display().to_string(),
+        output_mode: if let Some(ref field) = args.field {
+            OutputMode::SingleField(field.clone())
+        } else {
+            OutputMode::JsonMerge
+        },
         batch_size: runtime.batch_size,
         retries: runtime.retries,
-        model: runtime.model.clone(),
-        output_path: String::new(),
+        sample_prompt,
+        preflight_fields: vec![
+            InfoField {
+                label: "Source".into(),
+                value: source_label.clone(),
+            },
+            InfoField {
+                label: "Note type".into(),
+                value: args.note_type.clone().unwrap_or_else(|| "any".into()),
+            },
+            InfoField {
+                label: "Destination".into(),
+                value: "Anki".into(),
+            },
+            InfoField {
+                label: "Error log".into(),
+                value: format!("{slug}-errors.jsonl"),
+            },
+        ],
     };
 
-    let (event_tx, _event_rx) = mpsc::channel();
-    let cancel = Arc::new(AtomicBool::new(false));
-    let cancel_for_ctrlc = Arc::clone(&cancel);
-    let _ = ctrlc::set_handler(move || {
-        cancel_for_ctrlc.store(true, Ordering::SeqCst);
-        eprintln!("Interrupting... waiting for active requests to finish.");
+    let session: SharedSession = Arc::new(DeckSession {
+        writer,
+        process: process_fn,
+        source_name: source_name.clone(),
+        model: runtime.model.clone(),
+        slug: slug.clone(),
+        run_id: run_id.clone(),
+        snapshot_path: Mutex::new(None),
     });
 
-    let (outcomes, _tokens, _interrupted) = run_batch(
-        rows,
-        process_fn,
-        &batch_config,
-        Some(on_row_done),
-        event_tx,
-        cancel,
-    );
+    let summary = run_batch_controller(plan, &runtime, rows, session)?;
 
-    // Final flush
-    if let Err(e) = writer.flush() {
-        eprintln!("Error: failed to flush final Anki updates: {e}");
-    }
-
-    let has_flush_error = writer.has_flush_error.load(Ordering::SeqCst);
-    let anki_updates = writer.success_count();
-
-    if !has_flush_error {
-        eprintln!("\nSuccessfully updated {anki_updates} notes in Anki.");
-    }
-
-    // Save snapshot for rollback — even on partial failure, so notes that
-    // were successfully flushed before the error can still be rolled back.
-    let revisions = writer.take_revisions();
-    if !revisions.is_empty() {
-        let snapshot = Snapshot {
-            run_id: run_id.clone(),
-            timestamp: store::generate_timestamp(),
-            deck: source_name.to_string(),
-            model: runtime.model.clone(),
-            note_count: revisions.len(),
-            rolled_back: false,
-            notes: revisions,
-        };
-        match store::save_snapshot(&snapshot) {
-            Ok(path) => {
-                eprintln!(
-                    "Snapshot saved: {} (use `anki-llm rollback {}` to undo)",
-                    path.display(),
-                    run_id
-                );
-            }
-            Err(e) => {
-                eprintln!("Warning: failed to save snapshot: {e}");
-            }
-        }
-    }
-
-    if has_flush_error {
+    if summary.failed > 0 {
         bail!(
-            "failed to update Anki — some processed notes were not saved. \
-             Check Anki connectivity and try again."
+            "{} notes failed processing. Error log: {slug}-errors.jsonl",
+            summary.failed
         );
-    }
-
-    let failures = outcomes
-        .iter()
-        .filter(|o| matches!(o, RowOutcome::Failure { .. }))
-        .count();
-
-    if failures > 0 {
-        bail!("{failures} notes failed processing. Error log: {slug}-errors.jsonl");
     }
 
     Ok(())

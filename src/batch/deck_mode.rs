@@ -1,4 +1,4 @@
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -12,6 +12,8 @@ use crate::anki::client::AnkiClient;
 use crate::data::rows::Row;
 use crate::snapshot::store::NoteRevision;
 
+use super::engine::OnRowDoneAction;
+use super::events::FailedRowInfo;
 use super::report::RowOutcome;
 
 /// Internal key used to store the Anki note ID in a row.
@@ -32,6 +34,8 @@ pub struct DeckWriter {
     success_count: Mutex<usize>,
     /// Set to true if any Anki flush fails — prevents further writes.
     pub has_flush_error: AtomicBool,
+    /// Cached error message from the most recent flush failure.
+    last_flush_error: Mutex<Option<String>>,
     /// Original field values keyed by note_id, for snapshot diffing.
     before_fields: IndexMap<i64, IndexMap<String, String>>,
     /// Collected note revisions from successful updates.
@@ -45,10 +49,6 @@ impl DeckWriter {
         error_log_path: PathBuf,
         before_fields: IndexMap<i64, IndexMap<String, String>>,
     ) -> anyhow::Result<Self> {
-        // Truncate error log from prior runs. Fail early if the path is unwritable.
-        File::create(&error_log_path)
-            .with_context(|| format!("failed to create error log: {}", error_log_path.display()))?;
-
         Ok(Self {
             anki,
             queue: Mutex::new(Vec::new()),
@@ -56,39 +56,54 @@ impl DeckWriter {
             error_log_path,
             success_count: Mutex::new(0),
             has_flush_error: AtomicBool::new(false),
+            last_flush_error: Mutex::new(None),
             before_fields,
             revisions: Mutex::new(Vec::new()),
         })
     }
 
-    /// Record a completed row outcome. Queues Anki updates for successes,
-    /// logs failures to the error JSONL file.
-    pub fn on_row_done(&self, outcome: &RowOutcome) {
-        // Skip further Anki writes if a flush already failed
-        if self.has_flush_error.load(Ordering::Relaxed) {
-            return;
+    /// Record a completed row outcome. Queues Anki updates for successes;
+    /// failures are not logged here — they are written by `rewrite_error_log`
+    /// after the iteration completes so that retries can supersede prior failures.
+    pub fn on_row_done(&self, outcome: &RowOutcome) -> OnRowDoneAction {
+        // If a previous flush failed, abort immediately so the engine stops.
+        if let Some(msg) = self.last_flush_error.lock().unwrap().clone() {
+            return OnRowDoneAction::Abort(msg);
         }
 
-        match outcome {
-            RowOutcome::Success(row) => {
-                if let Some(action) = build_update_action(row) {
-                    // Record the note revision for snapshot
-                    self.record_revision(row);
+        if let RowOutcome::Success(row) = outcome
+            && let Some(action) = build_update_action(row)
+        {
+            self.record_revision(row);
 
-                    let should_flush = {
-                        let mut queue = self.queue.lock().unwrap();
-                        queue.push(action);
-                        queue.len() >= self.flush_threshold
-                    };
-                    if should_flush && let Err(e) = self.flush() {
-                        eprintln!("Error: failed to flush Anki updates: {e}");
-                    }
-                }
-            }
-            RowOutcome::Failure { row, error } => {
-                self.append_error_log(row, error);
+            let should_flush = {
+                let mut queue = self.queue.lock().unwrap();
+                queue.push(action);
+                queue.len() >= self.flush_threshold
+            };
+            if should_flush && let Err(e) = self.flush() {
+                return OnRowDoneAction::Abort(e.to_string());
             }
         }
+        OnRowDoneAction::Continue
+    }
+
+    /// Truncate and rewrite the error log with the current iteration's failures.
+    /// Called by the deck session at iteration finalization time so that retries
+    /// can supersede earlier failures cleanly.
+    pub fn rewrite_error_log(&self, failed: &[FailedRowInfo]) -> anyhow::Result<()> {
+        let mut file = File::create(&self.error_log_path).with_context(|| {
+            format!(
+                "failed to open error log: {}",
+                self.error_log_path.display()
+            )
+        })?;
+        for f in failed {
+            let entry = json!({ "error": f.error, "note": f.row_data });
+            let line = serde_json::to_string(&entry).unwrap_or_default();
+            writeln!(file, "{line}")?;
+        }
+        Ok(())
     }
 
     /// Extract the note ID from a row.
@@ -143,7 +158,19 @@ impl DeckWriter {
     }
 
     /// Flush all queued updates to Anki via `multi`.
+    /// Short-circuits if a previous flush already failed, so callers can rely
+    /// on calling `flush()` again without re-attempting a known-failing batch.
     pub fn flush(&self) -> anyhow::Result<()> {
+        if self.has_flush_error.load(Ordering::SeqCst) {
+            let cached = self
+                .last_flush_error
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "previous flush failed".to_string());
+            anyhow::bail!("Anki flush previously failed: {cached}");
+        }
+
         let actions: Vec<Value> = {
             let mut queue = self.queue.lock().unwrap();
             if queue.is_empty() {
@@ -153,8 +180,9 @@ impl DeckWriter {
         };
 
         let count = actions.len();
-        let results = self.anki.multi(&actions).inspect_err(|_e| {
+        let results = self.anki.multi(&actions).inspect_err(|e| {
             self.has_flush_error.store(true, Ordering::SeqCst);
+            *self.last_flush_error.lock().unwrap() = Some(e.to_string());
         })?;
 
         // Check for individual failures (updateNoteFields returns null on success)
@@ -166,11 +194,12 @@ impl DeckWriter {
 
         if !failures.is_empty() {
             self.has_flush_error.store(true, Ordering::SeqCst);
-            anyhow::bail!(
-                "{} of {} Anki update operations failed",
-                failures.len(),
-                count
+            let msg = format!(
+                "{} of {count} Anki update operations failed",
+                failures.len()
             );
+            *self.last_flush_error.lock().unwrap() = Some(msg.clone());
+            anyhow::bail!(msg);
         }
 
         *self.success_count.lock().unwrap() += count;
@@ -179,19 +208,6 @@ impl DeckWriter {
 
     pub fn success_count(&self) -> usize {
         *self.success_count.lock().unwrap()
-    }
-
-    fn append_error_log(&self, row: &Row, error: &str) {
-        let entry = json!({ "error": error, "note": row });
-        let line = serde_json::to_string(&entry).unwrap_or_default();
-        let result = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.error_log_path)
-            .and_then(|mut f| writeln!(f, "{line}"));
-        if let Err(e) = result {
-            eprintln!("Warning: failed to write error log: {e}");
-        }
     }
 }
 
