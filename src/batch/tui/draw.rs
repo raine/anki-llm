@@ -2,9 +2,10 @@ use std::time::Duration;
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::Color;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table, Wrap};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap};
 
 use crate::llm::pricing;
 use crate::tui::theme::{SPINNER_FRAMES, THEME, footer_cmd, footer_pipe};
@@ -193,12 +194,9 @@ fn draw_sidebar(state: &RunState, plan: &BatchPlan, frame: &mut Frame, area: Rec
 
     let mut lines: Vec<Line> = Vec::new();
 
-    // Progress gauge line
+    // Reserve a row for the progress gauge (rendered separately below).
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        format!("  {}/{}", completed, stats.total),
-        Style::default().fg(THEME.text).add_modifier(Modifier::BOLD),
-    )));
+    lines.push(Line::from(""));
     lines.push(Line::from(""));
 
     let label_style = Style::default().fg(THEME.dimmed);
@@ -288,12 +286,54 @@ fn draw_sidebar(state: &RunState, plan: &BatchPlan, frame: &mut Frame, area: Rec
     let para = Paragraph::new(Text::from(lines)).block(sidebar_block);
     frame.render_widget(para, area);
 
-    // Render gauge on top of sidebar
+    // Render the gauge manually so the centered label can swap fg per cell:
+    // dark text over the bright filled portion, light text over the dark
+    // unfilled portion. ratatui's Gauge widget only supports a single label
+    // style, which is why we paint into the buffer ourselves.
     if gauge_area.width > 0 {
-        let gauge = Gauge::default()
-            .ratio(ratio.min(1.0))
-            .gauge_style(Style::default().fg(THEME.info).bg(THEME.highlight_bg));
-        frame.render_widget(gauge, gauge_area);
+        let percent = (ratio * 100.0).round() as u16;
+        let label = format!("{}/{}  {percent}%", completed, stats.total);
+        let label_chars: Vec<char> = label.chars().collect();
+        let label_width = label_chars.len() as u16;
+        let label_x = gauge_area.x + gauge_area.width.saturating_sub(label_width) / 2;
+        let filled_width = (gauge_area.width as f64 * ratio.min(1.0)).round() as u16;
+
+        // Dark text used over the bright cyan fill.
+        let dark_label_fg = Color::Rgb(20, 30, 44);
+
+        let buf = frame.buffer_mut();
+
+        // Paint the bar background row.
+        for i in 0..gauge_area.width {
+            let x = gauge_area.x + i;
+            let y = gauge_area.y;
+            let cell_bg = if i < filled_width {
+                THEME.info
+            } else {
+                THEME.highlight_bg
+            };
+            let cell = &mut buf[(x, y)];
+            cell.set_char(' ');
+            cell.set_bg(cell_bg);
+        }
+
+        // Overlay the centered label, choosing fg per cell.
+        for (idx, ch) in label_chars.iter().enumerate() {
+            let x = label_x + idx as u16;
+            if x >= gauge_area.x + gauge_area.width {
+                break;
+            }
+            let in_filled = (x - gauge_area.x) < filled_width;
+            let label_fg = if in_filled {
+                dark_label_fg
+            } else {
+                THEME.highlight_fg
+            };
+            let cell = &mut buf[(x, gauge_area.y)];
+            cell.set_char(*ch);
+            cell.set_fg(label_fg);
+            cell.modifier.insert(Modifier::BOLD);
+        }
     }
 }
 
