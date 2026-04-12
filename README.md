@@ -573,10 +573,10 @@ Lists past `process-deck` runs that have snapshot data available.
 
 ```
 $ anki-llm history
-Run ID                   Deck                     Model              Notes  Status
-──────────────────────────────────────────────────────────────────────────────────
-20260411T153000_123Z     Japanese Core            gpt-5-mini           142  ok
-20260410T091500_456Z     Japanese Core            gpt-5-mini            50  rolled back
+Run ID                 Source                           Model              Notes  Status
+──────────────────────────────────────────────────────────────────────────────────────
+20260411T153000_123Z   Japanese Core                    gpt-5-mini           142  ok
+20260410T091500_456Z   query: tag:leech                 gpt-5-mini            50  rolled back
 ```
 
 Snapshots are stored in `~/.local/state/anki-llm/snapshots/`.

@@ -23,12 +23,32 @@ pub struct NoteRevision {
 pub struct Snapshot {
     pub run_id: String,
     pub timestamp: String,
-    pub deck: String,
+    /// Deck name when the run targeted a specific deck. `None` for query-mode
+    /// runs (see [`Snapshot::query`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deck: Option<String>,
+    /// Raw Anki search query when the run was launched with `--query`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
     pub model: String,
     pub note_count: usize,
     #[serde(default)]
     pub rolled_back: bool,
     pub notes: Vec<NoteRevision>,
+}
+
+impl Snapshot {
+    /// Human-readable label identifying the run's source. Prefers the deck
+    /// name; falls back to the raw query, then to a placeholder.
+    pub fn source_display(&self) -> String {
+        if let Some(deck) = self.deck.as_deref().filter(|s| !s.is_empty()) {
+            deck.to_string()
+        } else if let Some(q) = self.query.as_deref().filter(|s| !s.is_empty()) {
+            format!("query: {q}")
+        } else {
+            "(unknown)".to_string()
+        }
+    }
 }
 
 impl fmt::Display for Snapshot {
@@ -41,7 +61,11 @@ impl fmt::Display for Snapshot {
         write!(
             f,
             "{:<22} {:<24} {:<18} {:>5}  {}",
-            self.run_id, self.deck, self.model, self.note_count, status
+            self.run_id,
+            self.source_display(),
+            self.model,
+            self.note_count,
+            status
         )
     }
 }
@@ -202,7 +226,8 @@ mod tests {
         let snap = Snapshot {
             run_id: "20260411T120000Z".into(),
             timestamp: "2026-04-11T12:00:00Z".into(),
-            deck: "Test".into(),
+            deck: Some("Test".into()),
+            query: None,
             model: "gpt-5-mini".into(),
             note_count: 1,
             rolled_back: false,
@@ -220,6 +245,39 @@ mod tests {
     }
 
     #[test]
+    fn legacy_snapshot_with_string_deck_loads() {
+        // Older snapshots stored `deck` as a plain string. Ensure they still
+        // deserialize into the current Option<String> shape.
+        let legacy = r#"{
+            "run_id": "20260411T120000Z",
+            "timestamp": "2026-04-11T12:00:00Z",
+            "deck": "Old Deck",
+            "model": "gpt-5-mini",
+            "note_count": 0,
+            "notes": []
+        }"#;
+        let snap: Snapshot = serde_json::from_str(legacy).unwrap();
+        assert_eq!(snap.deck.as_deref(), Some("Old Deck"));
+        assert_eq!(snap.query, None);
+        assert_eq!(snap.source_display(), "Old Deck");
+    }
+
+    #[test]
+    fn query_mode_snapshot_source_display() {
+        let snap = Snapshot {
+            run_id: "20260411T120000Z".into(),
+            timestamp: "2026-04-11T12:00:00Z".into(),
+            deck: None,
+            query: Some(r#"deck:"Oma dekki" tag:foo"#.into()),
+            model: "gpt-5-mini".into(),
+            note_count: 0,
+            rolled_back: false,
+            notes: vec![],
+        };
+        assert_eq!(snap.source_display(), r#"query: deck:"Oma dekki" tag:foo"#);
+    }
+
+    #[test]
     fn save_and_load_snapshot() {
         let tmp = tempfile::tempdir().unwrap();
         // Override HOME so snapshots_dir() points to temp
@@ -228,7 +286,8 @@ mod tests {
         let snap = Snapshot {
             run_id: "20260411T120000Z".into(),
             timestamp: "2026-04-11T12:00:00Z".into(),
-            deck: "Test".into(),
+            deck: Some("Test".into()),
+            query: None,
             model: "gpt-5-mini".into(),
             note_count: 0,
             rolled_back: false,
@@ -236,7 +295,7 @@ mod tests {
         };
         save_snapshot(&snap).unwrap();
         let loaded = load_snapshot("20260411T120000Z").unwrap();
-        assert_eq!(loaded.deck, "Test");
+        assert_eq!(loaded.deck.as_deref(), Some("Test"));
 
         unsafe { std::env::remove_var("HOME") };
     }

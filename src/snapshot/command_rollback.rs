@@ -29,8 +29,10 @@ pub fn run(args: RollbackArgs) -> Result<()> {
     }
 
     eprintln!(
-        "Rolling back run {} ({} notes in deck '{}')...",
-        snapshot.run_id, snapshot.note_count, snapshot.deck
+        "Rolling back run {} ({} notes from {})...",
+        snapshot.run_id,
+        snapshot.note_count,
+        snapshot.source_display()
     );
 
     let anki = AnkiClient::new();
