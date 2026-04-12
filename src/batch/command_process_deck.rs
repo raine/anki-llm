@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
@@ -64,9 +63,6 @@ struct DeckSession {
     model: String,
     slug: String,
     run_id: String,
-    /// Snapshot path is set by `finish_run` and reported in the iteration
-    /// summary's completion fields if available.
-    snapshot_path: Mutex<Option<String>>,
 }
 
 impl BatchSession for DeckSession {
@@ -135,16 +131,9 @@ impl BatchSession for DeckSession {
                 value: format!("{updated} notes in Anki"),
             },
         ];
-        if let Some(ref path) = *self.snapshot_path.lock().unwrap() {
-            completion_fields.push(InfoField {
-                label: "Snapshot".into(),
-                value: path.clone(),
-            });
-            completion_fields.push(InfoField {
-                label: "Rollback".into(),
-                value: format!("anki-llm rollback {}", self.run_id),
-            });
-        }
+        // Snapshot info isn't shown here — `finish_run` runs after the TUI
+        // tears down (so revisions from all retries are aggregated), and its
+        // eprintln is the canonical place the user sees the snapshot path.
         if failed > 0 {
             completion_fields.push(InfoField {
                 label: "Errors".into(),
@@ -186,12 +175,11 @@ impl BatchSession for DeckSession {
         };
         match store::save_snapshot(&snapshot) {
             Ok(path) => {
-                let path_str = path.display().to_string();
                 eprintln!(
                     "Snapshot saved: {} (use `anki-llm rollback {}` to undo)",
-                    path_str, self.run_id
+                    path.display(),
+                    self.run_id
                 );
-                *self.snapshot_path.lock().unwrap() = Some(path_str);
             }
             Err(e) => {
                 eprintln!("Warning: failed to save snapshot: {e}");
@@ -452,7 +440,6 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         model: runtime.model.clone(),
         slug: slug.clone(),
         run_id: run_id.clone(),
-        snapshot_path: Mutex::new(None),
     });
 
     let summary = run_batch_controller(plan, &runtime, rows, session)?;

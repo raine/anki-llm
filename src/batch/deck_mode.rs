@@ -38,7 +38,11 @@ pub struct DeckWriter {
     last_flush_error: Mutex<Option<String>>,
     /// Original field values keyed by note_id, for snapshot diffing.
     before_fields: IndexMap<i64, IndexMap<String, String>>,
-    /// Collected note revisions from successful updates.
+    /// Revisions for rows whose updates have not yet been flushed to Anki.
+    /// Promoted to `revisions` only after the corresponding `multi()` call
+    /// succeeds, so a failed flush never leaves stale entries in the snapshot.
+    pending_revisions: Mutex<Vec<NoteRevision>>,
+    /// Revisions for rows whose Anki updates were successfully flushed.
     revisions: Mutex<Vec<NoteRevision>>,
 }
 
@@ -58,6 +62,7 @@ impl DeckWriter {
             has_flush_error: AtomicBool::new(false),
             last_flush_error: Mutex::new(None),
             before_fields,
+            pending_revisions: Mutex::new(Vec::new()),
             revisions: Mutex::new(Vec::new()),
         })
     }
@@ -142,9 +147,11 @@ impl DeckWriter {
             }
         }
 
-        // Only record if something actually changed
+        // Only record if something actually changed.
+        // Goes into the pending list — promoted to committed `revisions` once
+        // the matching Anki flush succeeds.
         if !after_fields.is_empty() {
-            self.revisions.lock().unwrap().push(NoteRevision {
+            self.pending_revisions.lock().unwrap().push(NoteRevision {
                 note_id,
                 before_fields: before.clone(),
                 after_fields,
@@ -171,12 +178,16 @@ impl DeckWriter {
             anyhow::bail!("Anki flush previously failed: {cached}");
         }
 
-        let actions: Vec<Value> = {
+        // Atomically take both the queued actions and the pending revisions.
+        // Lock order is fixed (queue, then pending) to avoid deadlock with any
+        // future caller that might want to lock both.
+        let (actions, pending) = {
             let mut queue = self.queue.lock().unwrap();
+            let mut pending = self.pending_revisions.lock().unwrap();
             if queue.is_empty() {
                 return Ok(());
             }
-            std::mem::take(&mut *queue)
+            (std::mem::take(&mut *queue), std::mem::take(&mut *pending))
         };
 
         let count = actions.len();
@@ -199,9 +210,13 @@ impl DeckWriter {
                 failures.len()
             );
             *self.last_flush_error.lock().unwrap() = Some(msg.clone());
+            // Pending revisions for this batch are dropped — they never made
+            // it into Anki and must not appear in the rollback snapshot.
             anyhow::bail!(msg);
         }
 
+        // Anki accepted everything: promote pending revisions to committed.
+        self.revisions.lock().unwrap().extend(pending);
         *self.success_count.lock().unwrap() += count;
         Ok(())
     }

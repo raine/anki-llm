@@ -31,18 +31,27 @@ pub fn run_batch_controller(
         None
     };
 
-    let result = run_loop(&mut plan, runtime, pending_rows, &session, &mut terminal);
+    let loop_result = run_loop(&mut plan, runtime, pending_rows, &session, &mut terminal);
 
     if use_tui {
         crate::tui::terminal::restore();
     }
 
-    let summary = result?;
+    // End-of-run finalization (snapshot save) runs even if the loop returned
+    // an error so partial successes can still be rolled back. If finish_run
+    // itself fails we surface its error only when the loop succeeded — the
+    // loop's error is more important and we don't want to mask it.
+    let finish_result = session.finish_run();
 
-    // End-of-run finalization (snapshot save). Only call once across all retries.
-    session.finish_run()?;
-
-    Ok(summary)
+    match (loop_result, finish_result) {
+        (Ok(summary), Ok(())) => Ok(summary),
+        (Ok(_), Err(e)) => Err(e),
+        (Err(e), Ok(())) => Err(e),
+        (Err(loop_err), Err(finish_err)) => {
+            eprintln!("Warning: finish_run failed after run error: {finish_err}");
+            Err(loop_err)
+        }
+    }
 }
 
 fn run_loop(
