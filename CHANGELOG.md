@@ -16,7 +16,7 @@
 
 ## v2.0.5 (2026-04-11)
 
-## `generate`
+### `generate`
 
 - Added batch/multi-term input — paste multiple terms or press Tab to queue
   them, then process all at once into a single selection view
