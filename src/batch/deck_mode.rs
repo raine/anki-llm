@@ -96,7 +96,24 @@ impl DeckWriter {
     /// Truncate and rewrite the error log with the current iteration's failures.
     /// Called by the deck session at iteration finalization time so that retries
     /// can supersede earlier failures cleanly.
+    ///
+    /// If the failure list is empty, no file is created — and any stale log
+    /// from a previous run on the same source is removed so the user isn't
+    /// left thinking there are still errors. This prevents the writer from
+    /// littering empty `*-errors.jsonl` files for clean runs.
     pub fn rewrite_error_log(&self, failed: &[FailedRowInfo]) -> anyhow::Result<()> {
+        if failed.is_empty() {
+            if self.error_log_path.exists() {
+                std::fs::remove_file(&self.error_log_path).with_context(|| {
+                    format!(
+                        "failed to remove stale error log: {}",
+                        self.error_log_path.display()
+                    )
+                })?;
+            }
+            return Ok(());
+        }
+
         let mut file = File::create(&self.error_log_path).with_context(|| {
             format!(
                 "failed to open error log: {}",
