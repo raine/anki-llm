@@ -109,6 +109,18 @@ pub struct TtsArgs {
     #[arg(long = "azure-region")]
     pub azure_region: Option<String>,
 
+    /// AWS region override for Amazon Polly (flag mode; provider must be 'amazon')
+    #[arg(long = "aws-region")]
+    pub aws_region: Option<String>,
+
+    /// AWS access key id for Amazon Polly (flag mode)
+    #[arg(long = "aws-access-key-id")]
+    pub aws_access_key_id: Option<String>,
+
+    /// AWS secret access key for Amazon Polly (flag mode)
+    #[arg(long = "aws-secret-access-key")]
+    pub aws_secret_access_key: Option<String>,
+
     /// Filter by note type (flag mode; rejected in --prompt mode)
     #[arg(long, short = 'n')]
     pub note_type: Option<String>,

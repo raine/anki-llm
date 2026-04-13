@@ -224,6 +224,9 @@ fn run_prompt_mode(args: TtsArgs) -> Result<()> {
         api_key: args.api_key.as_deref(),
         api_base_url: args.api_base_url.as_deref(),
         azure_region: args.azure_region.as_deref(),
+        aws_access_key_id: args.aws_access_key_id.as_deref(),
+        aws_secret_access_key: args.aws_secret_access_key.as_deref(),
+        aws_region: args.aws_region.as_deref(),
         batch_size: args.batch_size,
         retries: args.retries,
         force: args.force,
@@ -296,6 +299,9 @@ fn run_flag_mode(args: TtsArgs) -> Result<()> {
         api_key: args.api_key.as_deref(),
         api_base_url: args.api_base_url.as_deref(),
         azure_region: args.azure_region.as_deref(),
+        aws_access_key_id: args.aws_access_key_id.as_deref(),
+        aws_secret_access_key: args.aws_secret_access_key.as_deref(),
+        aws_region: args.aws_region.as_deref(),
         batch_size: args.batch_size,
         retries: args.retries,
         force: args.force,
@@ -552,8 +558,11 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
         if let Some(ref m) = resolved.model {
             eprintln!("Model:    {m}");
         }
-        if let ResolvedProvider::Azure { ref region, .. } = resolved.provider {
-            eprintln!("Region:   {region}");
+        match &resolved.provider {
+            ResolvedProvider::Azure { region, .. } | ResolvedProvider::Amazon { region, .. } => {
+                eprintln!("Region:   {region}");
+            }
+            _ => {}
         }
         eprintln!("Source:   {}", resolved.source.display_label());
         if let Some(first) = rows_to_process.first() {

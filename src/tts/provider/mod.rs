@@ -1,4 +1,6 @@
+pub mod amazon;
 pub mod azure;
+pub mod google;
 pub mod openai;
 
 use std::sync::Arc;
@@ -92,6 +94,15 @@ pub enum ProviderSelection {
         subscription_key: String,
         region: String,
     },
+    Google {
+        api_key: String,
+    },
+    Amazon {
+        access_key_id: String,
+        secret_access_key: String,
+        region: String,
+        session_token: Option<String>,
+    },
 }
 
 pub fn build(selection: ProviderSelection) -> Arc<dyn TtsProvider> {
@@ -104,5 +115,17 @@ pub fn build(selection: ProviderSelection) -> Arc<dyn TtsProvider> {
             subscription_key,
             region,
         } => Arc::new(azure::AzureTtsProvider::new(subscription_key, region)),
+        ProviderSelection::Google { api_key } => Arc::new(google::GoogleTtsProvider::new(api_key)),
+        ProviderSelection::Amazon {
+            access_key_id,
+            secret_access_key,
+            region,
+            session_token,
+        } => Arc::new(amazon::AmazonTtsProvider::new(
+            access_key_id,
+            secret_access_key,
+            region,
+            session_token,
+        )),
     }
 }

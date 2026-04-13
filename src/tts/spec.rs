@@ -20,6 +20,15 @@ pub enum ResolvedProvider {
         subscription_key: String,
         region: String,
     },
+    Google {
+        api_key: String,
+    },
+    Amazon {
+        access_key_id: String,
+        secret_access_key: String,
+        region: String,
+        session_token: Option<String>,
+    },
 }
 
 impl ResolvedProvider {
@@ -27,6 +36,8 @@ impl ResolvedProvider {
         match self {
             Self::OpenAi { .. } => "openai",
             Self::Azure { .. } => "azure",
+            Self::Google { .. } => "google",
+            Self::Amazon { .. } => "amazon",
         }
     }
 
@@ -38,6 +49,8 @@ impl ResolvedProvider {
         match self {
             Self::OpenAi { api_base_url, .. } => api_base_url.clone(),
             Self::Azure { region, .. } => Some(super::provider::azure::endpoint_identity(region)),
+            Self::Google { .. } => Some(super::provider::google::endpoint_identity()),
+            Self::Amazon { region, .. } => Some(super::provider::amazon::endpoint_identity(region)),
         }
     }
 
@@ -56,6 +69,18 @@ impl ResolvedProvider {
             } => ProviderSelection::Azure {
                 subscription_key,
                 region,
+            },
+            Self::Google { api_key } => ProviderSelection::Google { api_key },
+            Self::Amazon {
+                access_key_id,
+                secret_access_key,
+                region,
+                session_token,
+            } => ProviderSelection::Amazon {
+                access_key_id,
+                secret_access_key,
+                region,
+                session_token,
             },
         }
     }
@@ -85,6 +110,9 @@ pub struct CliOverrides<'a> {
     pub api_key: Option<&'a str>,
     pub api_base_url: Option<&'a str>,
     pub azure_region: Option<&'a str>,
+    pub aws_access_key_id: Option<&'a str>,
+    pub aws_secret_access_key: Option<&'a str>,
+    pub aws_region: Option<&'a str>,
     pub batch_size: u32,
     pub retries: u32,
     pub force: bool,
@@ -177,14 +205,111 @@ pub fn resolve(spec: &TtsSpec, overrides: &CliOverrides) -> Result<ResolvedTtsSp
                 region,
             }
         }
-        other => bail!("unknown TTS provider '{other}' (expected: openai or azure)"),
+        "google" => {
+            // CLI --api-key > env GOOGLE_TTS_KEY > config.
+            let api_key = overrides
+                .api_key
+                .map(String::from)
+                .or_else(|| {
+                    std::env::var("GOOGLE_TTS_KEY")
+                        .ok()
+                        .filter(|k| !k.trim().is_empty())
+                })
+                .or_else(|| config.as_ref().and_then(|c| c.google_tts_key.clone()))
+                .context(
+                    "Google TTS requires an API key \
+                     (set GOOGLE_TTS_KEY, pass --api-key, or set `google_tts_key` in config)",
+                )?;
+
+            ResolvedProvider::Google { api_key }
+        }
+        "amazon" => {
+            // CLI > env > config for each of access key id, secret,
+            // and region. Session token is env-only (standard AWS env).
+            let access_key_id = overrides
+                .aws_access_key_id
+                .map(String::from)
+                .or_else(|| {
+                    std::env::var("AWS_ACCESS_KEY_ID")
+                        .ok()
+                        .filter(|k| !k.trim().is_empty())
+                })
+                .or_else(|| {
+                    config
+                        .as_ref()
+                        .and_then(|c| c.aws_tts_access_key_id.clone())
+                })
+                .context(
+                    "Amazon Polly requires AWS_ACCESS_KEY_ID \
+                     (set AWS_ACCESS_KEY_ID, pass --aws-access-key-id, \
+                      or set `aws_tts_access_key_id` in config)",
+                )?;
+            let secret_access_key = overrides
+                .aws_secret_access_key
+                .map(String::from)
+                .or_else(|| {
+                    std::env::var("AWS_SECRET_ACCESS_KEY")
+                        .ok()
+                        .filter(|k| !k.trim().is_empty())
+                })
+                .or_else(|| {
+                    config
+                        .as_ref()
+                        .and_then(|c| c.aws_tts_secret_access_key.clone())
+                })
+                .context(
+                    "Amazon Polly requires AWS_SECRET_ACCESS_KEY \
+                     (set AWS_SECRET_ACCESS_KEY, pass --aws-secret-access-key, \
+                      or set `aws_tts_secret_access_key` in config)",
+                )?;
+
+            // Region precedence: YAML > CLI --aws-region > env > config.
+            let region = spec
+                .region
+                .clone()
+                .or_else(|| overrides.aws_region.map(String::from))
+                .or_else(|| {
+                    std::env::var("AWS_REGION")
+                        .ok()
+                        .filter(|r| !r.trim().is_empty())
+                })
+                .or_else(|| {
+                    std::env::var("AWS_DEFAULT_REGION")
+                        .ok()
+                        .filter(|r| !r.trim().is_empty())
+                })
+                .or_else(|| config.as_ref().and_then(|c| c.aws_tts_region.clone()))
+                .context(
+                    "Amazon Polly requires a region \
+                     (set tts.region in YAML, pass --aws-region, \
+                      set AWS_REGION, or set `aws_tts_region` in config)",
+                )?;
+
+            let session_token = std::env::var("AWS_SESSION_TOKEN")
+                .ok()
+                .filter(|t| !t.trim().is_empty());
+
+            ResolvedProvider::Amazon {
+                access_key_id,
+                secret_access_key,
+                region,
+                session_token,
+            }
+        }
+        other => {
+            bail!("unknown TTS provider '{other}' (expected: openai, azure, google, or amazon)")
+        }
     };
 
-    // Azure ignores model/speed; the parser already rejected them in the
-    // YAML, but legacy flag mode can still pass them in. Drop them on the
-    // floor here rather than forwarding them into the resolved spec.
+    // Non-OpenAI providers drop model/speed the same way Azure does,
+    // with the exception of Amazon Polly, where `model` is overloaded to
+    // mean the Polly `Engine` (`standard` / `neural` / `generative` /
+    // `long-form`). Google has no `model` parameter and `speed` is sent
+    // as `speakingRate` on the audioConfig.
     let (model, speed) = match &provider {
         ResolvedProvider::Azure { .. } => (None, None),
+        ResolvedProvider::Google { .. } => (None, spec.speed),
+        ResolvedProvider::Amazon { .. } => (spec.model.clone(), None),
         ResolvedProvider::OpenAi { .. } => (spec.model.clone(), spec.speed),
     };
 
@@ -239,6 +364,9 @@ mod tests {
             api_key: Some("sk-test"),
             api_base_url: None,
             azure_region: None,
+            aws_access_key_id: None,
+            aws_secret_access_key: None,
+            aws_region: None,
             batch_size: 5,
             retries: 3,
             force: false,
@@ -293,6 +421,9 @@ mod tests {
             api_key: None,
             api_base_url: None,
             azure_region: None,
+            aws_access_key_id: None,
+            aws_secret_access_key: None,
+            aws_region: None,
             batch_size: 5,
             retries: 3,
             force: false,
@@ -317,6 +448,9 @@ mod tests {
             api_key: Some("fake-azure-key"),
             api_base_url: None,
             azure_region: None,
+            aws_access_key_id: None,
+            aws_secret_access_key: None,
+            aws_region: None,
             batch_size: 5,
             retries: 3,
             force: false,
@@ -352,6 +486,9 @@ mod tests {
             api_key: None,
             api_base_url: None,
             azure_region: None,
+            aws_access_key_id: None,
+            aws_secret_access_key: None,
+            aws_region: None,
             batch_size: 5,
             retries: 3,
             force: false,

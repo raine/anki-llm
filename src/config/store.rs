@@ -35,6 +35,18 @@ pub struct AppConfig {
     /// Azure region for TTS (e.g. "eastus").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub azure_tts_region: Option<String>,
+    /// Google Cloud Text-to-Speech API key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub google_tts_key: Option<String>,
+    /// AWS access key id used for Amazon Polly TTS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aws_tts_access_key_id: Option<String>,
+    /// AWS secret access key used for Amazon Polly TTS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aws_tts_secret_access_key: Option<String>,
+    /// AWS region for Amazon Polly TTS (e.g. "us-east-1").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aws_tts_region: Option<String>,
 }
 
 impl AppConfig {
@@ -51,6 +63,10 @@ impl AppConfig {
             "tts_format" => self.tts_format.clone(),
             "azure_tts_key" => self.azure_tts_key.clone(),
             "azure_tts_region" => self.azure_tts_region.clone(),
+            "google_tts_key" => self.google_tts_key.clone(),
+            "aws_tts_access_key_id" => self.aws_tts_access_key_id.clone(),
+            "aws_tts_secret_access_key" => self.aws_tts_secret_access_key.clone(),
+            "aws_tts_region" => self.aws_tts_region.clone(),
             _ => None,
         }
     }
@@ -98,6 +114,22 @@ impl AppConfig {
                 self.azure_tts_region = Some(value.to_string());
                 true
             }
+            "google_tts_key" => {
+                self.google_tts_key = Some(value.to_string());
+                true
+            }
+            "aws_tts_access_key_id" => {
+                self.aws_tts_access_key_id = Some(value.to_string());
+                true
+            }
+            "aws_tts_secret_access_key" => {
+                self.aws_tts_secret_access_key = Some(value.to_string());
+                true
+            }
+            "aws_tts_region" => {
+                self.aws_tts_region = Some(value.to_string());
+                true
+            }
             _ => false,
         }
     }
@@ -134,6 +166,18 @@ impl AppConfig {
         }
         if let Some(ref v) = self.azure_tts_region {
             out.push(("azure_tts_region".into(), v.clone()));
+        }
+        if let Some(ref v) = self.google_tts_key {
+            out.push(("google_tts_key".into(), v.clone()));
+        }
+        if let Some(ref v) = self.aws_tts_access_key_id {
+            out.push(("aws_tts_access_key_id".into(), v.clone()));
+        }
+        if let Some(ref v) = self.aws_tts_secret_access_key {
+            out.push(("aws_tts_secret_access_key".into(), v.clone()));
+        }
+        if let Some(ref v) = self.aws_tts_region {
+            out.push(("aws_tts_region".into(), v.clone()));
         }
         out
     }

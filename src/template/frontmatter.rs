@@ -43,8 +43,8 @@ pub struct TtsSpec {
     /// "openai", "azure".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
-    /// Azure region, e.g. "eastus". Required when `provider: azure`,
-    /// forbidden otherwise.
+    /// Provider region. Required when `provider: azure` (e.g. "eastus")
+    /// or `provider: amazon` (e.g. "us-east-1"), forbidden otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -207,7 +207,7 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
             "openai" => {
                 if tts.region.is_some() {
                     return Err(TemplateError::InvalidFrontmatter(
-                        "tts.region is only valid when tts.provider is 'azure'".into(),
+                        "tts.region is only valid when tts.provider is 'azure' or 'amazon'".into(),
                     ));
                 }
             }
@@ -233,9 +233,48 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
                     ));
                 }
             }
+            "google" => {
+                if tts.region.is_some() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.region is only valid when tts.provider is 'azure' or 'amazon'".into(),
+                    ));
+                }
+                if tts.model.is_some() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.model is not supported with tts.provider 'google'".into(),
+                    ));
+                }
+            }
+            "amazon" => {
+                let region = tts
+                    .region
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty());
+                if region.is_none() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.region is required when tts.provider is 'amazon'".into(),
+                    ));
+                }
+                if tts.speed.is_some() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.speed is not supported with tts.provider 'amazon'".into(),
+                    ));
+                }
+                if let Some(ref engine) = tts.model {
+                    let allowed = ["standard", "neural", "generative", "long-form"];
+                    if !allowed.contains(&engine.as_str()) {
+                        return Err(TemplateError::InvalidFrontmatter(format!(
+                            "tts.model '{engine}' is not a valid Polly engine \
+                             (expected: standard, neural, generative, long-form)"
+                        )));
+                    }
+                }
+            }
             other => {
                 return Err(TemplateError::InvalidFrontmatter(format!(
-                    "tts.provider '{other}' is not supported (expected: openai or azure)"
+                    "tts.provider '{other}' is not supported \
+                     (expected: openai, azure, google, or amazon)"
                 )));
             }
         }
