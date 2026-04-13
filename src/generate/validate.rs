@@ -52,5 +52,15 @@ pub fn validate_anki_assets(
         );
     }
 
+    if let Some(ref tts) = frontmatter.tts
+        && !note_type_fields.contains(&tts.target)
+    {
+        anyhow::bail!(
+            "tts.target \"{}\" is not a field of note type \"{}\"",
+            tts.target,
+            frontmatter.note_type
+        );
+    }
+
     Ok(ValidationResult { note_type_fields })
 }
