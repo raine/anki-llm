@@ -8,12 +8,14 @@ use crate::template::fill_template;
 
 /// How the raw-text input for a single note is derived.
 ///
-/// TTS commands accept either a prompt template file (expanded per row with
-/// `{field}` placeholders like the LLM commands) or a bare field reference
-/// for the common "just speak this field" case.
+/// TTS commands accept either a prompt template (file on disk or inline
+/// string from a YAML `tts.source.template`) expanded per row with
+/// `{field}` placeholders, or a bare field reference for the common
+/// "just speak this field" case.
 #[derive(Clone)]
 pub enum TemplateSource {
     File { path: PathBuf, contents: String },
+    Inline { label: String, contents: String },
     Field(String),
 }
 
@@ -24,6 +26,10 @@ impl TemplateSource {
         Ok(Self::File { path, contents })
     }
 
+    pub fn inline(label: String, contents: String) -> Self {
+        Self::Inline { label, contents }
+    }
+
     pub fn field(name: String) -> Self {
         Self::Field(name)
     }
@@ -31,13 +37,14 @@ impl TemplateSource {
     pub fn display_label(&self) -> String {
         match self {
             Self::File { path, .. } => path.display().to_string(),
+            Self::Inline { label, .. } => format!("inline: {label}"),
             Self::Field(name) => format!("field: {name}"),
         }
     }
 
     pub fn expand(&self, row: &Row) -> Result<String> {
         match self {
-            Self::File { contents, .. } => {
+            Self::File { contents, .. } | Self::Inline { contents, .. } => {
                 fill_template(contents, row).map_err(|e| anyhow::anyhow!(e.to_string()))
             }
             Self::Field(name) => {
@@ -89,5 +96,19 @@ mod tests {
                 .unwrap(),
             "cat - feline"
         );
+    }
+
+    #[test]
+    fn inline_source_fills_placeholders() {
+        let src = TemplateSource::inline(
+            "tts.source.template".to_string(),
+            "{front}: {back}".to_string(),
+        );
+        assert_eq!(
+            src.expand(&row(&[("front", "cat"), ("back", "feline")]))
+                .unwrap(),
+            "cat: feline"
+        );
+        assert_eq!(src.display_label(), "inline: tts.source.template");
     }
 }

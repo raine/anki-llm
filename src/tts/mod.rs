@@ -5,5 +5,6 @@ pub mod media;
 pub mod process_row;
 pub mod provider;
 pub mod runtime;
+pub mod spec;
 pub mod template;
 pub mod text;
