@@ -215,6 +215,12 @@ pub fn build_bundle(
         api_key: opts.api_key,
         api_base_url: opts.api_base_url,
         azure_region: opts.azure_region,
+        // Generate-side callers never forward AWS creds yet; they flow
+        // through env/config via `spec::resolve` the same way Azure
+        // does when `azure_region` is None.
+        aws_access_key_id: None,
+        aws_secret_access_key: None,
+        aws_region: None,
         batch_size: 1,
         retries: 0,
         force: false,
