@@ -6,7 +6,7 @@ use regex::Regex;
 use super::error::TemplateError;
 use crate::data::Row;
 
-static PLACEHOLDER_RE: LazyLock<Regex> =
+pub(crate) static PLACEHOLDER_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\{([a-zA-Z0-9_-]+)\}").unwrap());
 
 /// Fill a template string by replacing `{key}` placeholders with values from `row`.
