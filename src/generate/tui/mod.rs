@@ -1344,23 +1344,37 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("Esc", "Cancel"),
             ("q", "Quit"),
         ],
-        AppMode::Selecting(_) => vec![
-            ("Space", "Toggle"),
-            ("f", "Force-select duplicate"),
-            ("a", "All"),
-            ("n", "None"),
-            ("c", "Copy"),
-            ("d", "Remove"),
-            ("e", "Edit in $EDITOR"),
-            ("r", "More"),
-            ("t", "More (new term)"),
-            ("R", "Regenerate card"),
-            ("Ctrl+O", "Model"),
-            ("Enter", "Confirm"),
-            ("Esc", "Back"),
-            ("q", "Quit"),
-            ("PgUp/PgDn", "Scroll"),
-        ],
+        AppMode::Selecting(_) => {
+            let mut v = vec![
+                ("Space", "Toggle"),
+                ("f", "Force-select duplicate"),
+                ("a", "All"),
+                ("n", "None"),
+                ("c", "Copy"),
+                ("d", "Remove"),
+                ("e", "Edit in $EDITOR"),
+                ("r", "More"),
+                ("t", "More (new term)"),
+                ("R", "Regenerate card"),
+            ];
+            if app
+                .session_info
+                .as_ref()
+                .map(|info| info.tts_preview_enabled)
+                .unwrap_or(false)
+                && app.player.is_some()
+            {
+                v.push(("p", "Preview audio"));
+            }
+            v.extend([
+                ("Ctrl+O", "Model"),
+                ("Enter", "Confirm"),
+                ("Esc", "Back"),
+                ("q", "Quit"),
+                ("PgUp/PgDn", "Scroll"),
+            ]);
+            v
+        }
         AppMode::Reviewing(_) => vec![
             ("k / y", "Keep"),
             ("d / n", "Discard"),
