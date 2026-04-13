@@ -240,17 +240,23 @@ fn run_prompt_mode(args: TtsArgs) -> Result<()> {
         format!("deck '{deck}'")
     };
 
+    let source_name = args
+        .deck
+        .clone()
+        .or_else(|| args.query.clone())
+        .unwrap_or_else(|| parsed.frontmatter.deck.clone());
     let field_map = parsed.frontmatter.field_map.clone();
     let expected_note_type = parsed.frontmatter.note_type.clone();
-    run_with_resolved(
-        &args,
-        AnkiClient::new(),
+    run_with_resolved(ResolvedRunInputs {
+        args: &args,
+        anki: AnkiClient::new(),
         query,
         source_label,
+        source_name,
         resolved,
-        Some(&field_map),
-        Some(&expected_note_type),
-    )
+        field_map_for_projection: Some(&field_map),
+        expected_note_type: Some(&expected_note_type),
+    })
 }
 
 fn run_legacy_mode(args: TtsArgs) -> Result<()> {
@@ -330,27 +336,47 @@ fn run_legacy_mode(args: TtsArgs) -> Result<()> {
         .as_deref()
         .map(|d| format!("deck '{d}'"))
         .unwrap_or_else(|| format!("query '{query}'"));
+    let source_name = args
+        .deck
+        .clone()
+        .or_else(|| args.query.clone())
+        .unwrap_or_default();
 
-    run_with_resolved(
-        &args,
-        AnkiClient::new(),
+    let note_type = args.note_type.clone();
+    run_with_resolved(ResolvedRunInputs {
+        args: &args,
+        anki: AnkiClient::new(),
         query,
         source_label,
+        source_name,
         resolved,
-        None,
-        args.note_type.as_deref(),
-    )
+        field_map_for_projection: None,
+        expected_note_type: note_type.as_deref(),
+    })
 }
 
-fn run_with_resolved(
-    args: &TtsArgs,
+struct ResolvedRunInputs<'a> {
+    args: &'a TtsArgs,
     anki: AnkiClient,
     query: String,
     source_label: String,
+    source_name: String,
     resolved: ResolvedTtsSpec,
-    field_map_for_projection: Option<&IndexMap<String, String>>,
-    expected_note_type: Option<&str>,
-) -> Result<()> {
+    field_map_for_projection: Option<&'a IndexMap<String, String>>,
+    expected_note_type: Option<&'a str>,
+}
+
+fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
+    let ResolvedRunInputs {
+        args,
+        anki,
+        query,
+        source_label,
+        source_name,
+        resolved,
+        field_map_for_projection,
+        expected_note_type,
+    } = inputs;
     eprintln!("Fetching notes...");
     let mut note_ids = anki
         .find_notes(&query)
@@ -436,7 +462,7 @@ fn run_with_resolved(
         );
     }
 
-    let mut rows: Vec<Row> = notes_info
+    let rows: Vec<Row> = notes_info
         .into_iter()
         .map(|note| {
             let mut row: Row = IndexMap::new();
@@ -448,24 +474,6 @@ fn run_with_resolved(
             row
         })
         .collect();
-
-    // In prompt mode, alias each field_map key to the same value as its
-    // Anki field name so `tts.source.field: expression` / `{expression}`
-    // placeholders resolve against the Anki-keyed row. The aliases are
-    // additive; the original Anki-name entries stay intact, so
-    // DeckWriter still serializes real Anki fields back unchanged.
-    if let Some(field_map) = field_map_for_projection {
-        for row in &mut rows {
-            for (llm_key, anki_name) in field_map {
-                if llm_key == anki_name {
-                    continue;
-                }
-                if let Some(value) = row.get(anki_name).cloned() {
-                    row.insert(llm_key.clone(), value);
-                }
-            }
-        }
-    }
 
     let before_fields: IndexMap<i64, IndexMap<String, String>> = rows
         .iter()
@@ -579,13 +587,9 @@ fn run_with_resolved(
         format: resolved.format,
         speed: resolved.speed,
         api_base_url: resolved.api_base_url.clone(),
+        field_map: field_map_for_projection.cloned(),
     });
 
-    let source_name = args
-        .deck
-        .clone()
-        .or_else(|| args.query.clone())
-        .unwrap_or_default();
     let slug = slugify_deck_name(&source_name);
     let error_log_path: PathBuf = format!("{slug}-tts-errors.jsonl").into();
 
