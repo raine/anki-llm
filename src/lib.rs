@@ -1,4 +1,5 @@
 pub mod anki;
+pub mod audio;
 pub mod batch;
 pub mod cli;
 pub mod config;
