@@ -8,13 +8,13 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 
-mod events;
+pub(crate) mod events;
 mod history;
 mod prompt_picker;
 mod screens;
 mod widgets;
 
-pub use events::{BackendEvent, SessionInfo, StepStatus, WorkerCommand};
+pub use events::{BackendEvent, SessionInfo, StepStatus, TtsUiState, WorkerCommand};
 use history::InputHistory;
 use screens::review::{ReviewState, draw_reviewing};
 use screens::selection::{SelectionState, draw_selecting};
@@ -114,6 +114,14 @@ struct App {
     batch_cards: Vec<ValidatedCard>,
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
+    /// Audio playback thread handle. `Some` when a system player was
+    /// detected at session startup AND the prompt has a `tts:` block;
+    /// the preview keybind is hidden and ignored when `None`.
+    player: Option<crate::audio::PlayerHandle>,
+    /// Remembered binary discovered at startup. Retained so the player
+    /// could be lazily respawned later if needed; currently unused but
+    /// kept alongside the handle for symmetry.
+    player_binary: Option<crate::audio::PlayerBinary>,
 }
 
 struct Toast {
@@ -176,6 +184,8 @@ impl App {
             batch_cards: Vec::new(),
             backend_rx,
             worker_tx,
+            player: None,
+            player_binary: crate::audio::detect_player_binary(),
         }
     }
 
@@ -248,6 +258,17 @@ impl App {
     fn handle_backend_event(&mut self, event: BackendEvent) {
         // SessionReady is always relevant
         if let BackendEvent::SessionReady(info) = event {
+            // Lazy-init the audio player the first time we see a session
+            // where TTS preview is live (frontmatter has a `tts:` block
+            // AND a playback binary was found at startup).
+            if info.tts_preview_enabled && self.player.is_none() {
+                if let Some(bin) = self.player_binary.clone() {
+                    self.player = Some(crate::audio::spawn_player(bin));
+                } else {
+                    self.logs
+                        .push("Audio player not found — preview disabled".into());
+                }
+            }
             self.session_info = Some(info);
             return;
         }
@@ -356,6 +377,20 @@ impl App {
                     message: msg,
                     tick: self.tick,
                 });
+            }
+            BackendEvent::TtsState { card_id, state } => {
+                if let AppMode::Selecting(ref mut sel) = self.mode {
+                    // On successful synth, immediately route a Play
+                    // command to the audio thread. The player itself
+                    // handles toggle-on-same-card semantics, so there's
+                    // no TUI-side state machine to keep coherent.
+                    if let TtsUiState::Ready { ref cache_path } = state
+                        && let Some(player) = &self.player
+                    {
+                        let _ = player.play(card_id, cache_path.clone());
+                    }
+                    sel.tts_states.insert(card_id, state);
+                }
             }
             BackendEvent::RequestReview(flagged) => {
                 self.mode = AppMode::Reviewing(ReviewState::new(flagged));
@@ -934,6 +969,41 @@ impl App {
             KeyCode::Char('c') => {
                 if let Some(card) = state.cards.get(state.cursor).cloned() {
                     self.copy_cards(&[card]);
+                }
+            }
+            KeyCode::Char('p') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // TTS preview: hidden keybind unless the session actually
+                // supports it (prompt has `tts:` AND an audio player
+                // was detected at startup).
+                let enabled = self
+                    .session_info
+                    .as_ref()
+                    .map(|info| info.tts_preview_enabled)
+                    .unwrap_or(false);
+                if !enabled || self.player.is_none() {
+                    return;
+                }
+                let Some(card) = state.cards.get(state.cursor) else {
+                    return;
+                };
+                let card_id = card.card_id;
+                match state.tts_states.get(&card_id) {
+                    Some(TtsUiState::Synthesizing) => {
+                        // Ignore repeat presses while synthesis is in flight.
+                    }
+                    Some(TtsUiState::Ready { cache_path }) => {
+                        // Already cached; tell the player directly. Same
+                        // card id will toggle it off if still playing.
+                        if let Some(player) = &self.player {
+                            let _ = player.play(card_id, cache_path.clone());
+                        }
+                    }
+                    _ => {
+                        // Idle or failed: ask the worker to synthesize.
+                        self.worker_tx
+                            .send(WorkerCommand::PreviewTts { card_id })
+                            .ok();
+                    }
                 }
             }
             KeyCode::PageUp => {
@@ -1595,6 +1665,16 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.push(footer_pipe());
             s.extend(footer_cmd("e", "Edit"));
             s.push(footer_pipe());
+            if app
+                .session_info
+                .as_ref()
+                .map(|info| info.tts_preview_enabled)
+                .unwrap_or(false)
+                && app.player.is_some()
+            {
+                s.extend(footer_cmd("p", "Preview"));
+                s.push(footer_pipe());
+            }
             if state.refresh_in_flight || state.regen_in_flight.is_some() {
                 let spinner = SPINNER_FRAMES[app.tick as usize % SPINNER_FRAMES.len()];
                 let loading_text = if let Some((current, total)) = app.batch_progress {

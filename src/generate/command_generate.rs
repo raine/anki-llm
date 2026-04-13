@@ -242,6 +242,7 @@ impl PipelineInteraction for TuiInteraction<'_> {
             Ok(WorkerCommand::RegenerateCard { index, feedback }) => {
                 SelectionAction::RegenerateCard { index, feedback }
             }
+            Ok(WorkerCommand::PreviewTts { card_id }) => SelectionAction::PreviewTts { card_id },
             Ok(WorkerCommand::Selection(indices)) => SelectionAction::Selected(indices),
             Ok(WorkerCommand::Cancel) => SelectionAction::Cancel,
             Ok(WorkerCommand::Quit) | Err(_) => SelectionAction::Quit,
@@ -255,6 +256,10 @@ impl PipelineInteraction for TuiInteraction<'_> {
             Ok(WorkerCommand::Review(decisions)) => ReviewResult::Reviewed(decisions),
             _ => ReviewResult::Cancel,
         }
+    }
+
+    fn tts_state(&self, card_id: u64, state: crate::generate::tui::events::TtsUiState) {
+        self.tx.send(BackendEvent::TtsState { card_id, state }).ok();
     }
 }
 
@@ -292,12 +297,19 @@ pub fn run_pipeline(
 
     let models: Vec<String> = available_models(args.dry_run);
 
+    // Worker-side only knows whether the YAML declares `tts:`. The TUI
+    // main thread owns audio-backend detection and player ownership,
+    // and combines this flag with its own detection result to decide
+    // whether to show the preview keybind.
+    let tts_configured = session.tts.is_some();
+
     tx.send(BackendEvent::SessionReady(SessionInfo {
         deck: session.frontmatter.deck.clone(),
         note_type: session.frontmatter.note_type.clone(),
         model: session.runtime.model.clone(),
         available_models: models.clone(),
         field_map: session.frontmatter.field_map.clone(),
+        tts_preview_enabled: tts_configured,
     }))
     .ok();
 
@@ -393,6 +405,7 @@ pub fn run_pipeline(
                             model: session.runtime.model.clone(),
                             available_models: models.clone(),
                             field_map: session.frontmatter.field_map.clone(),
+                            tts_preview_enabled: tts_configured,
                         }))
                         .ok();
                     }

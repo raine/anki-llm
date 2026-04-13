@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use indexmap::IndexMap;
 use ratatui::Frame;
@@ -8,6 +8,7 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::generate::cards::ValidatedCard;
+use crate::generate::tui::events::TtsUiState;
 use crate::tui::line_input::LineInput;
 use crate::tui::theme::{Glyphs, SPINNER_FRAMES, THEME};
 
@@ -25,6 +26,8 @@ pub(in crate::generate::tui) struct SelectionState {
     pub(in crate::generate::tui) feedback_input: Option<LineInput>,
     /// Card index currently being regenerated (in flight).
     pub(in crate::generate::tui) regen_in_flight: Option<usize>,
+    /// Per-card TTS preview state, keyed by stable `ValidatedCard.card_id`.
+    pub(in crate::generate::tui) tts_states: HashMap<u64, TtsUiState>,
 }
 
 impl SelectionState {
@@ -42,6 +45,7 @@ impl SelectionState {
             term_input: None,
             feedback_input: None,
             regen_in_flight: None,
+            tts_states: HashMap::new(),
         }
     }
 
@@ -192,6 +196,15 @@ pub(in crate::generate::tui) fn draw_selecting(
             } else {
                 String::new()
             };
+            let tts_note = match state.tts_states.get(&card.card_id) {
+                Some(TtsUiState::Synthesizing) => {
+                    let spinner = SPINNER_FRAMES[tick as usize % SPINNER_FRAMES.len()];
+                    format!(" {spinner} tts")
+                }
+                Some(TtsUiState::Ready { .. }) => " ♪".to_string(),
+                Some(TtsUiState::Failed(_)) => " [tts err]".to_string(),
+                None => String::new(),
+            };
             let flag_note = if !card.flags.is_empty() {
                 " [flagged]"
             } else {
@@ -221,7 +234,7 @@ pub(in crate::generate::tui) fn draw_selecting(
             };
             let mut spans = vec![
                 Span::styled(checkbox, checkbox_style),
-                Span::styled(format!("{label}{dup_note}{regen_note}"), style),
+                Span::styled(format!("{label}{dup_note}{regen_note}{tts_note}"), style),
             ];
             if !flag_note.is_empty() {
                 spans.push(Span::styled(
@@ -266,6 +279,28 @@ pub(in crate::generate::tui) fn draw_selecting(
                 "  ⚠ Already exists in Anki (f to force-select)",
                 Style::default().fg(THEME.warning),
             )));
+            lines.push(Line::from(""));
+        }
+
+        if let Some(tts_state) = state.tts_states.get(&card.card_id) {
+            let (label, style) = match tts_state {
+                TtsUiState::Synthesizing => {
+                    let spinner = SPINNER_FRAMES[tick as usize % SPINNER_FRAMES.len()];
+                    (
+                        format!("  {spinner} Synthesizing audio..."),
+                        Style::default().fg(THEME.info),
+                    )
+                }
+                TtsUiState::Ready { .. } => (
+                    "  ♪ Audio ready (press p to replay)".to_string(),
+                    Style::default().fg(THEME.success),
+                ),
+                TtsUiState::Failed(msg) => (
+                    format!("  ✗ TTS error: {msg}"),
+                    Style::default().fg(THEME.danger),
+                ),
+            };
+            lines.push(Line::from(Span::styled(label, style)));
             lines.push(Line::from(""));
         }
 

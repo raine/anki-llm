@@ -66,6 +66,7 @@ pub enum SelectionAction {
     Refresh,
     RefreshWithTerm(String),
     RegenerateCard { index: usize, feedback: String },
+    PreviewTts { card_id: u64 },
     Cancel,
     Quit,
 }
@@ -82,6 +83,9 @@ pub trait PipelineInteraction {
     fn regen_error(&self, message: String);
     fn wait_selection(&self) -> SelectionAction;
     fn request_review(&self, flagged: Vec<FlaggedCard>) -> ReviewResult;
+    /// Announce a TTS preview state transition for a given card id.
+    /// Default impl is a no-op so legacy / copy mode can ignore it.
+    fn tts_state(&self, _card_id: u64, _state: super::tui::events::TtsUiState) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -230,6 +234,7 @@ fn regenerate_single_card(
         .unwrap_or(Ok(false))?;
 
     Ok(ValidatedCard {
+        card_id: super::cards::next_card_id(),
         fields: sanitized,
         anki_fields,
         raw_anki_fields,
@@ -241,8 +246,9 @@ fn regenerate_single_card(
     })
 }
 
-/// Wait for a selection action, handling inline card regeneration requests.
-/// Returns only terminal actions (Refresh, RefreshWithTerm, Selected, Cancel, Quit).
+/// Wait for a selection action, handling inline card regeneration and
+/// TTS preview requests. Returns only terminal actions (Refresh,
+/// RefreshWithTerm, Selected, Cancel, Quit).
 fn wait_selection_with_regen(
     config: &PipelineConfig,
     interaction: &dyn PipelineInteraction,
@@ -268,7 +274,68 @@ fn wait_selection_with_regen(
                 }
                 continue;
             }
+            SelectionAction::PreviewTts { card_id } => {
+                handle_preview_tts(config, interaction, progress, all_validated, card_id);
+                continue;
+            }
             other => return other,
+        }
+    }
+}
+
+/// Synthesize preview audio for a card. On success, caches the audio
+/// to disk and emits `TtsUiState::Ready { cache_path }` so the TUI can
+/// route a `PlayerCommand::Play` to its owned audio thread. On failure,
+/// emits `TtsUiState::Failed` with a user-facing message.
+fn handle_preview_tts(
+    config: &PipelineConfig,
+    interaction: &dyn PipelineInteraction,
+    progress: &dyn PipelineProgress,
+    all_validated: &[ValidatedCard],
+    card_id: u64,
+) {
+    use super::tui::events::TtsUiState;
+
+    let Some(bundle) = config.tts else {
+        // No TTS configured — silently drop the request. The TUI should
+        // never send this command in that case, but defend anyway.
+        return;
+    };
+    let Some(card) = all_validated.iter().find(|c| c.card_id == card_id) else {
+        // Card was replaced before the worker picked up the request.
+        return;
+    };
+
+    interaction.tts_state(card_id, TtsUiState::Synthesizing);
+
+    let prepared = match bundle
+        .service
+        .prepare_from_anki_fields(&card.raw_anki_fields, &config.frontmatter.field_map)
+    {
+        Ok(p) => p,
+        Err(e) => {
+            progress.log(&format!("TTS prepare failed: {e}"));
+            interaction.tts_state(card_id, TtsUiState::Failed(e.to_string()));
+            return;
+        }
+    };
+
+    match bundle.service.ensure_cached(&prepared) {
+        Ok(_) => {
+            progress.log(&format!(
+                "TTS ready: {} chars → {}",
+                prepared.spoken_chars, prepared.filename
+            ));
+            interaction.tts_state(
+                card_id,
+                TtsUiState::Ready {
+                    cache_path: prepared.cache_path,
+                },
+            );
+        }
+        Err(e) => {
+            progress.log(&format!("TTS synthesis failed: {e}"));
+            interaction.tts_state(card_id, TtsUiState::Failed(e.to_string()));
         }
     }
 }
@@ -360,7 +427,10 @@ pub fn run_pipeline_for_term(
                         SelectionAction::Selected(indices) => break indices,
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
-                        SelectionAction::RegenerateCard { .. } => unreachable!(),
+                        SelectionAction::RegenerateCard { .. }
+                        | SelectionAction::PreviewTts { .. } => {
+                            unreachable!()
+                        }
                     }
                 } else {
                     progress.step_error(PipelineStep::Generate, &format!("{e}"));
@@ -481,7 +551,10 @@ pub fn run_pipeline_for_term(
                         SelectionAction::Selected(indices) => break indices,
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
-                        SelectionAction::RegenerateCard { .. } => unreachable!(),
+                        SelectionAction::RegenerateCard { .. }
+                        | SelectionAction::PreviewTts { .. } => {
+                            unreachable!()
+                        }
                     }
                 } else {
                     progress.step_error(PipelineStep::Validate, &format!("{e}"));
@@ -583,7 +656,9 @@ pub fn run_pipeline_for_term(
             SelectionAction::Selected(indices) => break indices,
             SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
             SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
-            SelectionAction::RegenerateCard { .. } => unreachable!(),
+            SelectionAction::RegenerateCard { .. } | SelectionAction::PreviewTts { .. } => {
+                unreachable!()
+            }
         }
     };
 
@@ -707,6 +782,7 @@ pub fn run_pipeline_for_term(
                     map_fields_to_anki(&raw_strings, &config.frontmatter.field_map).unwrap();
 
                 ValidatedCard {
+                    card_id: super::cards::next_card_id(),
                     fields: sanitized,
                     anki_fields,
                     raw_anki_fields,

@@ -243,6 +243,7 @@ mod tests {
         let mut raw_anki_fields = anki_fields.clone();
         raw_anki_fields.insert("Front".into(), front_raw.to_string());
         ValidatedCard {
+            card_id: crate::generate::cards::next_card_id(),
             fields,
             anki_fields,
             raw_anki_fields,

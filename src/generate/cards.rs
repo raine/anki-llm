@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use indexmap::IndexMap;
 
@@ -7,9 +8,22 @@ use crate::template::frontmatter::Frontmatter;
 
 use super::processor::CardCandidate;
 
+/// Monotonic counter minting stable `ValidatedCard` ids. Used by the
+/// TUI to route async per-card state (TTS preview, future edits) across
+/// regeneration without relying on fragile selection indices.
+static CARD_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+pub fn next_card_id() -> u64 {
+    CARD_ID_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
 /// A card with mapped Anki fields and duplicate status.
 #[derive(Clone)]
 pub struct ValidatedCard {
+    /// Stable identifier for per-card async state routing (TTS preview
+    /// status, etc.). Re-minted on regeneration so old state for the
+    /// replaced card is implicitly invalidated.
+    pub card_id: u64,
     /// Original fields (LLM keys → values as strings after sanitization).
     pub fields: HashMap<String, String>,
     /// Fields mapped to Anki field names (sanitized HTML, for Anki import).
@@ -128,6 +142,7 @@ pub fn validate_cards(
         };
 
         validated.push(ValidatedCard {
+            card_id: next_card_id(),
             fields: sanitized,
             anki_fields,
             raw_anki_fields,
