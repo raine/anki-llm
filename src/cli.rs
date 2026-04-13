@@ -51,20 +51,6 @@ pub enum Commands {
 }
 
 #[derive(clap::Args)]
-pub struct TtsArgs {
-    #[command(subcommand)]
-    pub command: TtsCommand,
-}
-
-#[derive(clap::Subcommand)]
-pub enum TtsCommand {
-    /// Generate audio for notes in an Anki deck
-    Deck(TtsDeckArgs),
-    /// Generate audio for notes in a CSV or YAML file
-    File(TtsFileArgs),
-}
-
-#[derive(clap::Args)]
 #[command(group(
     clap::ArgGroup::new("source")
         .required(true)
@@ -77,7 +63,7 @@ pub enum TtsCommand {
         .args(["template", "text_field"])
         .multiple(false)
 ))]
-pub struct TtsDeckArgs {
+pub struct TtsArgs {
     /// Deck name to process
     pub deck: Option<String>,
 
@@ -146,82 +132,6 @@ pub struct TtsDeckArgs {
     pub dry_run: bool,
 
     /// Limit the number of notes to process
-    #[arg(long)]
-    pub limit: Option<usize>,
-}
-
-#[derive(clap::Args)]
-#[command(group(
-    clap::ArgGroup::new("text_source")
-        .required(true)
-        .args(["template", "text_field"])
-        .multiple(false)
-))]
-pub struct TtsFileArgs {
-    /// Input file path (CSV or YAML)
-    pub input: PathBuf,
-
-    /// Output file path (CSV or YAML)
-    #[arg(long, short = 'o')]
-    pub output: PathBuf,
-
-    /// Target field to write [sound:...] into
-    #[arg(long)]
-    pub field: String,
-
-    /// Path to prompt template file (expanded per row with `{field}` placeholders)
-    #[arg(long, short = 'p')]
-    pub template: Option<PathBuf>,
-
-    /// Source field name (alternative to --template; speaks the raw field)
-    #[arg(long = "text-field")]
-    pub text_field: Option<String>,
-
-    /// TTS provider identifier
-    #[arg(long, default_value = "openai")]
-    pub provider: String,
-
-    /// Voice name (provider-specific, e.g. alloy, nova, shimmer)
-    #[arg(long)]
-    pub voice: Option<String>,
-
-    /// TTS backing model (e.g. gpt-4o-mini-tts)
-    #[arg(long = "tts-model")]
-    pub tts_model: Option<String>,
-
-    /// Output audio format
-    #[arg(long, default_value = "mp3")]
-    pub format: String,
-
-    /// Playback speed (e.g. 1.0 = normal)
-    #[arg(long)]
-    pub speed: Option<f32>,
-
-    /// API base URL override
-    #[arg(long)]
-    pub api_base_url: Option<String>,
-
-    /// API key override
-    #[arg(long)]
-    pub api_key: Option<String>,
-
-    /// Number of concurrent TTS requests
-    #[arg(long, short = 'b', default_value_t = DEFAULT_BATCH_SIZE, value_parser = clap::value_parser!(u32).range(1..))]
-    pub batch_size: u32,
-
-    /// Number of retries on transient failures
-    #[arg(long, short = 'r', default_value = "3")]
-    pub retries: u32,
-
-    /// Regenerate audio even for rows whose target field already contains a sound tag
-    #[arg(long, short = 'f')]
-    pub force: bool,
-
-    /// Preview without making API calls
-    #[arg(long, short = 'd')]
-    pub dry_run: bool,
-
-    /// Limit the number of rows to process
     #[arg(long)]
     pub limit: Option<usize>,
 }

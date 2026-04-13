@@ -1,6 +1,5 @@
 pub mod cache;
-pub mod command_deck;
-pub mod command_file;
+pub mod command;
 pub mod error;
 pub mod media;
 pub mod process_row;

@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::cli::{Cli, Commands, TtsCommand};
+use crate::cli::{Cli, Commands};
 
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
@@ -14,9 +14,6 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::GenerateInit(args) => crate::generate::init::command::run(args),
         Commands::History => crate::snapshot::command_history::run(),
         Commands::Rollback(args) => crate::snapshot::command_rollback::run(args),
-        Commands::Tts(args) => match args.command {
-            TtsCommand::Deck(a) => crate::tts::command_deck::run(a),
-            TtsCommand::File(a) => crate::tts::command_file::run(a),
-        },
+        Commands::Tts(args) => crate::tts::command::run(args),
     }
 }

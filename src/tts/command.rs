@@ -13,7 +13,7 @@ use crate::batch::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
 use crate::batch::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, RowDescriptor};
 use crate::batch::report::RowOutcome;
 use crate::batch::session::{BatchSession, SharedSession};
-use crate::cli::TtsDeckArgs;
+use crate::cli::TtsArgs;
 use crate::data::Row;
 use crate::data::slug::slugify_deck_name;
 
@@ -150,7 +150,7 @@ impl BatchSession for TtsDeckSession {
     }
 }
 
-pub fn run(args: TtsDeckArgs) -> Result<()> {
+pub fn run(args: TtsArgs) -> Result<()> {
     let anki = AnkiClient::new();
 
     eprintln!("Fetching notes...");
