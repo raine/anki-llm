@@ -1018,6 +1018,57 @@ anki-llm tts Japanese \
 
 Templates use the same `{field}` placeholder syntax as `process-deck`.
 
+**Using a prompt YAML (recommended)**
+
+The TTS settings for a deck (voice, model, target field, source text)
+are usually fixed and belong with the rest of the deck's design. They
+can be declared in the same YAML frontmatter `anki-llm generate` uses,
+under a top-level `tts:` block:
+
+```yaml
+---
+deck: Japanese::Vocab
+note_type: VocabCard
+field_map:
+  expression: Expression
+  reading: Reading
+  meaning: Meaning
+
+tts:
+  target: Audio
+  source:
+    template: '{expression}'
+    # or:
+    # field: expression
+  voice: alloy
+  # provider: openai      # default
+  # model: gpt-4o-mini-tts
+  # format: mp3           # default
+  # speed: 1.0
+---
+prompt body for `generate` goes here...
+```
+
+Then run:
+
+```bash
+anki-llm tts --prompt prompts/japanese.yaml
+```
+
+The deck and note type are taken from the frontmatter. Pass `--deck` to
+target a different deck (still using the YAML's voice/source/etc.) or
+`--query` for a custom Anki search. CLI flags for voice, model, format,
+target field, source text, provider, speed, and note type are **not
+allowed** in `--prompt` mode — edit the YAML if you need to change them.
+
+`tts.target` is an Anki field name (not a `field_map` key); audio is
+not an LLM-generated output. `tts.source.field` and the placeholders in
+`tts.source.template` reference `field_map` keys, so they read the same
+LLM-facing names the prompt body uses.
+
+The flag-only mode below is deprecated and will be removed in a future
+release. New decks should use `--prompt`.
+
 **Skip-existing behavior**
 
 By default, notes whose target field is non-empty are skipped — `anki-llm tts`
