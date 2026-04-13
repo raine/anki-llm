@@ -392,17 +392,32 @@ impl App {
                     });
                 }
             }
-            BackendEvent::RegenError(msg) => {
+            BackendEvent::RegenError { target_id, message } => {
                 if let AppMode::Selecting(ref mut state) = self.mode {
-                    state.regen_in_flight = None;
+                    // Only clear the spinner if THIS target is still
+                    // the in-flight one. A late error for an orphaned
+                    // (edited / removed) card must not stomp on a
+                    // different card's regen-in-flight state.
+                    if state.regen_in_flight == Some(target_id) {
+                        state.regen_in_flight = None;
+                    }
                 }
                 self.toast = Some(Toast {
-                    message: msg,
+                    message,
                     tick: self.tick,
                 });
             }
             BackendEvent::TtsState { card_id, state } => {
                 if let AppMode::Selecting(ref mut sel) = self.mode {
+                    // Drop replies for cards that were removed or
+                    // edited (and thus had their `card_id` re-minted)
+                    // while synthesis was in flight. Without this
+                    // gate, a stale `Ready` reply would auto-play
+                    // pre-edit audio once and leak an orphaned entry
+                    // into `tts_states`.
+                    if !sel.cards.iter().any(|c| c.card_id == card_id) {
+                        return;
+                    }
                     // On successful synth, immediately route a Play
                     // command to the audio thread. The player itself
                     // handles toggle-on-same-card semantics, so there's
@@ -1260,8 +1275,13 @@ fn edit_card_in_editor(terminal: &mut DefaultTerminal, app: &mut App, card_index
         if state.selected.remove(&old_id) {
             state.selected.insert(new_id);
         }
+        // Editing semantically *cancels* an in-flight regeneration:
+        // the worker is generating against the pre-edit text, so its
+        // reply is no longer relevant. Clear the spinner now; the
+        // late reply will be tagged with the old id and dropped on
+        // arrival by `ReplaceCard`'s `iter_mut().find` lookup.
         if state.regen_in_flight == Some(old_id) {
-            state.regen_in_flight = Some(new_id);
+            state.regen_in_flight = None;
         }
         state.tts_states.remove(&old_id);
 

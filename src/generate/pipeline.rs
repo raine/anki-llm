@@ -85,7 +85,7 @@ pub trait PipelineInteraction {
     fn begin_selection(&self, cards: Vec<ValidatedCard>);
     fn append_selection(&self, cards: Vec<ValidatedCard>);
     fn replace_card(&self, previous_card_id: u64, card: ValidatedCard);
-    fn regen_error(&self, message: String);
+    fn regen_error(&self, target_id: u64, message: String);
     fn wait_selection(&self) -> SelectionAction;
     fn request_review(&self, flagged: Vec<FlaggedCard>) -> ReviewResult;
     /// Announce a TTS preview state transition for a given card id.
@@ -277,7 +277,8 @@ fn wait_selection_with_regen(
                         progress.log("Card regenerated successfully");
                     }
                     Err(e) => {
-                        interaction.regen_error(format!("Regeneration failed: {e}"));
+                        interaction
+                            .regen_error(previous_card_id, format!("Regeneration failed: {e}"));
                         progress.log(&format!("Regeneration failed: {e}"));
                     }
                 }

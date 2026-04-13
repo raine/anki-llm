@@ -236,8 +236,10 @@ impl PipelineInteraction for TuiInteraction<'_> {
             .ok();
     }
 
-    fn regen_error(&self, message: String) {
-        self.tx.send(BackendEvent::RegenError(message)).ok();
+    fn regen_error(&self, target_id: u64, message: String) {
+        self.tx
+            .send(BackendEvent::RegenError { target_id, message })
+            .ok();
     }
 
     fn wait_selection(&self) -> SelectionAction {
@@ -462,7 +464,7 @@ impl PipelineInteraction for LegacyInteraction {
         unreachable!("Legacy mode does not support regeneration");
     }
 
-    fn regen_error(&self, _message: String) {
+    fn regen_error(&self, _target_id: u64, _message: String) {
         unreachable!("Legacy mode does not support regeneration");
     }
 

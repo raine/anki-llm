@@ -43,7 +43,15 @@ pub enum BackendEvent {
         previous_card_id: u64,
         card: ValidatedCard,
     },
-    RegenError(String), // single-card regeneration failed
+    /// Single-card regeneration failed. `target_id` is the
+    /// `previous_card_id` from the original request so the TUI can
+    /// verify ownership before clearing its spinner — preventing a
+    /// late error for an orphaned (edited / removed) card from
+    /// stomping on a different card's regen-in-flight state.
+    RegenError {
+        target_id: u64,
+        message: String,
+    },
     RequestReview(Vec<FlaggedCard>),
     CostUpdate {
         input_tokens: u64,
