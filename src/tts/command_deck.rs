@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -7,23 +7,22 @@ use indexmap::IndexMap;
 use serde_json::Value;
 
 use crate::anki::client::{AnkiClient, anki_quote};
-use crate::cli::ProcessDeckArgs;
+use crate::batch::controller::{ControllerRuntime, run_batch_controller};
+use crate::batch::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
+use crate::batch::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
+use crate::batch::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, RowDescriptor};
+use crate::batch::report::RowOutcome;
+use crate::batch::session::{BatchSession, SharedSession};
+use crate::cli::TtsDeckArgs;
 use crate::data::Row;
 use crate::data::slug::slugify_deck_name;
-use crate::llm::client::LlmClient;
-use crate::llm::logger::LlmLogger;
-use crate::llm::pricing;
-use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
-use crate::snapshot::store::{self, Snapshot};
-use crate::template::fill_template;
 
-use super::controller::{ControllerRuntime, run_batch_controller};
-use super::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
-use super::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
-use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, OutputMode, RowDescriptor};
-use super::process_row::{ProcessRowConfig, build_process_fn};
-use super::report::RowOutcome;
-use super::session::{BatchSession, SharedSession};
+use super::cache::TtsCache;
+use super::media::AnkiMediaStore;
+use super::process_row::{TtsProcessConfig, build_tts_process_fn};
+use super::provider::build as build_provider;
+use super::runtime::{TtsRuntimeArgs, build_tts_runtime};
+use super::template::TemplateSource;
 
 fn deck_row_id(row: &Row) -> String {
     row.get(ANKI_NOTE_ID_KEY)
@@ -56,18 +55,14 @@ fn deck_row_descriptors(rows: &[Row]) -> Vec<RowDescriptor> {
         .collect()
 }
 
-struct DeckSession {
+struct TtsDeckSession {
     writer: Arc<DeckWriter>,
     process: ProcessFn,
     source_name: String,
-    deck_name: Option<String>,
-    query: Option<String>,
-    model: String,
     slug: String,
-    run_id: String,
 }
 
-impl BatchSession for DeckSession {
+impl BatchSession for TtsDeckSession {
     fn process_fn(&self) -> ProcessFn {
         Arc::clone(&self.process)
     }
@@ -90,10 +85,8 @@ impl BatchSession for DeckSession {
         result: &EngineRunResult,
         plan_run_total: usize,
     ) -> Result<BatchSummary> {
-        // Final flush — short-circuits if a previous flush already failed.
         self.writer.flush()?;
 
-        // Build failed_rows from outcomes
         let failed_rows: Vec<FailedRowInfo> = result
             .outcomes
             .iter()
@@ -107,8 +100,6 @@ impl BatchSession for DeckSession {
             })
             .collect();
 
-        // Rewrite the error log with the current iteration's failures so
-        // retries can supersede earlier failures cleanly.
         self.writer.rewrite_error_log(&failed_rows)?;
 
         let succeeded = result
@@ -118,8 +109,6 @@ impl BatchSession for DeckSession {
             .count();
         let failed = failed_rows.len();
         let updated = self.writer.success_count();
-        let cost = pricing::calculate_cost(&self.model, result.usage.input, result.usage.output);
-
         let interrupted = result.interrupted || result.abort_reason.is_some();
         let can_retry_failed = failed > 0 && !interrupted && result.abort_reason.is_none();
 
@@ -133,9 +122,6 @@ impl BatchSession for DeckSession {
                 value: format!("{updated} notes in Anki"),
             },
         ];
-        // Snapshot info isn't shown here — `finish_run` runs after the TUI
-        // tears down (so revisions from all retries are aggregated), and its
-        // eprintln is the canonical place the user sees the snapshot path.
         if failed > 0 {
             completion_fields.push(InfoField {
                 label: "Errors".into(),
@@ -151,53 +137,22 @@ impl BatchSession for DeckSession {
             interrupted,
             input_units: result.usage.input,
             output_units: result.usage.output,
-            cost,
+            cost: 0.0,
             elapsed: result.elapsed,
-            model: Some(self.model.clone()),
-            metrics_label: "Tokens",
-            show_cost: true,
-            headline: format!("Updated {updated} notes in Anki"),
+            model: None,
+            metrics_label: "Characters",
+            show_cost: false,
+            headline: format!("Generated audio for {updated} notes"),
             completion_fields,
             failed_rows,
             can_retry_failed,
         })
     }
-
-    fn finish_run(&self) -> Result<()> {
-        let revisions = self.writer.take_revisions();
-        if revisions.is_empty() {
-            return Ok(());
-        }
-        let snapshot = Snapshot {
-            run_id: self.run_id.clone(),
-            timestamp: store::generate_timestamp(),
-            deck: self.deck_name.clone(),
-            query: self.query.clone(),
-            model: self.model.clone(),
-            note_count: revisions.len(),
-            rolled_back: false,
-            notes: revisions,
-        };
-        match store::save_snapshot(&snapshot) {
-            Ok(path) => {
-                eprintln!(
-                    "Snapshot saved: {} (use `anki-llm rollback {}` to undo)",
-                    path.display(),
-                    self.run_id
-                );
-            }
-            Err(e) => {
-                eprintln!("Warning: failed to save snapshot: {e}");
-            }
-        }
-        Ok(())
-    }
 }
 
-pub fn run(args: ProcessDeckArgs) -> Result<()> {
+pub fn run(args: TtsDeckArgs) -> Result<()> {
     let anki = AnkiClient::new();
 
-    // Build query from either deck name or raw query
     eprintln!("Fetching notes...");
     let mut query = if let Some(ref q) = args.query {
         q.clone()
@@ -224,7 +179,6 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     }
     eprintln!("Found {} notes", note_ids.len());
 
-    // Apply limit before fetching details to avoid loading the entire deck
     if let Some(limit) = args.limit
         && note_ids.len() > limit
     {
@@ -237,14 +191,12 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         note_ids.truncate(limit);
     }
 
-    // Fetch note details
     eprintln!("Loading note details...");
     let notes_info = anki
         .notes_info(&note_ids)
         .context("failed to fetch note details from Anki")?;
     eprintln!("Loaded {} notes", notes_info.len());
 
-    // Validate note types — fail fast if mixed (unless --note-type filtered)
     if args.note_type.is_none() && !notes_info.is_empty() {
         let first_model = &notes_info[0].model_name;
         let mixed: Vec<_> = notes_info
@@ -268,17 +220,23 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         }
     }
 
-    // Convert to Row format. The note ID is stored under ANKI_NOTE_ID_KEY (a
-    // private _-prefixed key) so it cannot collide with real Anki field names
-    // or be overwritten by a case-insensitive JSON merge.
+    // Convert note info to Row, validate target field exists on note type.
+    if let Some(first) = notes_info.first()
+        && !first.fields.contains_key(&args.field)
+    {
+        bail!(
+            "note type '{}' has no field named '{}'",
+            first.model_name,
+            args.field
+        );
+    }
+
     let rows: Vec<Row> = notes_info
         .into_iter()
         .map(|note| {
-            let mut row = indexmap::IndexMap::new();
+            let mut row: Row = IndexMap::new();
             row.insert(ANKI_NOTE_ID_KEY.to_string(), Value::from(note.note_id));
             for (field_name, field_data) in note.fields {
-                // Anki stores field content with \r\n line endings on Windows;
-                // strip \r so templates and comparisons work consistently.
                 let value = field_data.value.replace('\r', "");
                 row.insert(field_name, Value::String(value));
             }
@@ -286,7 +244,6 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         })
         .collect();
 
-    // Capture before_fields for snapshot (keyed by note_id)
     let before_fields: IndexMap<i64, IndexMap<String, String>> = rows
         .iter()
         .filter_map(|row| {
@@ -311,7 +268,6 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         })
         .collect();
 
-    // Validate no duplicate note IDs
     let mut seen_ids = HashSet::new();
     for (i, row) in rows.iter().enumerate() {
         let id = row
@@ -327,39 +283,69 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         }
     }
 
-    let prompt_path = args.prompt;
+    // Skip rows whose target field is already populated — either with a
+    // [sound:...] tag (already has audio) or with plain text we'd be
+    // about to clobber on replace. Users who know what they're doing can
+    // pass --force to overwrite.
+    let total_before_skip = rows.len();
+    let rows_to_process: Vec<Row> = if args.force {
+        rows
+    } else {
+        rows.into_iter()
+            .filter(|row| {
+                let existing = row.get(&args.field).and_then(|v| v.as_str()).unwrap_or("");
+                existing.trim().is_empty()
+            })
+            .collect()
+    };
+    let skipped = total_before_skip - rows_to_process.len();
+    if skipped > 0 {
+        eprintln!(
+            "Skipping {skipped} notes with non-empty {} field (use --force to regenerate)",
+            args.field
+        );
+    }
+    if rows_to_process.is_empty() {
+        eprintln!("No notes need audio. Use --force to regenerate.");
+        return Ok(());
+    }
 
-    // Read prompt template
-    let prompt_template = fs::read_to_string(&prompt_path)
-        .with_context(|| format!("failed to read prompt file: {}", prompt_path.display()))?;
-
-    // Build runtime config
-    let runtime = build_runtime_config(RuntimeConfigArgs {
-        model: args.model.as_deref(),
-        api_base_url: args.api_base_url.as_deref(),
+    // Build TTS runtime from CLI + config + env
+    let runtime = build_tts_runtime(TtsRuntimeArgs {
+        provider: Some(args.provider.as_str()),
+        voice: args.voice.as_deref(),
+        tts_model: args.tts_model.as_deref(),
+        format: Some(args.format.as_str()),
+        speed: args.speed,
         api_key: args.api_key.as_deref(),
-        batch_size: Some(args.batch_size),
-        max_tokens: args.max_tokens,
-        temperature: args.temperature,
+        api_base_url: args.api_base_url.as_deref(),
+        batch_size: args.batch_size,
         retries: args.retries,
+        force: args.force,
         dry_run: args.dry_run,
     })?;
 
-    // Dry run
+    // Source: template file xor direct field reference.
+    let source = match (&args.template, &args.text_field) {
+        (Some(path), None) => TemplateSource::load_file(path.clone())?,
+        (None, Some(field)) => TemplateSource::field(field.clone()),
+        _ => bail!("exactly one of --template or --text-field is required"),
+    };
+
     if args.dry_run {
         eprintln!("\n--- DRY RUN MODE ---");
-        eprintln!("\nPrompt template:");
-        eprintln!("{prompt_template}");
-        if let Some(first) = rows.first() {
-            eprintln!("\nSample note:");
-            eprintln!(
-                "{}",
-                serde_json::to_string_pretty(first).unwrap_or_default()
-            );
-            match fill_template(&prompt_template, first) {
-                Ok(filled) => {
-                    eprintln!("\nSample prompt:");
-                    eprintln!("{filled}");
+        eprintln!("Provider: {}", runtime.provider);
+        eprintln!("Voice:    {}", runtime.voice);
+        if let Some(ref m) = runtime.model {
+            eprintln!("Model:    {m}");
+        }
+        eprintln!("Source:   {}", source.display_label());
+        if let Some(first) = rows_to_process.first() {
+            match source.expand(first) {
+                Ok(text) => {
+                    let normalized = super::text::normalize(&text);
+                    eprintln!("\nSample raw:        {text}");
+                    eprintln!("Sample normalized: {normalized}");
                 }
                 Err(e) => eprintln!("\nTemplate error: {e}"),
             }
@@ -367,20 +353,30 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         return Ok(());
     }
 
-    // Build logger
-    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
-    let logger = Arc::new(logger);
+    let provider = build_provider(
+        &runtime.provider,
+        runtime.api_key.clone(),
+        runtime.api_base_url.clone(),
+    )
+    .map_err(anyhow::Error::msg)?;
 
-    // Build processing closure
-    let process_fn = build_process_fn(ProcessRowConfig {
-        client: Arc::new(LlmClient::from_config(&runtime)),
+    let cache_dir = TtsCache::default_dir()
+        .context("failed to locate cache directory (home dir unavailable)")?;
+    let cache = Arc::new(TtsCache::new(cache_dir).context("failed to initialize TTS cache")?);
+    let media = Arc::new(AnkiMediaStore::new(AnkiClient::new()));
+
+    let source = Arc::new(source);
+    let process_fn = build_tts_process_fn(TtsProcessConfig {
+        provider,
+        cache,
+        media,
+        source: Arc::clone(&source),
+        target_field: args.field.clone(),
+        voice: runtime.voice.clone(),
         model: runtime.model.clone(),
-        template: prompt_template.clone(),
-        field: args.field.clone(),
-        temperature: runtime.temperature,
-        max_tokens: runtime.max_tokens,
-        require_result_tag: args.require_result_tag,
-        logger: Some(logger),
+        format: runtime.format,
+        speed: runtime.speed,
+        api_base_url: runtime.api_base_url.clone(),
     });
 
     let source_name = args
@@ -389,8 +385,8 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         .or_else(|| args.query.clone())
         .unwrap_or_default();
     let slug = slugify_deck_name(&source_name);
-    let error_log_path = format!("{slug}-errors.jsonl").into();
-    let run_id = store::generate_run_id();
+    let error_log_path: PathBuf = format!("{slug}-tts-errors.jsonl").into();
+
     let writer = Arc::new(DeckWriter::new(
         anki,
         runtime.batch_size as usize,
@@ -398,69 +394,56 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         before_fields,
     )?);
 
-    // Build sample prompt for preflight
-    let sample_prompt = rows
-        .first()
-        .and_then(|row| fill_template(&prompt_template, row).ok());
-
     let plan = BatchPlan {
         item_name_singular: "note",
         item_name_plural: "notes",
-        rows: deck_row_descriptors(&rows),
-        run_total: rows.len(),
-        model: Some(runtime.model.clone()),
-        prompt_path: Some(prompt_path.display().to_string()),
-        output_mode: Some(if let Some(ref field) = args.field {
-            OutputMode::SingleField(field.clone())
-        } else {
-            OutputMode::JsonMerge
-        }),
+        rows: deck_row_descriptors(&rows_to_process),
+        run_total: rows_to_process.len(),
+        model: None,
+        prompt_path: None,
+        output_mode: None,
         batch_size: runtime.batch_size,
         retries: runtime.retries,
-        sample_prompt,
-        metrics_label: "Tokens",
-        show_cost: true,
+        sample_prompt: None,
+        metrics_label: "Characters",
+        show_cost: false,
         preflight_fields: vec![
             InfoField {
                 label: "Source".into(),
                 value: source_label.clone(),
             },
             InfoField {
-                label: "Note type".into(),
-                value: args.note_type.clone().unwrap_or_else(|| "any".into()),
+                label: "Field".into(),
+                value: args.field.clone(),
             },
             InfoField {
-                label: "Destination".into(),
-                value: "Anki".into(),
+                label: "Voice".into(),
+                value: format!("{} ({})", runtime.voice, runtime.provider),
             },
             InfoField {
-                label: "Error log".into(),
-                value: format!("{slug}-errors.jsonl"),
+                label: "Text".into(),
+                value: source.display_label(),
             },
         ],
     };
 
-    let session: SharedSession = Arc::new(DeckSession {
+    let session: SharedSession = Arc::new(TtsDeckSession {
         writer,
         process: process_fn,
         source_name: source_name.clone(),
-        deck_name: args.deck.clone(),
-        query: args.query.clone(),
-        model: runtime.model.clone(),
         slug: slug.clone(),
-        run_id: run_id.clone(),
     });
 
     let controller_runtime = ControllerRuntime {
         batch_size: runtime.batch_size,
         retries: runtime.retries,
-        model: Some(runtime.model.clone()),
+        model: None,
     };
-    let summary = run_batch_controller(plan, &controller_runtime, rows, session)?;
+    let summary = run_batch_controller(plan, &controller_runtime, rows_to_process, session)?;
 
     if summary.failed > 0 {
         bail!(
-            "{} notes failed processing. Error log: {slug}-errors.jsonl",
+            "{} notes failed TTS generation. Error log: {slug}-tts-errors.jsonl",
             summary.failed
         );
     }

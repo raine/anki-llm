@@ -17,6 +17,7 @@ use anki_llm::llm;
 use anki_llm::snapshot;
 use anki_llm::style;
 use anki_llm::template;
+use anki_llm::tts;
 use anki_llm::tui;
 
 fn main() -> Result<()> {

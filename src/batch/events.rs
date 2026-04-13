@@ -11,8 +11,8 @@ pub enum BatchEvent {
     RowStateChanged(RowUpdate),
     Log(String),
     CostUpdate {
-        input_tokens: u64,
-        output_tokens: u64,
+        input_units: u64,
+        output_units: u64,
         cost: f64,
     },
     RunDone(BatchSummary),
@@ -36,12 +36,24 @@ pub struct BatchPlan {
     pub item_name_plural: &'static str,
     pub rows: Vec<RowDescriptor>,
     pub run_total: usize,
-    pub model: String,
-    pub prompt_path: String,
-    pub output_mode: OutputMode,
+    /// LLM model name, if applicable. TTS sessions leave this `None`.
+    pub model: Option<String>,
+    /// Path to the prompt template file, if applicable. TTS sessions that
+    /// use a raw source field instead of a template leave this `None`.
+    pub prompt_path: Option<String>,
+    /// LLM output mode (single field / JSON merge). TTS sessions leave this
+    /// `None` since their output is always a single `[sound:...]` tag.
+    pub output_mode: Option<OutputMode>,
     pub batch_size: u32,
     pub retries: u32,
     pub sample_prompt: Option<String>,
+    /// Header label for the per-row usage counter shown in the sidebar
+    /// ("Tokens" for LLM sessions, "Characters" for TTS sessions).
+    pub metrics_label: &'static str,
+    /// Whether the renderer should display cost information. LLM sessions
+    /// set this to `true`; TTS sessions (which don't have per-character
+    /// pricing data yet) set it to `false`.
+    pub show_cost: bool,
     /// Caller-supplied label/value pairs shown in the preflight screen
     /// (e.g. "Input", "Output", "Source", "Destination").
     pub preflight_fields: Vec<InfoField>,
@@ -100,11 +112,18 @@ pub struct BatchSummary {
     pub succeeded: usize,
     pub failed: usize,
     pub interrupted: bool,
-    pub input_tokens: u64,
-    pub output_tokens: u64,
+    pub input_units: u64,
+    pub output_units: u64,
     pub cost: f64,
     pub elapsed: Duration,
-    pub model: String,
+    /// LLM model name, if applicable. `None` for TTS sessions.
+    pub model: Option<String>,
+    /// Mirrors `BatchPlan::metrics_label` so the end-of-run banner can label
+    /// its usage section without a reference back to the plan.
+    pub metrics_label: &'static str,
+    /// Mirrors `BatchPlan::show_cost` so the end-of-run banner can gate its
+    /// cost section.
+    pub show_cost: bool,
     /// Short headline shown in the success banner (e.g. "Batch complete",
     /// "Updated 42 notes in Anki").
     pub headline: String,

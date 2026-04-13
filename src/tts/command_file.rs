@@ -1,25 +1,26 @@
 use std::collections::HashSet;
-use std::fs;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 
-use crate::cli::ProcessFileArgs;
+use crate::anki::client::AnkiClient;
+use crate::batch::controller::{ControllerRuntime, run_batch_controller};
+use crate::batch::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
+use crate::batch::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, RowDescriptor};
+use crate::batch::file_mode::FileWriter;
+use crate::batch::report::ERROR_FIELD;
+use crate::batch::report::RowOutcome;
+use crate::batch::session::{BatchSession, SharedSession};
+use crate::cli::TtsFileArgs;
 use crate::data::io::{load_existing_output, parse_data_file};
 use crate::data::rows::{Row, get_note_id, require_note_id};
-use crate::llm::client::LlmClient;
-use crate::llm::logger::LlmLogger;
-use crate::llm::pricing;
-use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
-use crate::template::fill_template;
 
-use super::controller::{ControllerRuntime, run_batch_controller};
-use super::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
-use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, OutputMode, RowDescriptor};
-use super::file_mode::FileWriter;
-use super::process_row::{ProcessRowConfig, build_process_fn};
-use super::report::{ERROR_FIELD, RowOutcome};
-use super::session::{BatchSession, SharedSession};
+use super::cache::TtsCache;
+use super::media::{AnkiMediaStore, field_has_sound_tag};
+use super::process_row::{TtsProcessConfig, build_tts_process_fn};
+use super::provider::build as build_provider;
+use super::runtime::{TtsRuntimeArgs, build_tts_runtime};
+use super::template::TemplateSource;
 
 fn file_row_descriptors(rows: &[Row]) -> Vec<RowDescriptor> {
     rows.iter()
@@ -42,14 +43,13 @@ fn file_row_descriptors(rows: &[Row]) -> Vec<RowDescriptor> {
         .collect()
 }
 
-struct FileSession {
+struct TtsFileSession {
     writer: Arc<FileWriter>,
     process: ProcessFn,
     output_path: String,
-    model: String,
 }
 
-impl BatchSession for FileSession {
+impl BatchSession for TtsFileSession {
     fn process_fn(&self) -> ProcessFn {
         Arc::clone(&self.process)
     }
@@ -94,7 +94,6 @@ impl BatchSession for FileSession {
             })
             .collect();
         let failed = failed_rows.len();
-        let cost = pricing::calculate_cost(&self.model, result.usage.input, result.usage.output);
         let interrupted = result.interrupted || result.abort_reason.is_some();
         let can_retry_failed = failed > 0 && !interrupted && result.abort_reason.is_none();
 
@@ -106,12 +105,12 @@ impl BatchSession for FileSession {
             interrupted,
             input_units: result.usage.input,
             output_units: result.usage.output,
-            cost,
+            cost: 0.0,
             elapsed: result.elapsed,
-            model: Some(self.model.clone()),
-            metrics_label: "Tokens",
-            show_cost: true,
-            headline: "Batch complete".into(),
+            model: None,
+            metrics_label: "Characters",
+            show_cost: false,
+            headline: "TTS complete".into(),
             completion_fields: vec![InfoField {
                 label: "Output".into(),
                 value: self.output_path.clone(),
@@ -122,8 +121,7 @@ impl BatchSession for FileSession {
     }
 }
 
-pub fn run(args: ProcessFileArgs) -> Result<()> {
-    // Read input
+pub fn run(args: TtsFileArgs) -> Result<()> {
     let rows = parse_data_file(&args.input)
         .with_context(|| format!("failed to read input file: {}", args.input.display()))?;
     if rows.is_empty() {
@@ -132,7 +130,6 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     }
     eprintln!("Loaded {} rows from {}", rows.len(), args.input.display());
 
-    // Validate all rows have IDs and check for duplicates
     let mut all_ids = Vec::with_capacity(rows.len());
     let mut seen_ids = HashSet::new();
     for (i, row) in rows.iter().enumerate() {
@@ -144,27 +141,10 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         all_ids.push(id);
     }
 
-    let prompt_path = args.prompt;
-
-    // Read prompt template
-    let prompt_template = fs::read_to_string(&prompt_path)
-        .with_context(|| format!("failed to read prompt file: {}", prompt_path.display()))?;
-
-    // Build runtime config
-    let runtime = build_runtime_config(RuntimeConfigArgs {
-        model: args.model.as_deref(),
-        api_base_url: args.api_base_url.as_deref(),
-        api_key: args.api_key.as_deref(),
-        batch_size: Some(args.batch_size),
-        max_tokens: args.max_tokens,
-        temperature: args.temperature,
-        retries: args.retries,
-        dry_run: args.dry_run,
-    })?;
-
     let input_total = rows.len();
 
-    // Resume: load existing output
+    // Resume: load prior output. Rows that already have a sound tag in the
+    // target field are skipped unless --force.
     let existing = if args.force {
         indexmap::IndexMap::new()
     } else {
@@ -173,24 +153,48 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     };
     let resume_skipped = existing.len();
 
-    // Filter rows to process: skip rows already completed successfully.
-    // In --field mode, also re-process rows that are missing the target field.
-    let target_field = args.field.as_deref();
+    let target_field = args.field.clone();
     let rows_to_process: Vec<Row> = rows
         .into_iter()
         .filter(|row| {
-            let Some(id) = get_note_id(row) else {
-                return true; // unreachable after validation above
-            };
-            match existing.get(&id) {
-                Some(existing_row) if existing_row.contains_key(ERROR_FIELD) => true,
-                Some(existing_row) => target_field.is_some_and(|f| !existing_row.contains_key(f)),
-                None => true,
+            if args.force {
+                return true;
             }
+            let Some(id) = get_note_id(row) else {
+                return true;
+            };
+
+            // A prior output row only counts as "done" if its target field
+            // actually contains a sound tag. Rows that carry an `_error`
+            // field are always retried. Plain-text values left over from
+            // earlier experimentation should be re-processed (otherwise a
+            // populated target column in the input file would skip every
+            // row forever).
+            if let Some(existing_row) = existing.get(&id) {
+                if existing_row.contains_key(ERROR_FIELD) {
+                    return true;
+                }
+                let existing_val = existing_row
+                    .get(&target_field)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if field_has_sound_tag(existing_val) {
+                    return false;
+                }
+            }
+
+            // For rows without prior output, skip if the input row's
+            // target field is non-empty — either it already contains
+            // audio, or it contains plain text we'd be about to clobber.
+            // Users who know what they're doing can pass --force.
+            let existing_value = row
+                .get(&target_field)
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            existing_value.trim().is_empty()
         })
         .collect();
 
-    // Apply limit
     let rows_to_process = if let Some(limit) = args.limit {
         rows_to_process.into_iter().take(limit).collect()
     } else {
@@ -198,25 +202,44 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     };
 
     if rows_to_process.is_empty() {
-        eprintln!("All rows already processed. Use --force to reprocess.");
+        eprintln!("All rows already have audio. Use --force to regenerate.");
         return Ok(());
     }
 
-    // Dry run
+    let runtime = build_tts_runtime(TtsRuntimeArgs {
+        provider: Some(args.provider.as_str()),
+        voice: args.voice.as_deref(),
+        tts_model: args.tts_model.as_deref(),
+        format: Some(args.format.as_str()),
+        speed: args.speed,
+        api_key: args.api_key.as_deref(),
+        api_base_url: args.api_base_url.as_deref(),
+        batch_size: args.batch_size,
+        retries: args.retries,
+        force: args.force,
+        dry_run: args.dry_run,
+    })?;
+
+    let source = match (&args.template, &args.text_field) {
+        (Some(path), None) => TemplateSource::load_file(path.clone())?,
+        (None, Some(field)) => TemplateSource::field(field.clone()),
+        _ => bail!("exactly one of --template or --text-field is required"),
+    };
+
     if args.dry_run {
         eprintln!("\n--- DRY RUN MODE ---");
-        eprintln!("\nPrompt template:");
-        eprintln!("{prompt_template}");
+        eprintln!("Provider: {}", runtime.provider);
+        eprintln!("Voice:    {}", runtime.voice);
+        if let Some(ref m) = runtime.model {
+            eprintln!("Model:    {m}");
+        }
+        eprintln!("Source:   {}", source.display_label());
         if let Some(first) = rows_to_process.first() {
-            eprintln!("\nSample row:");
-            eprintln!(
-                "{}",
-                serde_json::to_string_pretty(first).unwrap_or_default()
-            );
-            match fill_template(&prompt_template, first) {
-                Ok(filled) => {
-                    eprintln!("\nSample prompt:");
-                    eprintln!("{filled}");
+            match source.expand(first) {
+                Ok(text) => {
+                    let normalized = super::text::normalize(&text);
+                    eprintln!("\nSample raw:        {text}");
+                    eprintln!("Sample normalized: {normalized}");
                 }
                 Err(e) => eprintln!("\nTemplate error: {e}"),
             }
@@ -224,12 +247,39 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         return Ok(());
     }
 
-    // Build sample prompt for preflight
-    let sample_prompt = rows_to_process
-        .first()
-        .and_then(|row| fill_template(&prompt_template, row).ok());
+    let provider = build_provider(
+        &runtime.provider,
+        runtime.api_key.clone(),
+        runtime.api_base_url.clone(),
+    )
+    .map_err(anyhow::Error::msg)?;
 
-    // Build preflight info fields
+    let cache_dir = TtsCache::default_dir()
+        .context("failed to locate cache directory (home dir unavailable)")?;
+    let cache = Arc::new(TtsCache::new(cache_dir).context("failed to initialize TTS cache")?);
+    let media = Arc::new(AnkiMediaStore::new(AnkiClient::new()));
+
+    let source = Arc::new(source);
+    let process_fn = build_tts_process_fn(TtsProcessConfig {
+        provider,
+        cache,
+        media,
+        source: Arc::clone(&source),
+        target_field: args.field.clone(),
+        voice: runtime.voice.clone(),
+        model: runtime.model.clone(),
+        format: runtime.format,
+        speed: runtime.speed,
+        api_base_url: runtime.api_base_url.clone(),
+    });
+
+    let writer = Arc::new(FileWriter::new(
+        args.output.clone(),
+        all_ids,
+        existing,
+        runtime.batch_size as usize,
+    ));
+
     let mut preflight_fields = vec![
         InfoField {
             label: "Input".into(),
@@ -239,6 +289,18 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
             label: "Output".into(),
             value: args.output.display().to_string(),
         },
+        InfoField {
+            label: "Field".into(),
+            value: args.field.clone(),
+        },
+        InfoField {
+            label: "Voice".into(),
+            value: format!("{} ({})", runtime.voice, runtime.provider),
+        },
+        InfoField {
+            label: "Text".into(),
+            value: source.display_label(),
+        },
     ];
     if resume_skipped > 0 {
         preflight_fields.push(InfoField {
@@ -247,68 +309,38 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         });
     }
 
-    // Build plan
     let plan = BatchPlan {
         item_name_singular: "row",
         item_name_plural: "rows",
         rows: file_row_descriptors(&rows_to_process),
         run_total: rows_to_process.len(),
-        model: Some(runtime.model.clone()),
-        prompt_path: Some(prompt_path.display().to_string()),
-        output_mode: Some(if let Some(ref field) = args.field {
-            OutputMode::SingleField(field.clone())
-        } else {
-            OutputMode::JsonMerge
-        }),
+        model: None,
+        prompt_path: None,
+        output_mode: None,
         batch_size: runtime.batch_size,
         retries: runtime.retries,
-        sample_prompt,
-        metrics_label: "Tokens",
-        show_cost: true,
+        sample_prompt: None,
+        metrics_label: "Characters",
+        show_cost: false,
         preflight_fields,
     };
 
-    // Build logger
-    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
-    let logger = Arc::new(logger);
-
-    // Build processing closure
-    let process_fn = build_process_fn(ProcessRowConfig {
-        client: Arc::new(LlmClient::from_config(&runtime)),
-        model: runtime.model.clone(),
-        template: prompt_template.clone(),
-        field: args.field.clone(),
-        temperature: runtime.temperature,
-        max_tokens: runtime.max_tokens,
-        require_result_tag: args.require_result_tag,
-        logger: Some(logger),
-    });
-
-    // Set up file writer
-    let writer = Arc::new(FileWriter::new(
-        args.output.clone(),
-        all_ids,
-        existing,
-        runtime.batch_size as usize,
-    ));
-
-    let session: SharedSession = Arc::new(FileSession {
+    let session: SharedSession = Arc::new(TtsFileSession {
         writer,
         process: process_fn,
         output_path: args.output.display().to_string(),
-        model: runtime.model.clone(),
     });
 
     let controller_runtime = ControllerRuntime {
         batch_size: runtime.batch_size,
         retries: runtime.retries,
-        model: Some(runtime.model.clone()),
+        model: None,
     };
     let summary = run_batch_controller(plan, &controller_runtime, rows_to_process, session)?;
 
     if summary.failed > 0 {
         bail!(
-            "{} row(s) failed processing. See _error fields in output file.",
+            "{} row(s) failed TTS generation. See _error fields in output file.",
             summary.failed
         );
     }

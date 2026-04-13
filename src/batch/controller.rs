@@ -7,7 +7,6 @@ use anyhow::Result;
 use ratatui::DefaultTerminal;
 
 use crate::data::Row;
-use crate::llm::runtime::RuntimeConfig;
 
 use super::engine::{BatchConfig, run_batch};
 use super::events::{BatchEvent, BatchPlan, BatchSummary};
@@ -15,12 +14,23 @@ use super::plain::run_plain_renderer;
 use super::session::SharedSession;
 use super::tui::{AppMode, BatchTuiResult, RunState, run_tui};
 
+/// Processor-agnostic knobs the controller needs to drive `run_batch`.
+/// Both LLM and TTS sessions build one of these; the fields that only make
+/// sense for LLM sessions are expressed as `Option`s so TTS can leave them
+/// unset.
+#[derive(Clone)]
+pub struct ControllerRuntime {
+    pub batch_size: u32,
+    pub retries: u32,
+    pub model: Option<String>,
+}
+
 /// Drives a batch run end-to-end. Owns terminal lifecycle, runs the engine in
 /// a worker thread, dispatches `RunDone`/`Fatal` only after the session has
 /// finalized the iteration, and supports retry-failed loops.
 pub fn run_batch_controller(
     mut plan: BatchPlan,
-    runtime: &RuntimeConfig,
+    runtime: &ControllerRuntime,
     pending_rows: Vec<Row>,
     session: SharedSession,
 ) -> Result<BatchSummary> {
@@ -56,7 +66,7 @@ pub fn run_batch_controller(
 
 fn run_loop(
     plan: &mut BatchPlan,
-    runtime: &RuntimeConfig,
+    runtime: &ControllerRuntime,
     initial_rows: Vec<Row>,
     session: &SharedSession,
     terminal: &mut Option<DefaultTerminal>,
@@ -209,11 +219,13 @@ fn empty_summary(plan: &BatchPlan) -> BatchSummary {
         succeeded: 0,
         failed: 0,
         interrupted: true,
-        input_tokens: 0,
-        output_tokens: 0,
+        input_units: 0,
+        output_units: 0,
         cost: 0.0,
         elapsed: std::time::Duration::ZERO,
         model: plan.model.clone(),
+        metrics_label: plan.metrics_label,
+        show_cost: plan.show_cost,
         headline: "Cancelled".into(),
         completion_fields: Vec::new(),
         failed_rows: Vec::new(),
@@ -304,11 +316,13 @@ mod tests {
                 succeeded,
                 failed: failed_rows.len(),
                 interrupted: result.interrupted,
-                input_tokens: result.tokens.input,
-                output_tokens: result.tokens.output,
+                input_units: result.usage.input,
+                output_units: result.usage.output,
                 cost: 0.0,
                 elapsed: result.elapsed,
-                model: "test-model".into(),
+                model: Some("test-model".into()),
+                metrics_label: "Tokens",
+                show_cost: true,
                 headline: "Test complete".into(),
                 completion_fields: vec![InfoField {
                     label: "Result".into(),
@@ -337,26 +351,23 @@ mod tests {
                 })
                 .collect(),
             run_total: total,
-            model: "test-model".into(),
-            prompt_path: "test.txt".into(),
-            output_mode: OutputMode::JsonMerge,
+            model: Some("test-model".into()),
+            prompt_path: Some("test.txt".into()),
+            output_mode: Some(OutputMode::JsonMerge),
             batch_size: 2,
             retries: 0,
             sample_prompt: None,
+            metrics_label: "Tokens",
+            show_cost: true,
             preflight_fields: vec![],
         }
     }
 
-    fn make_runtime() -> RuntimeConfig {
-        RuntimeConfig {
-            model: "test-model".into(),
-            api_key: None,
-            api_base_url: None,
-            temperature: None,
-            max_tokens: None,
+    fn make_runtime() -> ControllerRuntime {
+        ControllerRuntime {
             batch_size: 2,
             retries: 0,
-            dry_run: true,
+            model: Some("test-model".into()),
         }
     }
 

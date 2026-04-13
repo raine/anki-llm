@@ -9,5 +9,6 @@ pub mod snapshot;
 pub mod spinner;
 pub mod style;
 pub mod template;
+pub mod tts;
 pub mod tui;
 pub mod workspace;

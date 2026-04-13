@@ -59,6 +59,10 @@ ammonia = "4"
 # its transitive dep `named-item` requires a nightly-only feature.
 jsonrepair = "0.1"
 
+# TTS audio hashing and media upload
+sha2 = "0.10"
+base64 = "0.22"
+
 # Terminal UI
 ratatui = "0.30"
 crossterm = "0.29"

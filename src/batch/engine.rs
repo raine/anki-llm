@@ -7,13 +7,15 @@ use crate::llm::pricing;
 
 use super::error::BatchError;
 use super::events::{BatchEvent, RowState, RowUpdate};
-use super::report::{RowOutcome, TokenStats};
+use super::report::{RowOutcome, UsageStats};
 
 /// Configuration for the batch engine.
 pub struct BatchConfig {
     pub batch_size: u32,
     pub retries: u32,
-    pub model: String,
+    /// Model name used for pricing lookups. `None` means no cost tracking
+    /// (e.g. TTS sessions).
+    pub model: Option<String>,
 }
 
 /// Action returned by the per-row callback. `Abort` stops the engine and
@@ -42,7 +44,7 @@ pub type IdExtractor = Arc<dyn Fn(&Row) -> String + Send + Sync>;
 /// the `BatchPlan`, so duplicating it would invite drift.
 pub struct EngineRunResult {
     pub outcomes: Vec<RowOutcome>,
-    pub tokens: TokenStats,
+    pub usage: UsageStats,
     pub elapsed: Duration,
     pub interrupted: bool,
     pub abort_reason: Option<String>,
@@ -64,7 +66,7 @@ pub fn run_batch(
     cancel: Arc<AtomicBool>,
 ) -> EngineRunResult {
     let total = rows.len();
-    let tokens = Mutex::new(TokenStats::default());
+    let usage = Mutex::new(UsageStats::default());
     let completed: Mutex<Vec<RowOutcome>> = Mutex::new(Vec::new());
     let abort_reason: Mutex<Option<String>> = Mutex::new(None);
     let next_index = AtomicUsize::new(0);
@@ -87,10 +89,10 @@ pub fn run_batch(
                     let ctx = RetryCtx {
                         process: &process,
                         max_retries: config.retries,
-                        tokens: &tokens,
+                        usage: &usage,
                         event_tx: &event_tx,
                         cancel: &cancel,
-                        model: &config.model,
+                        model: config.model.as_deref(),
                         id_extractor: &id_extractor,
                     };
                     let Some(outcome) = process_with_retry(row, idx, &ctx) else {
@@ -115,12 +117,12 @@ pub fn run_batch(
     let elapsed = start.elapsed();
     let was_interrupted = cancel.load(Ordering::SeqCst);
     let outcomes = completed.into_inner().unwrap();
-    let tokens = tokens.into_inner().unwrap();
+    let usage = usage.into_inner().unwrap();
     let abort_reason = abort_reason.into_inner().unwrap();
 
     EngineRunResult {
         outcomes,
-        tokens,
+        usage,
         elapsed,
         interrupted: was_interrupted,
         abort_reason,
@@ -131,10 +133,11 @@ pub fn run_batch(
 struct RetryCtx<'a> {
     process: &'a ProcessFn,
     max_retries: u32,
-    tokens: &'a Mutex<TokenStats>,
+    usage: &'a Mutex<UsageStats>,
     event_tx: &'a mpsc::Sender<BatchEvent>,
     cancel: &'a AtomicBool,
-    model: &'a str,
+    /// LLM model name used for cost lookups. `None` skips cost computation.
+    model: Option<&'a str>,
     id_extractor: &'a IdExtractor,
 }
 
@@ -217,13 +220,16 @@ fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> Option<Row
         match (ctx.process)(row) {
             Ok((updated_row, usage)) => {
                 if let Some((input, output)) = usage {
-                    let mut t = ctx.tokens.lock().unwrap();
+                    let mut t = ctx.usage.lock().unwrap();
                     t.add(input, output);
-                    let cost = pricing::calculate_cost(ctx.model, t.input, t.output);
+                    let cost = match ctx.model {
+                        Some(m) => pricing::calculate_cost(m, t.input, t.output),
+                        None => 0.0,
+                    };
                     ctx.event_tx
                         .send(BatchEvent::CostUpdate {
-                            input_tokens: t.input,
-                            output_tokens: t.output,
+                            input_units: t.input,
+                            output_units: t.output,
                             cost,
                         })
                         .ok();
@@ -295,7 +301,7 @@ mod tests {
         BatchConfig {
             batch_size: 1,
             retries,
-            model: "test-model".into(),
+            model: Some("test-model".into()),
         }
     }
 
@@ -341,8 +347,8 @@ mod tests {
                 .iter()
                 .all(|o| matches!(o, RowOutcome::Success(_)))
         );
-        assert_eq!(result.tokens.input, 30);
-        assert_eq!(result.tokens.output, 15);
+        assert_eq!(result.usage.input, 30);
+        assert_eq!(result.usage.output, 15);
     }
 
     #[test]
@@ -377,7 +383,7 @@ mod tests {
 
         assert_eq!(result.outcomes.len(), 1);
         assert!(matches!(&result.outcomes[0], RowOutcome::Success(_)));
-        assert_eq!(result.tokens.input, 10);
+        assert_eq!(result.usage.input, 10);
     }
 
     #[test]
@@ -437,7 +443,7 @@ mod tests {
 
         let result = test_run_batch(rows, process, &config(0), None);
 
-        assert_eq!(result.tokens.total(), 0);
+        assert_eq!(result.usage.total(), 0);
     }
 
     #[test]

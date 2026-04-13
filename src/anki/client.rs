@@ -222,6 +222,22 @@ impl AnkiClient {
     pub fn load_profile(&self, name: &str) -> Result<bool, AnkiConnectError> {
         self.request("loadProfile", serde_json::json!({ "name": name }))
     }
+
+    /// Upload a media file to Anki's collection.media directory via
+    /// AnkiConnect's `storeMediaFile` action. Returns the stored filename
+    /// (AnkiConnect may adjust it if a same-named file already exists).
+    pub fn store_media_file(
+        &self,
+        filename: &str,
+        data: &[u8],
+    ) -> Result<String, AnkiConnectError> {
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(data);
+        self.request(
+            "storeMediaFile",
+            serde_json::json!({ "filename": filename, "data": b64 }),
+        )
+    }
 }
 
 #[cfg(test)]

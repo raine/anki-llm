@@ -36,19 +36,26 @@ fn draw_preflight(plan: &BatchPlan, frame: &mut Frame) {
     let label_style = Style::default().fg(THEME.dimmed);
     let value_style = Style::default().fg(THEME.text);
 
-    let fixed_fields: Vec<(&str, String)> = vec![
-        ("Prompt", plan.prompt_path.clone()),
-        ("Model", plan.model.clone()),
-        (
+    // Only the LLM sessions populate Prompt/Model/Mode; TTS leaves them
+    // unset, so skip those rows entirely rather than rendering "—".
+    let mut fixed_fields: Vec<(&str, String)> = Vec::new();
+    if let Some(ref path) = plan.prompt_path {
+        fixed_fields.push(("Prompt", path.clone()));
+    }
+    if let Some(ref model) = plan.model {
+        fixed_fields.push(("Model", model.clone()));
+    }
+    if let Some(ref output_mode) = plan.output_mode {
+        fixed_fields.push((
             "Mode",
-            match &plan.output_mode {
+            match output_mode {
                 OutputMode::SingleField(f) => format!("single field ({f})"),
                 OutputMode::JsonMerge => "JSON merge".to_string(),
             },
-        ),
-        ("Batch size", plan.batch_size.to_string()),
-        ("Retries", plan.retries.to_string()),
-    ];
+        ));
+    }
+    fixed_fields.push(("Batch size", plan.batch_size.to_string()));
+    fixed_fields.push(("Retries", plan.retries.to_string()));
 
     for (label, value) in &fixed_fields {
         let pad = 12usize.saturating_sub(label.len());
@@ -233,26 +240,32 @@ fn draw_sidebar(state: &RunState, plan: &BatchPlan, frame: &mut Frame, area: Rec
 
     lines.push(Line::from(""));
 
-    // Tokens
-    lines.push(Line::from(vec![Span::styled("  Tokens", label_style)]));
+    // Per-row usage section — label comes from the plan so LLM sessions
+    // show "Tokens" while TTS sessions show "Characters".
+    lines.push(Line::from(vec![Span::styled(
+        format!("  {}", plan.metrics_label),
+        label_style,
+    )]));
     lines.push(Line::from(vec![
         Span::styled("    In", label_style),
         Span::raw("      "),
-        Span::styled(format_number(stats.input_tokens), value_style),
+        Span::styled(format_number(stats.input_units), value_style),
     ]));
     lines.push(Line::from(vec![
         Span::styled("    Out", label_style),
         Span::raw("     "),
-        Span::styled(format_number(stats.output_tokens), value_style),
+        Span::styled(format_number(stats.output_units), value_style),
     ]));
-    lines.push(Line::from(vec![
-        Span::styled("  Cost", label_style),
-        Span::raw("      "),
-        Span::styled(
-            pricing::format_cost(stats.cost),
-            Style::default().fg(THEME.info),
-        ),
-    ]));
+    if plan.show_cost {
+        lines.push(Line::from(vec![
+            Span::styled("  Cost", label_style),
+            Span::raw("      "),
+            Span::styled(
+                pricing::format_cost(stats.cost),
+                Style::default().fg(THEME.info),
+            ),
+        ]));
+    }
 
     lines.push(Line::from(""));
 
@@ -270,12 +283,14 @@ fn draw_sidebar(state: &RunState, plan: &BatchPlan, frame: &mut Frame, area: Rec
         ]));
     }
 
-    // Model
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        format!("  {}", plan.model),
-        Style::default().fg(THEME.dimmed),
-    )));
+    // Model (LLM only)
+    if let Some(ref model) = plan.model {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("  {model}"),
+            Style::default().fg(THEME.dimmed),
+        )));
+    }
 
     let sidebar_block = Block::default()
         .borders(Borders::RIGHT)
@@ -523,7 +538,7 @@ fn draw_success_banner(summary: &BatchSummary, frame: &mut Frame, area: Rect) {
     let label_style = Style::default().fg(THEME.dimmed);
     let value_style = Style::default().fg(THEME.text);
 
-    let total_tokens = summary.input_tokens + summary.output_tokens;
+    let total_units = summary.input_units + summary.output_units;
     let avg_per_item = if summary.processed_total > 0 {
         format!(
             "  {:.1}s avg",
@@ -533,6 +548,25 @@ fn draw_success_banner(summary: &BatchSummary, frame: &mut Frame, area: Rect) {
         String::new()
     };
 
+    let metrics_segment = if summary.show_cost {
+        format!(
+            " {} {}  {}  {}{}",
+            format_number(total_units),
+            summary.metrics_label.to_lowercase(),
+            pricing::format_cost(summary.cost),
+            format_duration(summary.elapsed),
+            avg_per_item,
+        )
+    } else {
+        format!(
+            " {} {}  {}{}",
+            format_number(total_units),
+            summary.metrics_label.to_lowercase(),
+            format_duration(summary.elapsed),
+            avg_per_item,
+        )
+    };
+
     let banner = Line::from(vec![
         Span::styled(
             format!(" \u{2713} {} ", summary.headline),
@@ -540,16 +574,7 @@ fn draw_success_banner(summary: &BatchSummary, frame: &mut Frame, area: Rect) {
                 .fg(THEME.success)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            format!(
-                " {} tokens  {}  {}{}",
-                format_number(total_tokens),
-                pricing::format_cost(summary.cost),
-                format_duration(summary.elapsed),
-                avg_per_item,
-            ),
-            value_style,
-        ),
+        Span::styled(metrics_segment, value_style),
     ]);
 
     let mut lines: Vec<Line> = vec![Line::from(""), banner];

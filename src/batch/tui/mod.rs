@@ -203,12 +203,12 @@ fn handle_batch_event(mode: &mut AppMode, event: BatchEvent) {
             state.log_scroll = state.log.len().saturating_sub(1) as u16;
         }
         BatchEvent::CostUpdate {
-            input_tokens,
-            output_tokens,
+            input_units,
+            output_units,
             cost,
         } => {
-            state.stats.input_tokens = input_tokens;
-            state.stats.output_tokens = output_tokens;
+            state.stats.input_units = input_units;
+            state.stats.output_units = output_units;
             state.stats.cost = cost;
         }
         BatchEvent::RunDone(_) | BatchEvent::Fatal(_) => unreachable!(),

@@ -1,0 +1,93 @@
+use std::fs;
+use std::path::PathBuf;
+
+use anyhow::{Context, Result};
+
+use crate::data::Row;
+use crate::template::fill_template;
+
+/// How the raw-text input for a single note is derived.
+///
+/// TTS commands accept either a prompt template file (expanded per row with
+/// `{field}` placeholders like the LLM commands) or a bare field reference
+/// for the common "just speak this field" case.
+#[derive(Clone)]
+pub enum TemplateSource {
+    File { path: PathBuf, contents: String },
+    Field(String),
+}
+
+impl TemplateSource {
+    pub fn load_file(path: PathBuf) -> Result<Self> {
+        let contents = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read template file: {}", path.display()))?;
+        Ok(Self::File { path, contents })
+    }
+
+    pub fn field(name: String) -> Self {
+        Self::Field(name)
+    }
+
+    pub fn display_label(&self) -> String {
+        match self {
+            Self::File { path, .. } => path.display().to_string(),
+            Self::Field(name) => format!("field: {name}"),
+        }
+    }
+
+    pub fn expand(&self, row: &Row) -> Result<String> {
+        match self {
+            Self::File { contents, .. } => {
+                fill_template(contents, row).map_err(|e| anyhow::anyhow!(e.to_string()))
+            }
+            Self::Field(name) => {
+                let v = row
+                    .get(name)
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+                    .unwrap_or_default();
+                Ok(v)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use indexmap::IndexMap;
+    use serde_json::Value;
+
+    fn row(pairs: &[(&str, &str)]) -> Row {
+        let mut r: Row = IndexMap::new();
+        for (k, v) in pairs {
+            r.insert((*k).to_string(), Value::String((*v).to_string()));
+        }
+        r
+    }
+
+    #[test]
+    fn field_source_reads_value() {
+        let src = TemplateSource::field("Front".into());
+        assert_eq!(src.expand(&row(&[("Front", "hello")])).unwrap(), "hello");
+    }
+
+    #[test]
+    fn field_source_missing_is_empty() {
+        let src = TemplateSource::field("Missing".into());
+        assert_eq!(src.expand(&row(&[("Front", "hello")])).unwrap(), "");
+    }
+
+    #[test]
+    fn file_source_fills_placeholders() {
+        let src = TemplateSource::File {
+            path: PathBuf::from("-"),
+            contents: "{Front} - {Back}".to_string(),
+        };
+        assert_eq!(
+            src.expand(&row(&[("Front", "cat"), ("Back", "feline")]))
+                .unwrap(),
+            "cat - feline"
+        );
+    }
+}

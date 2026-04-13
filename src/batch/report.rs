@@ -1,14 +1,19 @@
 /// Field key used to record processing errors on failed rows.
 pub const ERROR_FIELD: &str = "_error";
 
-/// Accumulated token counts across all processed rows.
+/// Accumulated per-row usage counts across all processed rows.
+///
+/// The unit is processor-specific: LLM sessions count tokens, TTS sessions
+/// count characters. The engine does not interpret the numbers — it just
+/// accumulates them and hands them to the renderer, which labels the section
+/// from `BatchPlan::metrics_label`.
 #[derive(Debug, Default, Clone)]
-pub struct TokenStats {
+pub struct UsageStats {
     pub input: u64,
     pub output: u64,
 }
 
-impl TokenStats {
+impl UsageStats {
     #[cfg(test)]
     pub fn total(&self) -> u64 {
         self.input + self.output
@@ -25,8 +30,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn token_stats_add_and_total() {
-        let mut stats = TokenStats::default();
+    fn usage_stats_add_and_total() {
+        let mut stats = UsageStats::default();
         assert_eq!(stats.total(), 0);
         stats.add(100, 50);
         assert_eq!(stats.input, 100);

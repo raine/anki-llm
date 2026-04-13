@@ -17,6 +17,18 @@ pub struct AppConfig {
     /// Custom API base URL (e.g. OpenRouter, Ollama, or any OpenAI-compatible endpoint).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_base_url: Option<String>,
+    /// Default TTS provider identifier (e.g. "openai").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tts_provider: Option<String>,
+    /// Default TTS voice (provider-specific, e.g. "alloy", "nova").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tts_voice: Option<String>,
+    /// Default TTS backing model (e.g. "gpt-4o-mini-tts").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tts_model: Option<String>,
+    /// Default TTS output format (currently only "mp3").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tts_format: Option<String>,
 }
 
 impl AppConfig {
@@ -27,6 +39,10 @@ impl AppConfig {
             "nerd_font" => self.nerd_font.map(|b| b.to_string()),
             "prompts_dir" => self.prompts_dir.as_ref().map(|p| p.display().to_string()),
             "api_base_url" => self.api_base_url.clone(),
+            "tts_provider" => self.tts_provider.clone(),
+            "tts_voice" => self.tts_voice.clone(),
+            "tts_model" => self.tts_model.clone(),
+            "tts_format" => self.tts_format.clone(),
             _ => None,
         }
     }
@@ -50,6 +66,22 @@ impl AppConfig {
                 self.api_base_url = Some(value.to_string());
                 true
             }
+            "tts_provider" => {
+                self.tts_provider = Some(value.to_string());
+                true
+            }
+            "tts_voice" => {
+                self.tts_voice = Some(value.to_string());
+                true
+            }
+            "tts_model" => {
+                self.tts_model = Some(value.to_string());
+                true
+            }
+            "tts_format" => {
+                self.tts_format = Some(value.to_string());
+                true
+            }
             _ => false,
         }
     }
@@ -68,6 +100,18 @@ impl AppConfig {
         }
         if let Some(ref v) = self.api_base_url {
             out.push(("api_base_url".into(), v.clone()));
+        }
+        if let Some(ref v) = self.tts_provider {
+            out.push(("tts_provider".into(), v.clone()));
+        }
+        if let Some(ref v) = self.tts_voice {
+            out.push(("tts_voice".into(), v.clone()));
+        }
+        if let Some(ref v) = self.tts_model {
+            out.push(("tts_model".into(), v.clone()));
+        }
+        if let Some(ref v) = self.tts_format {
+            out.push(("tts_format".into(), v.clone()));
         }
         out
     }

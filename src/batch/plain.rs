@@ -28,7 +28,11 @@ pub fn run_plain_renderer(rx: mpsc::Receiver<BatchEvent>, total: usize) {
                 }
             }
             BatchEvent::CostUpdate { cost, .. } => {
-                pb.set_message(pricing::format_cost(cost));
+                // Plain-mode progress bar only shows cost when we actually
+                // know it. TTS sessions emit cost=0 so the bar stays clean.
+                if cost > 0.0 {
+                    pb.set_message(pricing::format_cost(cost));
+                }
             }
             BatchEvent::Log(msg) => {
                 let s = style();
@@ -73,36 +77,40 @@ fn print_plain_summary(summary: &BatchSummary) {
         eprintln!("  Failed     {}", s.error_text(summary.failed));
     }
 
-    eprintln!("\n{}", s.bold("Tokens"));
-    eprintln!("  Input      {}", summary.input_tokens);
-    eprintln!("  Output     {}", summary.output_tokens);
+    eprintln!("\n{}", s.bold(summary.metrics_label));
+    eprintln!("  Input      {}", summary.input_units);
+    eprintln!("  Output     {}", summary.output_units);
     eprintln!(
         "  Total      {}",
-        summary.input_tokens + summary.output_tokens
+        summary.input_units + summary.output_units
     );
 
-    eprintln!("\n{}", s.bold("Cost"));
-    eprintln!("  Model      {}", summary.model);
-    if let Some(p) = pricing::model_pricing(&summary.model) {
+    if summary.show_cost
+        && let Some(ref model) = summary.model
+    {
+        eprintln!("\n{}", s.bold("Cost"));
+        eprintln!("  Model      {}", model);
+        if let Some(p) = pricing::model_pricing(model) {
+            eprintln!(
+                "  Input      {} {}",
+                pricing::format_cost(
+                    (summary.input_units as f64 / 1_000_000.0) * p.input_cost_per_million
+                ),
+                s.muted(format!("(${:.2}/M)", p.input_cost_per_million))
+            );
+            eprintln!(
+                "  Output     {} {}",
+                pricing::format_cost(
+                    (summary.output_units as f64 / 1_000_000.0) * p.output_cost_per_million
+                ),
+                s.muted(format!("(${:.2}/M)", p.output_cost_per_million))
+            );
+        }
         eprintln!(
-            "  Input      {} {}",
-            pricing::format_cost(
-                (summary.input_tokens as f64 / 1_000_000.0) * p.input_cost_per_million
-            ),
-            s.muted(format!("(${:.2}/M)", p.input_cost_per_million))
-        );
-        eprintln!(
-            "  Output     {} {}",
-            pricing::format_cost(
-                (summary.output_tokens as f64 / 1_000_000.0) * p.output_cost_per_million
-            ),
-            s.muted(format!("(${:.2}/M)", p.output_cost_per_million))
+            "  Total      {}",
+            s.accent(pricing::format_cost(summary.cost))
         );
     }
-    eprintln!(
-        "  Total      {}",
-        s.accent(pricing::format_cost(summary.cost))
-    );
 
     eprintln!("\n{}", s.bold("Performance"));
     eprintln!("  Time       {:.1}s", summary.elapsed.as_secs_f64());
