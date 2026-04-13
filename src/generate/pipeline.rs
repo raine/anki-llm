@@ -8,7 +8,7 @@ use crate::llm::logger::LlmLogger;
 use crate::llm::pricing;
 use crate::template::frontmatter::Frontmatter;
 
-use super::anki_import::import_cards_to_anki;
+use super::anki_import::{TtsFinalize, import_cards_to_anki};
 use super::cards::{ValidatedCard, map_fields_to_anki, validate_cards};
 use super::exporter::export_cards;
 use super::process::{CardFlag, FlaggedCard, run_processors};
@@ -103,6 +103,10 @@ pub struct PipelineConfig<'a> {
     pub count: u32,
     pub dry_run: bool,
     pub output: Option<&'a std::path::Path>,
+    /// Optional TTS bundle. When present, `finalize_tts` runs before
+    /// `add_notes` to synthesize + upload missing audio and rewrite the
+    /// target field.
+    pub tts: Option<&'a crate::tts::service::TtsBundle>,
 }
 
 pub enum PipelineOutcome {
@@ -833,7 +837,17 @@ pub fn run_pipeline_for_term(
             note_ids: Vec::new(),
         })
     } else {
-        let result = import_cards_to_anki(&final_cards, config.frontmatter, config.anki, on_log)?;
+        let tts_finalize = config.tts.map(|bundle| TtsFinalize {
+            service: &bundle.service,
+            media: &bundle.media,
+        });
+        let result = import_cards_to_anki(
+            &final_cards,
+            config.frontmatter,
+            config.anki,
+            tts_finalize,
+            on_log,
+        )?;
         let note_ids = result.note_ids.clone();
 
         if result.failures > 0 {

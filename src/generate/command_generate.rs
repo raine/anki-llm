@@ -61,6 +61,11 @@ struct PreparedSession {
     anki: AnkiClient,
     client: LlmClient,
     logger: LlmLogger,
+    /// Bundled TTS service + media store, built once per session when the
+    /// prompt has a `tts:` block. Shared by the (future) preview path and
+    /// the import-time finalizer so both hit the same cache and the same
+    /// upload-dedup map.
+    tts: Option<crate::tts::service::TtsBundle>,
 }
 
 /// Load and parse a prompt file, validating required placeholders.
@@ -117,6 +122,24 @@ fn prepare_session(
     let field_map_keys: Vec<String> = loaded.frontmatter.field_map.keys().cloned().collect();
     let client = LlmClient::from_config(&runtime);
 
+    let tts = if let Some(ref spec) = loaded.frontmatter.tts {
+        let bundle = crate::tts::service::build_bundle(
+            spec,
+            AnkiClient::new(),
+            crate::tts::service::TtsBundleOptions {
+                api_key: args.api_key.as_deref(),
+                api_base_url: args.api_base_url.as_deref(),
+                azure_region: None,
+            },
+        )
+        .inspect_err(|e| {
+            progress.step_error(PipelineStep::ValidateAnki, &e.to_string());
+        })?;
+        Some(bundle)
+    } else {
+        None
+    };
+
     Ok(PreparedSession {
         frontmatter: loaded.frontmatter,
         prompt_body: loaded.body,
@@ -126,6 +149,7 @@ fn prepare_session(
         anki,
         client,
         logger,
+        tts,
     })
 }
 
@@ -311,6 +335,7 @@ pub fn run_pipeline(
                     count: args.count,
                     dry_run: args.dry_run,
                     output: args.output.as_deref(),
+                    tts: session.tts.as_ref(),
                 };
 
                 match super::pipeline::run_pipeline_for_term(
@@ -509,6 +534,7 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         count: args.count,
         dry_run: args.dry_run,
         output: args.output.as_deref(),
+        tts: session.tts.as_ref(),
     };
 
     let interaction = LegacyInteraction {
@@ -672,7 +698,26 @@ fn run_copy_mode(
     if let Some(ref output_path) = args.output {
         export_cards(&selected, output_path, on_log)?;
     } else {
-        let result = import_cards_to_anki(&selected, frontmatter, &anki, on_log)?;
+        let tts_bundle = if let Some(ref spec) = frontmatter.tts {
+            Some(crate::tts::service::build_bundle(
+                spec,
+                AnkiClient::new(),
+                crate::tts::service::TtsBundleOptions {
+                    api_key: args.api_key.as_deref(),
+                    api_base_url: args.api_base_url.as_deref(),
+                    azure_region: None,
+                },
+            )?)
+        } else {
+            None
+        };
+        let tts_finalize = tts_bundle
+            .as_ref()
+            .map(|b| crate::generate::anki_import::TtsFinalize {
+                service: &b.service,
+                media: &b.media,
+            });
+        let result = import_cards_to_anki(&selected, frontmatter, &anki, tts_finalize, on_log)?;
         report_import_result(&result, &frontmatter.deck);
 
         if result.failures > 0 {

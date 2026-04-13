@@ -5,14 +5,19 @@ use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
 use serde_json::Value;
 
+use crate::anki::client::AnkiClient;
 use crate::data::Row;
+use crate::template::frontmatter::TtsSpec;
 
 use super::cache::TtsCache;
 use super::error::TtsError;
 use super::ir::parse_furigana;
 use super::media::{AnkiMediaStore, format_sound_tag};
-use super::provider::{AudioFormat, SynthesisRequest, TextFormat, TtsProvider};
+use super::provider::{
+    AudioFormat, SynthesisRequest, TextFormat, TtsProvider, build as build_provider,
+};
 use super::render::{render_plain_text, render_ssml};
+use super::spec::{CliOverrides, resolve as resolve_tts_spec};
 use super::template::TemplateSource;
 
 /// A fully-prepared synthesis job. Holds the provider-ready payload, the
@@ -172,6 +177,72 @@ impl TtsService {
     ) -> Result<String, TtsError> {
         media.ensure_uploaded(&prepared.filename, bytes)
     }
+}
+
+/// A `TtsService` bundled with its Anki media store. The generate
+/// pipeline builds this once per session when `frontmatter.tts` is
+/// present and shares it with both the preview path and the import-time
+/// finalizer so they hit the same cache and the same upload-dedup map.
+pub struct TtsBundle {
+    pub service: Arc<TtsService>,
+    pub media: Arc<AnkiMediaStore>,
+}
+
+/// Inputs needed to build a `TtsBundle` from a `TtsSpec`. Mirrors the
+/// subset of `CliOverrides` that generate-side callers actually have —
+/// generate only carries `api_key` / `api_base_url`; Azure region falls
+/// back to env/config via `spec::resolve`.
+pub struct TtsBundleOptions<'a> {
+    pub api_key: Option<&'a str>,
+    pub api_base_url: Option<&'a str>,
+    pub azure_region: Option<&'a str>,
+}
+
+/// Build a `TtsBundle` from a prompt-file `TtsSpec` plus an existing
+/// `AnkiClient`. Re-uses `spec::resolve` for provider/env/config
+/// fallbacks so generate and standalone `tts --prompt` land on identical
+/// credentials.
+pub fn build_bundle(
+    spec: &TtsSpec,
+    anki: AnkiClient,
+    opts: TtsBundleOptions<'_>,
+) -> Result<TtsBundle> {
+    // `spec::resolve` needs a full `CliOverrides`; fill batch fields with
+    // values that never drive generate's finalization (no --batch-size,
+    // no --retries, no --force, no --dry-run here — those belong to the
+    // standalone `tts` command, not to generate).
+    let overrides = CliOverrides {
+        api_key: opts.api_key,
+        api_base_url: opts.api_base_url,
+        azure_region: opts.azure_region,
+        batch_size: 1,
+        retries: 0,
+        force: false,
+        dry_run: false,
+    };
+    let resolved = resolve_tts_spec(spec, &overrides)?;
+
+    let endpoint_identity = resolved.provider.endpoint_identity();
+    let provider = build_provider(resolved.provider.clone().into_selection());
+
+    let cache_dir = TtsCache::default_dir()
+        .context("failed to locate cache directory (home dir unavailable)")?;
+    let cache = Arc::new(TtsCache::new(cache_dir).context("failed to initialize TTS cache")?);
+    let media = Arc::new(AnkiMediaStore::new(anki));
+
+    let service = Arc::new(TtsService::new(TtsServiceConfig {
+        provider,
+        cache,
+        source: Arc::new(resolved.source),
+        target_field: resolved.target,
+        voice: resolved.voice,
+        model: resolved.model,
+        format: resolved.format,
+        speed: resolved.speed,
+        endpoint: endpoint_identity,
+    }));
+
+    Ok(TtsBundle { service, media })
 }
 
 /// Project an Anki-keyed row (or field map) through `field_map` into an
