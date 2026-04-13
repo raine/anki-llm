@@ -183,9 +183,7 @@ mod tests {
         // This test assumes the environment does not carry an OPENAI_API_KEY
         // / ANKI_LLM_API_KEY. If it does, skip the assertion — `resolve` is
         // doing the right thing using real env vars.
-        if std::env::var("OPENAI_API_KEY").is_ok()
-            || std::env::var("ANKI_LLM_API_KEY").is_ok()
-        {
+        if std::env::var("OPENAI_API_KEY").is_ok() || std::env::var("ANKI_LLM_API_KEY").is_ok() {
             return;
         }
         match resolve(&spec(Some("front"), None), &overrides) {

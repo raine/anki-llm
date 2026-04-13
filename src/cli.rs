@@ -51,55 +51,47 @@ pub enum Commands {
 }
 
 #[derive(clap::Args)]
-#[command(group(
-    clap::ArgGroup::new("source")
-        .required(true)
-        .args(["deck", "query"])
-        .multiple(false)
-))]
-#[command(group(
-    clap::ArgGroup::new("text_source")
-        .required(true)
-        .args(["template", "text_field"])
-        .multiple(false)
-))]
 pub struct TtsArgs {
-    /// Deck name to process
+    /// Deck name to process (defaults to deck from --prompt frontmatter)
     pub deck: Option<String>,
 
     /// Anki search query (e.g. "tag:leech", "deck:Japanese -Audio:")
     #[arg(long, short = 'q')]
     pub query: Option<String>,
 
-    /// Target field to write [sound:...] into
+    /// Path to generate prompt YAML; reads `tts:` block from frontmatter
     #[arg(long)]
-    pub field: String,
+    pub prompt: Option<PathBuf>,
 
-    /// Path to prompt template file (expanded per row with `{field}` placeholders)
+    /// Target field to write [sound:...] into (legacy flag-only mode)
+    #[arg(long)]
+    pub field: Option<String>,
+
+    /// Path to prompt template file (legacy flag-only mode)
     #[arg(long, short = 'p')]
     pub template: Option<PathBuf>,
 
-    /// Source field name (alternative to --template; speaks the raw field)
+    /// Source field name (legacy flag-only mode; alternative to --template)
     #[arg(long = "text-field")]
     pub text_field: Option<String>,
 
-    /// TTS provider identifier
-    #[arg(long, default_value = "openai")]
-    pub provider: String,
+    /// TTS provider identifier (legacy flag-only mode; defaults to "openai")
+    #[arg(long)]
+    pub provider: Option<String>,
 
-    /// Voice name (provider-specific, e.g. alloy, nova, shimmer)
+    /// Voice name (legacy flag-only mode; provider-specific, e.g. alloy)
     #[arg(long)]
     pub voice: Option<String>,
 
-    /// TTS backing model (e.g. gpt-4o-mini-tts)
+    /// TTS backing model (legacy flag-only mode; e.g. gpt-4o-mini-tts)
     #[arg(long = "tts-model")]
     pub tts_model: Option<String>,
 
-    /// Output audio format
-    #[arg(long, default_value = "mp3")]
-    pub format: String,
+    /// Output audio format (legacy flag-only mode; defaults to "mp3")
+    #[arg(long)]
+    pub format: Option<String>,
 
-    /// Playback speed (e.g. 1.0 = normal)
+    /// Playback speed (legacy flag-only mode; 1.0 = normal)
     #[arg(long)]
     pub speed: Option<f32>,
 
@@ -111,7 +103,7 @@ pub struct TtsArgs {
     #[arg(long)]
     pub api_key: Option<String>,
 
-    /// Filter by note type (required if deck contains multiple note types)
+    /// Filter by note type (legacy flag-only mode; rejected in --prompt mode)
     #[arg(long, short = 'n')]
     pub note_type: Option<String>,
 

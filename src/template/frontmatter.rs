@@ -188,7 +188,7 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
             ));
         }
         if let Some(speed) = tts.speed
-            && !(speed > 0.0)
+            && speed <= 0.0
         {
             return Err(TemplateError::InvalidFrontmatter(
                 "tts.speed must be > 0".into(),
@@ -441,10 +441,7 @@ tts:
 body";
         let parsed = parse_prompt_file(content).unwrap();
         let tts = parsed.frontmatter.tts.unwrap();
-        assert_eq!(
-            tts.source.template.as_deref(),
-            Some("{front} - {back}")
-        );
+        assert_eq!(tts.source.template.as_deref(), Some("{front} - {back}"));
         assert_eq!(tts.model.as_deref(), Some("gpt-4o-mini-tts"));
         assert_eq!(tts.speed, Some(1.25));
     }

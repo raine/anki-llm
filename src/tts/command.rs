@@ -16,12 +16,14 @@ use crate::batch::session::{BatchSession, SharedSession};
 use crate::cli::TtsArgs;
 use crate::data::Row;
 use crate::data::slug::slugify_deck_name;
+use crate::template::frontmatter::parse_prompt_file;
 
 use super::cache::TtsCache;
 use super::media::AnkiMediaStore;
 use super::process_row::{TtsProcessConfig, build_tts_process_fn};
 use super::provider::build as build_provider;
 use super::runtime::{TtsRuntimeArgs, build_tts_runtime};
+use super::spec::{CliOverrides, ResolvedTtsSpec, resolve as resolve_tts_spec};
 use super::template::TemplateSource;
 
 fn deck_row_id(row: &Row) -> String {
@@ -150,10 +152,171 @@ impl BatchSession for TtsDeckSession {
     }
 }
 
+/// Dispatcher: branch on whether the user passed `--prompt <file>`.
 pub fn run(args: TtsArgs) -> Result<()> {
-    let anki = AnkiClient::new();
+    if args.prompt.is_some() {
+        run_prompt_mode(args)
+    } else {
+        run_legacy_mode(args)
+    }
+}
 
-    eprintln!("Fetching notes...");
+fn reject_legacy_flags_in_prompt_mode(args: &TtsArgs) -> Result<()> {
+    let mut bad: Vec<&'static str> = Vec::new();
+    if args.field.is_some() {
+        bad.push("--field");
+    }
+    if args.template.is_some() {
+        bad.push("--template");
+    }
+    if args.text_field.is_some() {
+        bad.push("--text-field");
+    }
+    if args.provider.is_some() {
+        bad.push("--provider");
+    }
+    if args.voice.is_some() {
+        bad.push("--voice");
+    }
+    if args.tts_model.is_some() {
+        bad.push("--tts-model");
+    }
+    if args.format.is_some() {
+        bad.push("--format");
+    }
+    if args.speed.is_some() {
+        bad.push("--speed");
+    }
+    if args.note_type.is_some() {
+        bad.push("--note-type");
+    }
+    if !bad.is_empty() {
+        bail!(
+            "these flags are not allowed with --prompt (edit the YAML instead): {}",
+            bad.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn run_prompt_mode(args: TtsArgs) -> Result<()> {
+    reject_legacy_flags_in_prompt_mode(&args)?;
+
+    let prompt_path = args.prompt.as_ref().expect("checked by dispatcher");
+    let content = std::fs::read_to_string(prompt_path)
+        .with_context(|| format!("failed to read prompt file {}", prompt_path.display()))?;
+    let parsed = parse_prompt_file(&content).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let tts_spec = parsed
+        .frontmatter
+        .tts
+        .as_ref()
+        .context("prompt file has no `tts:` block")?;
+
+    let overrides = CliOverrides {
+        api_key: args.api_key.as_deref(),
+        api_base_url: args.api_base_url.as_deref(),
+        batch_size: args.batch_size,
+        retries: args.retries,
+        force: args.force,
+        dry_run: args.dry_run,
+    };
+    let resolved = resolve_tts_spec(tts_spec, &overrides)?;
+
+    // Query: --query wins; otherwise derive from deck + frontmatter.note_type.
+    let query = if let Some(ref q) = args.query {
+        q.clone()
+    } else {
+        let deck = args.deck.as_deref().unwrap_or(&parsed.frontmatter.deck);
+        format!(
+            "deck:{} note:{}",
+            anki_quote(deck),
+            anki_quote(&parsed.frontmatter.note_type)
+        )
+    };
+    let source_label = if let Some(ref q) = args.query {
+        format!("query '{q}'")
+    } else {
+        let deck = args.deck.as_deref().unwrap_or(&parsed.frontmatter.deck);
+        format!("deck '{deck}'")
+    };
+
+    let field_map = parsed.frontmatter.field_map.clone();
+    let expected_note_type = parsed.frontmatter.note_type.clone();
+    run_with_resolved(
+        &args,
+        AnkiClient::new(),
+        query,
+        source_label,
+        resolved,
+        Some(&field_map),
+        Some(&expected_note_type),
+    )
+}
+
+fn run_legacy_mode(args: TtsArgs) -> Result<()> {
+    eprintln!(
+        "warning: `anki-llm tts` flag-only mode is deprecated; \
+         define a `tts:` block in your prompt YAML and pass --prompt"
+    );
+
+    // Manual enforcement of the old clap ArgGroups, now that they've been
+    // dropped so --prompt mode can reuse the same struct.
+    if args.deck.is_none() && args.query.is_none() {
+        bail!("exactly one of <deck> or --query is required");
+    }
+    if args.deck.is_some() && args.query.is_some() {
+        bail!("<deck> and --query are mutually exclusive");
+    }
+    match (&args.template, &args.text_field) {
+        (Some(_), Some(_)) => bail!("--template and --text-field are mutually exclusive"),
+        (None, None) => bail!("exactly one of --template or --text-field is required"),
+        _ => {}
+    }
+    let field = args
+        .field
+        .clone()
+        .context("--field is required in legacy flag-only mode")?;
+
+    let runtime = build_tts_runtime(TtsRuntimeArgs {
+        provider: Some(args.provider.as_deref().unwrap_or("openai")),
+        voice: args.voice.as_deref(),
+        tts_model: args.tts_model.as_deref(),
+        format: Some(args.format.as_deref().unwrap_or("mp3")),
+        speed: args.speed,
+        api_key: args.api_key.as_deref(),
+        api_base_url: args.api_base_url.as_deref(),
+        batch_size: args.batch_size,
+        retries: args.retries,
+        force: args.force,
+        dry_run: args.dry_run,
+    })?;
+
+    let source = match (&args.template, &args.text_field) {
+        (Some(path), None) => TemplateSource::load_file(path.clone())?,
+        (None, Some(f)) => TemplateSource::field(f.clone()),
+        _ => unreachable!("checked above"),
+    };
+
+    // Reshape the legacy TtsRuntime into the unified ResolvedTtsSpec so the
+    // shared body has a single input type. This is a shim, not a merge —
+    // build_tts_runtime is still responsible for legacy-mode defaulting
+    // (including AppConfig.tts_* fallbacks).
+    let resolved = ResolvedTtsSpec {
+        provider: runtime.provider,
+        voice: runtime.voice,
+        model: runtime.model,
+        format: runtime.format,
+        speed: runtime.speed,
+        api_key: runtime.api_key,
+        api_base_url: runtime.api_base_url,
+        target: field,
+        source,
+        batch_size: runtime.batch_size,
+        retries: runtime.retries,
+        force: runtime.force,
+        dry_run: runtime.dry_run,
+    };
+
     let mut query = if let Some(ref q) = args.query {
         q.clone()
     } else {
@@ -162,13 +325,33 @@ pub fn run(args: TtsArgs) -> Result<()> {
     if let Some(ref nt) = args.note_type {
         query.push_str(&format!(" note:{}", anki_quote(nt)));
     }
-
     let source_label = args
         .deck
         .as_deref()
         .map(|d| format!("deck '{d}'"))
         .unwrap_or_else(|| format!("query '{query}'"));
 
+    run_with_resolved(
+        &args,
+        AnkiClient::new(),
+        query,
+        source_label,
+        resolved,
+        None,
+        args.note_type.as_deref(),
+    )
+}
+
+fn run_with_resolved(
+    args: &TtsArgs,
+    anki: AnkiClient,
+    query: String,
+    source_label: String,
+    resolved: ResolvedTtsSpec,
+    field_map_for_projection: Option<&IndexMap<String, String>>,
+    expected_note_type: Option<&str>,
+) -> Result<()> {
+    eprintln!("Fetching notes...");
     let mut note_ids = anki
         .find_notes(&query)
         .context("failed to query Anki for notes")?;
@@ -197,7 +380,10 @@ pub fn run(args: TtsArgs) -> Result<()> {
         .context("failed to fetch note details from Anki")?;
     eprintln!("Loaded {} notes", notes_info.len());
 
-    if args.note_type.is_none() && !notes_info.is_empty() {
+    // Mixed note type check. In legacy mode we only warn when the user
+    // didn't pass --note-type; in prompt mode the frontmatter note_type
+    // is always known, so we require every row to match.
+    if expected_note_type.is_none() && !notes_info.is_empty() {
         let first_model = &notes_info[0].model_name;
         let mixed: Vec<_> = notes_info
             .iter()
@@ -218,20 +404,39 @@ pub fn run(args: TtsArgs) -> Result<()> {
                     .join(", ")
             );
         }
+    } else if let Some(expected) = expected_note_type {
+        let wrong: Vec<_> = notes_info
+            .iter()
+            .filter(|n| n.model_name != expected)
+            .map(|n| n.model_name.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        if !wrong.is_empty() {
+            bail!(
+                "query returned notes of unexpected note types: {}. \
+                 Expected '{expected}'.",
+                wrong
+                    .iter()
+                    .map(|m| format!("'{m}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
     }
 
-    // Convert note info to Row, validate target field exists on note type.
+    // Validate target field exists on the (uniform) note type.
     if let Some(first) = notes_info.first()
-        && !first.fields.contains_key(&args.field)
+        && !first.fields.contains_key(&resolved.target)
     {
         bail!(
             "note type '{}' has no field named '{}'",
             first.model_name,
-            args.field
+            resolved.target
         );
     }
 
-    let rows: Vec<Row> = notes_info
+    let mut rows: Vec<Row> = notes_info
         .into_iter()
         .map(|note| {
             let mut row: Row = IndexMap::new();
@@ -243,6 +448,24 @@ pub fn run(args: TtsArgs) -> Result<()> {
             row
         })
         .collect();
+
+    // In prompt mode, alias each field_map key to the same value as its
+    // Anki field name so `tts.source.field: expression` / `{expression}`
+    // placeholders resolve against the Anki-keyed row. The aliases are
+    // additive; the original Anki-name entries stay intact, so
+    // DeckWriter still serializes real Anki fields back unchanged.
+    if let Some(field_map) = field_map_for_projection {
+        for row in &mut rows {
+            for (llm_key, anki_name) in field_map {
+                if llm_key == anki_name {
+                    continue;
+                }
+                if let Some(value) = row.get(anki_name).cloned() {
+                    row.insert(llm_key.clone(), value);
+                }
+            }
+        }
+    }
 
     let before_fields: IndexMap<i64, IndexMap<String, String>> = rows
         .iter()
@@ -283,17 +506,18 @@ pub fn run(args: TtsArgs) -> Result<()> {
         }
     }
 
-    // Skip rows whose target field is already populated — either with a
-    // [sound:...] tag (already has audio) or with plain text we'd be
-    // about to clobber on replace. Users who know what they're doing can
-    // pass --force to overwrite.
+    // Skip rows whose target field is already populated. Users who know
+    // what they're doing can pass --force to overwrite.
     let total_before_skip = rows.len();
-    let rows_to_process: Vec<Row> = if args.force {
+    let rows_to_process: Vec<Row> = if resolved.force {
         rows
     } else {
         rows.into_iter()
             .filter(|row| {
-                let existing = row.get(&args.field).and_then(|v| v.as_str()).unwrap_or("");
+                let existing = row
+                    .get(&resolved.target)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 existing.trim().is_empty()
             })
             .collect()
@@ -302,7 +526,7 @@ pub fn run(args: TtsArgs) -> Result<()> {
     if skipped > 0 {
         eprintln!(
             "Skipping {skipped} notes with non-empty {} field (use --force to regenerate)",
-            args.field
+            resolved.target
         );
     }
     if rows_to_process.is_empty() {
@@ -310,38 +534,16 @@ pub fn run(args: TtsArgs) -> Result<()> {
         return Ok(());
     }
 
-    // Build TTS runtime from CLI + config + env
-    let runtime = build_tts_runtime(TtsRuntimeArgs {
-        provider: Some(args.provider.as_str()),
-        voice: args.voice.as_deref(),
-        tts_model: args.tts_model.as_deref(),
-        format: Some(args.format.as_str()),
-        speed: args.speed,
-        api_key: args.api_key.as_deref(),
-        api_base_url: args.api_base_url.as_deref(),
-        batch_size: args.batch_size,
-        retries: args.retries,
-        force: args.force,
-        dry_run: args.dry_run,
-    })?;
-
-    // Source: template file xor direct field reference.
-    let source = match (&args.template, &args.text_field) {
-        (Some(path), None) => TemplateSource::load_file(path.clone())?,
-        (None, Some(field)) => TemplateSource::field(field.clone()),
-        _ => bail!("exactly one of --template or --text-field is required"),
-    };
-
-    if args.dry_run {
+    if resolved.dry_run {
         eprintln!("\n--- DRY RUN MODE ---");
-        eprintln!("Provider: {}", runtime.provider);
-        eprintln!("Voice:    {}", runtime.voice);
-        if let Some(ref m) = runtime.model {
+        eprintln!("Provider: {}", resolved.provider);
+        eprintln!("Voice:    {}", resolved.voice);
+        if let Some(ref m) = resolved.model {
             eprintln!("Model:    {m}");
         }
-        eprintln!("Source:   {}", source.display_label());
+        eprintln!("Source:   {}", resolved.source.display_label());
         if let Some(first) = rows_to_process.first() {
-            match source.expand(first) {
+            match resolved.source.expand(first) {
                 Ok(text) => {
                     let normalized = super::text::normalize(&text);
                     eprintln!("\nSample raw:        {text}");
@@ -354,9 +556,9 @@ pub fn run(args: TtsArgs) -> Result<()> {
     }
 
     let provider = build_provider(
-        &runtime.provider,
-        runtime.api_key.clone(),
-        runtime.api_base_url.clone(),
+        &resolved.provider,
+        resolved.api_key.clone(),
+        resolved.api_base_url.clone(),
     )
     .map_err(anyhow::Error::msg)?;
 
@@ -365,18 +567,18 @@ pub fn run(args: TtsArgs) -> Result<()> {
     let cache = Arc::new(TtsCache::new(cache_dir).context("failed to initialize TTS cache")?);
     let media = Arc::new(AnkiMediaStore::new(AnkiClient::new()));
 
-    let source = Arc::new(source);
+    let source = Arc::new(resolved.source.clone());
     let process_fn = build_tts_process_fn(TtsProcessConfig {
         provider,
         cache,
         media,
         source: Arc::clone(&source),
-        target_field: args.field.clone(),
-        voice: runtime.voice.clone(),
-        model: runtime.model.clone(),
-        format: runtime.format,
-        speed: runtime.speed,
-        api_base_url: runtime.api_base_url.clone(),
+        target_field: resolved.target.clone(),
+        voice: resolved.voice.clone(),
+        model: resolved.model.clone(),
+        format: resolved.format,
+        speed: resolved.speed,
+        api_base_url: resolved.api_base_url.clone(),
     });
 
     let source_name = args
@@ -389,7 +591,7 @@ pub fn run(args: TtsArgs) -> Result<()> {
 
     let writer = Arc::new(DeckWriter::new(
         anki,
-        runtime.batch_size as usize,
+        resolved.batch_size as usize,
         error_log_path,
         before_fields,
     )?);
@@ -402,8 +604,8 @@ pub fn run(args: TtsArgs) -> Result<()> {
         model: None,
         prompt_path: None,
         output_mode: None,
-        batch_size: runtime.batch_size,
-        retries: runtime.retries,
+        batch_size: resolved.batch_size,
+        retries: resolved.retries,
         sample_prompt: None,
         metrics_label: "Characters",
         show_cost: false,
@@ -414,15 +616,15 @@ pub fn run(args: TtsArgs) -> Result<()> {
             },
             InfoField {
                 label: "Field".into(),
-                value: args.field.clone(),
+                value: resolved.target.clone(),
             },
             InfoField {
                 label: "Voice".into(),
-                value: format!("{} ({})", runtime.voice, runtime.provider),
+                value: format!("{} ({})", resolved.voice, resolved.provider),
             },
             InfoField {
                 label: "Text".into(),
-                value: source.display_label(),
+                value: resolved.source.display_label(),
             },
         ],
     };
@@ -435,8 +637,8 @@ pub fn run(args: TtsArgs) -> Result<()> {
     });
 
     let controller_runtime = ControllerRuntime {
-        batch_size: runtime.batch_size,
-        retries: runtime.retries,
+        batch_size: resolved.batch_size,
+        retries: resolved.retries,
         model: None,
     };
     let summary = run_batch_controller(plan, &controller_runtime, rows_to_process, session)?;
