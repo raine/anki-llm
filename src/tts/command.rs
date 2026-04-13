@@ -589,7 +589,7 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
         model: resolved.model.clone(),
         format: resolved.format,
         speed: resolved.speed,
-        api_base_url: resolved.api_base_url.clone(),
+        endpoint: resolved.api_base_url.clone(),
         field_map: field_map_for_projection.cloned(),
     });
 

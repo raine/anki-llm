@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use super::{SynthesisRequest, TtsProvider};
+use super::{SynthesisRequest, TextFormat, TtsProvider};
 use crate::tts::error::TtsError;
 
 const DEFAULT_BASE: &str = "https://api.openai.com/v1";
@@ -45,11 +45,15 @@ impl TtsProvider for OpenAiTtsProvider {
         "openai"
     }
 
+    fn text_format(&self) -> TextFormat {
+        TextFormat::PlainText
+    }
+
     fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {
         let url = format!("{}/audio/speech", self.base_url);
         let body = SpeechRequest {
             model: req.model.as_deref().unwrap_or(DEFAULT_MODEL),
-            input: &req.text,
+            input: &req.payload,
             voice: &req.voice,
             response_format: req.format.ext(),
             speed: req.speed,
@@ -83,7 +87,10 @@ impl TtsProvider for OpenAiTtsProvider {
             .read_to_end(&mut buf)
             .map_err(|e| TtsError::Transient(format!("body read failed: {e}")))?;
         if buf.is_empty() {
-            return Err(TtsError::Permanent("empty audio response".to_string()));
+            // Treat a zero-byte 200 OK as a transport glitch rather than a
+            // permanent client error — the server accepted the request but
+            // returned nothing, which is almost always retryable.
+            return Err(TtsError::Transient("empty audio response".to_string()));
         }
         Ok(buf)
     }

@@ -2,11 +2,6 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
-/// Cache schema version. Bump this when normalization rules change so that
-/// previously-cached audio is invalidated instead of silently serving audio
-/// that was generated from a slightly different spoken text.
-pub const NORMALIZATION_VERSION: u32 = 1;
-
 static HTML_TAG: OnceLock<Regex> = OnceLock::new();
 static CLOZE: OnceLock<Regex> = OnceLock::new();
 static SOUND_TAG: OnceLock<Regex> = OnceLock::new();
