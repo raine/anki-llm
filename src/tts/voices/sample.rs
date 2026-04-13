@@ -12,7 +12,7 @@ pub fn pangram_for(lang: &str) -> &'static str {
         "en" => {
             "The quick brown fox jumps over the lazy dog. She sells sea shells by the seashore."
         }
-        "ja" => "いろはにほへと ちりぬるを わかよたれそ つねならむ。",
+        "ja" => "これは日本語の音声サンプルです。今日の天気は晴れで、風が少し冷たいです。",
         "zh" | "cmn" | "yue" => "天地玄黄，宇宙洪荒。日月盈昃，辰宿列张。",
         "ko" => "다람쥐 헌 쳇바퀴에 타고파.",
         "de" => "Falsches Üben von Xylophonmusik quält jeden größeren Zwerg.",
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn known_languages_have_native_samples() {
-        assert!(pangram_for("ja-JP").contains("いろは"));
+        assert!(pangram_for("ja-JP").contains("音声サンプル"));
         assert!(pangram_for("de-DE").contains("Xylophon"));
         assert!(pangram_for("fr-FR").contains("whisky"));
     }
