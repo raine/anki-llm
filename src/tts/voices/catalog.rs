@@ -7,7 +7,7 @@
 
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderId {
     Openai,
@@ -107,31 +107,76 @@ pub fn load_snapshot() -> Vec<VoiceEntry> {
     serde_json::from_str(SNAPSHOT).expect("tts/voices/snapshot.json is malformed")
 }
 
-/// Filter result: indices into the input slice, in ranked order.
+/// Structured filter state driven by the TUI chip row + modal pickers.
 ///
-/// Ranking rules:
-/// - If `lang_filter` is set, only voices whose primary or any listed
-///   language starts with it (case-insensitive) are kept. Multilingual
-///   voices are kept regardless.
-/// - If `provider_filter` is set, non-matching voices are dropped.
-/// - Omni-query is split on whitespace; each token must appear as a
-///   case-insensitive substring in the voice's searchable text. Empty
-///   query keeps everything.
-pub fn filter(
-    entries: &[VoiceEntry],
-    query: &str,
-    lang_filter: Option<&str>,
-    provider_filter: Option<ProviderId>,
-) -> Vec<usize> {
-    let tokens: Vec<String> = query
-        .split_whitespace()
-        .map(|t| t.to_ascii_lowercase())
-        .collect();
-    let lang_lc = lang_filter.map(|s| s.to_ascii_lowercase());
+/// `text` is a free-form substring match against voice id + display
+/// name only. Structured facets (`provider`, `language`, `gender`,
+/// `engine`, `tags`) own everything else.
+#[derive(Debug, Clone, Default)]
+pub struct VoiceFilters {
+    pub provider: Option<ProviderId>,
+    /// BCP-47 prefix (e.g. `ja`, `ja-JP`). Matches voices whose primary
+    /// or any listed language equals or starts with the prefix.
+    /// Multilingual voices (OpenAI) are always kept.
+    pub language: Option<String>,
+    pub gender: Option<String>,
+    /// Polly `Engine` (`standard`, `neural`, `generative`, `long-form`).
+    /// Other providers carry an empty `preview_model` and always pass.
+    pub engine: Option<String>,
+    /// Required tags — ALL must be present on the entry.
+    pub tags: Vec<String>,
+    /// Free-text substring over voice_id + display_name (case-insensitive).
+    pub text: String,
+}
+
+impl VoiceFilters {
+    pub fn is_empty(&self) -> bool {
+        self.provider.is_none()
+            && self.language.is_none()
+            && self.gender.is_none()
+            && self.engine.is_none()
+            && self.tags.is_empty()
+            && self.text.is_empty()
+    }
+
+    pub fn active_count(&self) -> usize {
+        let mut n = 0;
+        if self.provider.is_some() {
+            n += 1;
+        }
+        if self.language.is_some() {
+            n += 1;
+        }
+        if self.gender.is_some() {
+            n += 1;
+        }
+        if self.engine.is_some() {
+            n += 1;
+        }
+        n += self.tags.len();
+        if !self.text.is_empty() {
+            n += 1;
+        }
+        n
+    }
+}
+
+/// Apply `filters` to `entries` and return the retained indices in
+/// original order.
+pub fn filter(entries: &[VoiceEntry], filters: &VoiceFilters) -> Vec<usize> {
+    let lang_lc = filters.language.as_deref().map(str::to_ascii_lowercase);
+    let gender_lc = filters.gender.as_deref().map(str::to_ascii_lowercase);
+    let engine_lc = filters.engine.as_deref().map(str::to_ascii_lowercase);
+    let text_lc = filters.text.to_ascii_lowercase();
+    let text_tokens: Vec<&str> = if text_lc.is_empty() {
+        Vec::new()
+    } else {
+        text_lc.split_whitespace().collect()
+    };
 
     let mut out: Vec<usize> = Vec::new();
     for (i, entry) in entries.iter().enumerate() {
-        if let Some(p) = provider_filter
+        if let Some(p) = filters.provider
             && entry.provider != p
         {
             continue;
@@ -146,15 +191,84 @@ pub fn filter(
                 continue;
             }
         }
-        if !tokens.is_empty() {
-            let hay = entry.searchable_text();
-            if !tokens.iter().all(|t| hay.contains(t)) {
+        if let Some(gender) = &gender_lc {
+            match &entry.gender {
+                Some(g) if g.to_ascii_lowercase() == *gender => {}
+                _ => continue,
+            }
+        }
+        if let Some(engine) = &engine_lc {
+            match &entry.preview_model {
+                Some(m) if m.to_ascii_lowercase() == *engine => {}
+                _ => continue,
+            }
+        }
+        if !filters.tags.is_empty() {
+            let have: std::collections::HashSet<&str> =
+                entry.tags.iter().map(String::as_str).collect();
+            let all_present = filters.tags.iter().all(|t| have.contains(t.as_str()));
+            if !all_present {
+                continue;
+            }
+        }
+        if !text_tokens.is_empty() {
+            let id_lc = entry.voice_id.to_ascii_lowercase();
+            let name_lc = entry.display_name.to_ascii_lowercase();
+            let all_match = text_tokens
+                .iter()
+                .all(|t| id_lc.contains(t) || name_lc.contains(t));
+            if !all_match {
                 continue;
             }
         }
         out.push(i);
     }
     out
+}
+
+/// Precomputed facet options for the modal pickers: unique values
+/// and the count of voices having each value, sorted for display.
+/// Built once at startup from the catalog snapshot.
+#[derive(Debug, Clone, Default)]
+pub struct FacetCatalog {
+    pub providers: Vec<(ProviderId, usize)>,
+    pub languages: Vec<(String, usize)>,
+    pub genders: Vec<(String, usize)>,
+    pub engines: Vec<(String, usize)>,
+    pub tags: Vec<(String, usize)>,
+}
+
+pub fn build_facets(entries: &[VoiceEntry]) -> FacetCatalog {
+    use std::collections::BTreeMap;
+    let mut providers: BTreeMap<ProviderId, usize> = BTreeMap::new();
+    let mut languages: BTreeMap<String, usize> = BTreeMap::new();
+    let mut genders: BTreeMap<String, usize> = BTreeMap::new();
+    let mut engines: BTreeMap<String, usize> = BTreeMap::new();
+    let mut tags: BTreeMap<String, usize> = BTreeMap::new();
+
+    for entry in entries {
+        *providers.entry(entry.provider).or_default() += 1;
+        for lang in &entry.languages {
+            *languages.entry(lang.clone()).or_default() += 1;
+        }
+        if let Some(g) = &entry.gender {
+            *genders.entry(g.clone()).or_default() += 1;
+        }
+        if let Some(m) = &entry.preview_model {
+            *engines.entry(m.clone()).or_default() += 1;
+        }
+        for t in &entry.tags {
+            *tags.entry(t.clone()).or_default() += 1;
+        }
+    }
+
+    FacetCatalog {
+        providers: providers.into_iter().collect(),
+        languages: languages.into_iter().collect(),
+        genders: genders.into_iter().collect(),
+        engines: engines.into_iter().collect(),
+        tags: tags.into_iter().collect(),
+    }
 }
 
 #[cfg(test)]
@@ -182,7 +296,13 @@ mod tests {
     #[test]
     fn filter_by_language_narrows_to_ja() {
         let entries = load();
-        let ids = filter(&entries, "", Some("ja"), None);
+        let ids = filter(
+            &entries,
+            &VoiceFilters {
+                language: Some("ja".into()),
+                ..VoiceFilters::default()
+            },
+        );
         assert!(!ids.is_empty());
         for i in &ids {
             let e = &entries[*i];
@@ -196,7 +316,13 @@ mod tests {
     #[test]
     fn filter_by_provider_narrows_to_azure() {
         let entries = load();
-        let ids = filter(&entries, "", None, Some(ProviderId::Azure));
+        let ids = filter(
+            &entries,
+            &VoiceFilters {
+                provider: Some(ProviderId::Azure),
+                ..VoiceFilters::default()
+            },
+        );
         assert!(!ids.is_empty());
         assert!(
             ids.iter()
@@ -205,18 +331,36 @@ mod tests {
     }
 
     #[test]
-    fn filter_query_requires_all_tokens() {
+    fn text_search_matches_voice_id_and_name() {
         let entries = load();
         let ids = filter(
             &entries,
-            "nanami neural",
-            Some("ja"),
-            Some(ProviderId::Azure),
+            &VoiceFilters {
+                provider: Some(ProviderId::Azure),
+                language: Some("ja".into()),
+                text: "nanami".into(),
+                ..VoiceFilters::default()
+            },
         );
         assert!(
             ids.iter().any(|i| entries[*i].voice_id.contains("Nanami")),
             "expected NanamiNeural in filtered results"
         );
+    }
+
+    #[test]
+    fn build_facets_collects_sorted_values() {
+        let entries = load();
+        let facets = build_facets(&entries);
+        assert_eq!(facets.providers.len(), 4);
+        assert!(
+            facets
+                .providers
+                .iter()
+                .any(|(p, _)| *p == ProviderId::Amazon)
+        );
+        assert!(facets.languages.iter().any(|(lang, _)| lang == "ja-JP"));
+        assert!(facets.tags.iter().any(|(tag, _)| tag == "neural"));
     }
 
     #[test]
