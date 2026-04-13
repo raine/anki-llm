@@ -48,6 +48,24 @@ pub enum Commands {
     Rollback(RollbackArgs),
     /// Generate text-to-speech audio for notes and upload to Anki's media store
     Tts(TtsArgs),
+    /// Browse and audition TTS voices across OpenAI / Azure / Google / Polly
+    #[command(name = "tts-voices")]
+    TtsVoices(VoicesArgs),
+}
+
+#[derive(clap::Args)]
+pub struct VoicesArgs {
+    /// Pre-filter by language code prefix, e.g. "ja" or "en-US".
+    #[arg(long)]
+    pub lang: Option<String>,
+
+    /// Pre-filter by provider id (openai, azure, google, amazon).
+    #[arg(long)]
+    pub provider: Option<String>,
+
+    /// Initial text query for the omni-search field.
+    #[arg(long, short = 'q')]
+    pub query: Option<String>,
 }
 
 #[derive(clap::Args)]

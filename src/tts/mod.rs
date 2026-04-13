@@ -11,3 +11,4 @@ pub mod service;
 pub mod spec;
 pub mod template;
 pub mod text;
+pub mod voices;

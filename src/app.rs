@@ -15,5 +15,6 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::History => crate::snapshot::command_history::run(),
         Commands::Rollback(args) => crate::snapshot::command_rollback::run(args),
         Commands::Tts(args) => crate::tts::command::run(args),
+        Commands::TtsVoices(args) => crate::tts::voices::command::run(args),
     }
 }

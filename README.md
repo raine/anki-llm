@@ -70,11 +70,11 @@ interactively, and add selected cards to your deck.
   (file mode).
 - **Copy mode**: Alternatively, generate cards without API keys by pasting LLM
   responses from browser interfaces (ChatGPT, Claude, etc.).
-- **TTS audio**: Generate text-to-speech audio for notes with
-  `anki-llm tts` (bulk-fill existing decks) or `anki-llm generate`
-  (auto-finalize audio for newly generated cards at import time, with
-  an in-TUI preview hotkey). Cached on disk, uploaded via AnkiConnect's
-  `storeMediaFile`, and written as `[sound:...]` tags.
+- **TTS audio**: Generate text-to-speech audio for notes with `anki-llm tts`
+  (bulk-fill existing decks) or `anki-llm generate` (auto-finalize audio for
+  newly generated cards at import time, with an in-TUI preview hotkey). Cached
+  on disk, uploaded via AnkiConnect's `storeMediaFile`, and written as
+  `[sound:...]` tags.
 
 ## Installation
 
@@ -289,6 +289,8 @@ field_map:
 - [`generate-init`](#anki-llm-generate-init-output) - Create prompt template for
   generate
 - [`generate`](#anki-llm-generate-term) - Generate new cards for a term
+- [`tts`](#anki-llm-tts) - Generate TTS audio for notes and upload to Anki
+- [`tts-voices`](#anki-llm-tts-voices) - Browse and audition TTS voices
 - [`query`](#anki-llm-query-action-params) - Query AnkiConnect API
 
 ### `anki-llm export`
@@ -392,11 +394,11 @@ failure triage with retry. Falls back to a progress bar when output is piped.
 
 **Prompt template:**
 
-The prompt file is a plain text file containing the instructions sent to the
-LLM for each note. Use `{field_name}` placeholders to inject values from the
-input file — for every row, each placeholder is replaced with that note's
-field value before the prompt is sent. Field names are case-insensitive, and
-unknown placeholders cause an error.
+The prompt file is a plain text file containing the instructions sent to the LLM
+for each note. Use `{field_name}` placeholders to inject values from the input
+file — for every row, each placeholder is replaced with that note's field value
+before the prompt is sent. Field names are case-insensitive, and unknown
+placeholders cause an error.
 
 For example, given an input row with `Japanese` and `English` fields:
 
@@ -410,9 +412,10 @@ Existing translation for reference: {English}
 Wrap your final answer in <result></result> tags.
 ```
 
-Combined with `--require-result-tag`, only the content inside `<result>` tags
-is saved, letting the model "think out loud" before committing to an answer.
-See the [translation walkthrough](#example-use-case-fixing-1000-japanese-translations)
+Combined with `--require-result-tag`, only the content inside `<result>` tags is
+saved, letting the model "think out loud" before committing to an answer. See
+the
+[translation walkthrough](#example-use-case-fixing-1000-japanese-translations)
 and [`examples/`](examples/) for complete prompts.
 
 **Workflow:**
@@ -564,9 +567,9 @@ To revert all changes from that run:
 anki-llm rollback 20260411T153000_123Z
 ```
 
-Use [`anki-llm history`](#anki-llm-history) to list past runs if you forgot
-the ID, or [`anki-llm rollback`](#anki-llm-rollback-run-id) for the full
-rollback options (dry-run, conflict handling).
+Use [`anki-llm history`](#anki-llm-history) to list past runs if you forgot the
+ID, or [`anki-llm rollback`](#anki-llm-rollback-run-id) for the full rollback
+options (dry-run, conflict handling).
 
 **Key features:**
 
@@ -764,13 +767,12 @@ card with feedback (e.g. "make the definition simpler"). Press `e` to edit a
 card in your `$EDITOR`. Press `d` to remove a card from the list, `c` to copy to
 clipboard. Switch model with `Ctrl+O` (type to filter, `Ctrl+N`/`Ctrl+P` to
 navigate). When cards from multiple models are present, each card shows its
-model. If the prompt declares a `tts:` block and a system audio player
-(`afplay` / `mpv` / `ffplay`) is on `PATH`, press `p` to preview the focused
-card's audio — synthesized once on first press, played back on demand from
-the local cache, with a second press toggling playback off. Selected cards
-get their audio finalized (synthesized + uploaded to Anki's media store)
-automatically at import time, so a cancelled run leaves no orphan media
-behind. Confirm with `Enter`.
+model. If the prompt declares a `tts:` block and a system audio player (`afplay`
+/ `mpv` / `ffplay`) is on `PATH`, press `p` to preview the focused card's audio
+— synthesized once on first press, played back on demand from the local cache,
+with a second press toggling playback off. Selected cards get their audio
+finalized (synthesized + uploaded to Anki's media store) automatically at import
+time, so a cancelled run leaves no orphan media behind. Confirm with `Enter`.
 
 **Quality check review** — If quality checking is enabled, flagged cards are
 presented one at a time with the LLM's reasoning. Keep (`k`/`y`/`Enter`) or
@@ -992,39 +994,37 @@ anki-llm generate
 
 ### `anki-llm tts`
 
-Generate text-to-speech audio for notes in an Anki deck and upload it to
-Anki's media store as `[sound:...]` tags in a target field. Streams notes
-directly from AnkiConnect, so there's no intermediate file to manage.
+Generate text-to-speech audio for notes in an Anki deck and upload it to Anki's
+media store as `[sound:...]` tags in a target field. Streams notes directly from
+AnkiConnect, so there's no intermediate file to manage.
 
-Audio is generated by a pluggable TTS provider (OpenAI, Azure Neural
-TTS, Google Cloud Text-to-Speech, and Amazon Polly are supported today),
-cached on disk, uploaded via AnkiConnect's `storeMediaFile`, and the
-target field is replaced with `[sound:<filename>]`.
+Audio is generated by a pluggable TTS provider (OpenAI, Azure Neural TTS, Google
+Cloud Text-to-Speech, and Amazon Polly are supported today), cached on disk,
+uploaded via AnkiConnect's `storeMediaFile`, and the target field is replaced
+with `[sound:<filename>]`.
 
-For Japanese decks, neural TTS voices routinely mis-read kanji that
-have multiple readings (e.g. `日本語` vs `ひのもとのことば`). The fix is
-to put the intended reading in the source field next to each kanji
-cluster using the convention `漢字[かんじ]`, and `anki-llm tts` routes
-that reading into the provider's native pronunciation mechanism:
+For Japanese decks, neural TTS voices routinely mis-read kanji that have
+multiple readings (e.g. `日本語` vs `ひのもとのことば`). The fix is to put the
+intended reading in the source field next to each kanji cluster using the
+convention `漢字[かんじ]`, and `anki-llm tts` routes that reading into the
+provider's native pronunciation mechanism:
 
-- **Azure Neural TTS** gets SSML with
-  `<sub alias="READING">SURFACE</sub>` substitutions. The
-  `ja-JP-MasaruMultilingualNeural` voice honors these natively — the
-  kanji surface is preserved in the SSML and the reading goes in the
-  `alias` attribute.
-- **OpenAI**, **Google Cloud TTS**, and **Amazon Polly** receive plain
-  text: the surface is dropped and only the kana reading is sent, so
-  `日本語[にほんご]を勉強[べんきょう]` becomes `にほんごをべんきょう`.
-  If you'd rather have the provider read the raw kanji directly, just
-  leave the `[reading]` annotations out of the source field — plain text
-  without annotations passes through unchanged.
+- **Azure Neural TTS** gets SSML with `<sub alias="READING">SURFACE</sub>`
+  substitutions. The `ja-JP-MasaruMultilingualNeural` voice honors these
+  natively — the kanji surface is preserved in the SSML and the reading goes in
+  the `alias` attribute.
+- **OpenAI**, **Google Cloud TTS**, and **Amazon Polly** receive plain text: the
+  surface is dropped and only the kana reading is sent, so
+  `日本語[にほんご]を勉強[べんきょう]` becomes `にほんごをべんきょう`. If you'd
+  rather have the provider read the raw kanji directly, just leave the
+  `[reading]` annotations out of the source field — plain text without
+  annotations passes through unchanged.
 
-Each `[...]` annotation is bound to the immediately preceding run of
-CJK characters, so mid-word splits like `転がり込[こ]んだ` and
-`お父[とう]さん` parse correctly. How the annotations get into the
-source field is up to you: write them by hand, generate them with
-`anki-llm generate` from an LLM prompt that emits the format, or paste
-them from any other tool.
+Each `[...]` annotation is bound to the immediately preceding run of CJK
+characters, so mid-word splits like `転がり込[こ]んだ` and `お父[とう]さん`
+parse correctly. How the annotations get into the source field is up to you:
+write them by hand, generate them with `anki-llm generate` from an LLM prompt
+that emits the format, or paste them from any other tool.
 
 **Quick start:**
 
@@ -1055,27 +1055,25 @@ Templates use the same `{field}` placeholder syntax as `process-deck`.
 
 `anki-llm tts` has two first-class modes:
 
-1. **Flag mode** (shown in the quick start above) — pass voice / target
-   field / source text / provider on the CLI. Best for one-shot fills,
-   trying TTS for the first time, or processing decks you don't
-   maintain.
-2. **Prompt mode** (`--prompt <file>`) — read the deck's TTS settings
-   from a YAML frontmatter alongside its LLM prompt. Best for decks you
-   maintain in version control, where the voice and source-text strategy
-   are inherent to the deck's design.
+1. **Flag mode** (shown in the quick start above) — pass voice / target field /
+   source text / provider on the CLI. Best for one-shot fills, trying TTS for
+   the first time, or processing decks you don't maintain.
+2. **Prompt mode** (`--prompt <file>`) — read the deck's TTS settings from a
+   YAML frontmatter alongside its LLM prompt. Best for decks you maintain in
+   version control, where the voice and source-text strategy are inherent to the
+   deck's design.
 
 Pick whichever fits the task — neither is deprecated.
 
 **Using a prompt YAML**
 
-The TTS settings for a deck (voice, model, target field, source text)
-are usually fixed and belong with the rest of the deck's design. They
-can be declared in the same YAML frontmatter `anki-llm generate` uses,
-under a top-level `tts:` block. **Both** `anki-llm tts --prompt` (for
-bulk-filling existing notes) and `anki-llm generate` (for new cards)
-read the same block — generate synthesizes + uploads audio for the
-cards you confirm at import time, and offers an in-TUI `p` preview
-hotkey while you're reviewing them. Example:
+The TTS settings for a deck (voice, model, target field, source text) are
+usually fixed and belong with the rest of the deck's design. They can be
+declared in the same YAML frontmatter `anki-llm generate` uses, under a
+top-level `tts:` block. **Both** `anki-llm tts --prompt` (for bulk-filling
+existing notes) and `anki-llm generate` (for new cards) read the same block —
+generate synthesizes + uploads audio for the cards you confirm at import time,
+and offers an in-TUI `p` preview hotkey while you're reviewing them. Example:
 
 ```yaml
 ---
@@ -1123,11 +1121,10 @@ tts:
 prompt body...
 ```
 
-When `provider: azure`, `region` is required and `model` / `speed` are
-rejected (Azure's REST endpoint doesn't use them). When
-`provider: openai` (or omitted), `region` is rejected. Credentials never
-live in the YAML — set `AZURE_TTS_KEY` in the environment instead (see
-Provider configuration below).
+When `provider: azure`, `region` is required and `model` / `speed` are rejected
+(Azure's REST endpoint doesn't use them). When `provider: openai` (or omitted),
+`region` is rejected. Credentials never live in the YAML — set `AZURE_TTS_KEY`
+in the environment instead (see Provider configuration below).
 
 **Google Cloud TTS example (Japanese):**
 
@@ -1152,8 +1149,8 @@ prompt body...
 ```
 
 Google voice names always follow `<lang>-<REGION>-<style>`, e.g.
-`ja-JP-Neural2-B` or `en-US-Wavenet-D`. The `languageCode` is derived
-from the first two segments automatically. `tts.region` is rejected for
+`ja-JP-Neural2-B` or `en-US-Wavenet-D`. The `languageCode` is derived from the
+first two segments automatically. `tts.region` is rejected for
 `provider: google` (Google's TTS API is a single global endpoint) and
 `tts.model` is not used.
 
@@ -1172,20 +1169,20 @@ tts:
   target: Audio
   source:
     field: reading
-  voice: Takumi          # any Polly VoiceId
+  voice: Takumi # any Polly VoiceId
   provider: amazon
   region: us-east-1
-  model: neural          # Polly Engine: standard | neural | generative | long-form
+  model: neural # Polly Engine: standard | neural | generative | long-form
 ---
 prompt body...
 ```
 
-When `provider: amazon`, `region` is required (Polly is region-scoped)
-and `tts.model` is overloaded to mean the Polly `Engine`: one of
-`standard`, `neural`, `generative`, or `long-form`. `tts.speed` is
-rejected. As with the other providers, AWS credentials never live in
-the YAML — set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in the
-environment (see Provider configuration below).
+When `provider: amazon`, `region` is required (Polly is region-scoped) and
+`tts.model` is overloaded to mean the Polly `Engine`: one of `standard`,
+`neural`, `generative`, or `long-form`. `tts.speed` is rejected. As with the
+other providers, AWS credentials never live in the YAML — set
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in the environment (see Provider
+configuration below).
 
 Then run:
 
@@ -1193,15 +1190,15 @@ Then run:
 anki-llm tts --prompt prompts/japanese.yaml
 ```
 
-The deck and note type are taken from the frontmatter. Pass `--deck` to
-target a different deck (still using the YAML's voice/source/etc.) or
-`--query` for a custom Anki search. CLI flags for voice, model, format,
-target field, source text, provider, speed, and note type are **not
-allowed** in `--prompt` mode — edit the YAML if you need to change them.
-That's the whole point of prompt mode: one place to look.
+The deck and note type are taken from the frontmatter. Pass `--deck` to target a
+different deck (still using the YAML's voice/source/etc.) or `--query` for a
+custom Anki search. CLI flags for voice, model, format, target field, source
+text, provider, speed, and note type are **not allowed** in `--prompt` mode —
+edit the YAML if you need to change them. That's the whole point of prompt mode:
+one place to look.
 
-`tts.target` is an Anki field name (not a `field_map` key); audio is
-not an LLM-generated output. `tts.source.field` and the placeholders in
+`tts.target` is an Anki field name (not a `field_map` key); audio is not an
+LLM-generated output. `tts.source.field` and the placeholders in
 `tts.source.template` reference `field_map` keys, so they read the same
 LLM-facing names the prompt body uses.
 
@@ -1215,23 +1212,23 @@ audio for every matching note.
 
 Before parsing, raw field values are normalized: HTML tags are stripped,
 `{{c1::answer}}` cloze markers are replaced with their answer, existing
-`[sound:...]` tags are dropped, HTML entities are decoded, and whitespace
-is collapsed.
+`[sound:...]` tags are dropped, HTML entities are decoded, and whitespace is
+collapsed.
 
 The normalized text is then parsed into a provider-neutral intermediate
 representation that binds inline furigana `[reading]` annotations to the
-preceding CJK cluster. Each provider renders the IR into its own
-preferred format (plain kana for OpenAI / Google / Amazon Polly, SSML
-`<sub alias>` for Azure), and the rendered payload is what the cache
-keys on and what the provider actually POSTs.
+preceding CJK cluster. Each provider renders the IR into its own preferred
+format (plain kana for OpenAI / Google / Amazon Polly, SSML `<sub alias>` for
+Azure), and the rendered payload is what the cache keys on and what the provider
+actually POSTs.
 
 **On-disk audio cache**
 
 Generated audio is cached at `~/.cache/anki-llm/tts/anki-llm-tts-<sha256>.mp3`.
-The hash keys on the prepared provider payload, provider id, text format
-(plain text vs SSML), voice, model, speed, endpoint identity, and a
-cache schema version, so identical requests across runs reuse the same
-file without re-billing the TTS API. To clear the cache, simply
+The hash keys on the prepared provider payload, provider id, text format (plain
+text vs SSML), voice, model, speed, endpoint identity, and a cache schema
+version, so identical requests across runs reuse the same file without
+re-billing the TTS API. To clear the cache, simply
 `rm -rf ~/.cache/anki-llm/tts`.
 
 **Provider configuration**
@@ -1257,80 +1254,144 @@ anki-llm config set aws_tts_secret_access_key <secret-access-key>
 anki-llm config set aws_tts_region us-east-1
 ```
 
-**OpenAI TTS** reads the API key from `OPENAI_API_KEY` (or
-`ANKI_LLM_API_KEY`, or `--api-key`). Available voices at the time of
-writing include `alloy`, `ash`, `ballad`, `coral`, `echo`, `fable`,
-`nova`, `onyx`, `sage`, and `shimmer`. See the
-[OpenAI TTS docs](https://platform.openai.com/docs/guides/text-to-speech)
+**OpenAI TTS** reads the API key from `OPENAI_API_KEY` (or `ANKI_LLM_API_KEY`,
+or `--api-key`). Available voices at the time of writing include `alloy`, `ash`,
+`ballad`, `coral`, `echo`, `fable`, `nova`, `onyx`, `sage`, and `shimmer`. See
+the [OpenAI TTS docs](https://platform.openai.com/docs/guides/text-to-speech)
 for the current list.
 
-**Azure Neural TTS** reads the subscription key and region from
-`AZURE_TTS_KEY` / `AZURE_TTS_REGION` environment variables, the
-`azure_tts_key` / `azure_tts_region` config keys, or the `--api-key` /
-`--azure-region` CLI flags (in that precedence: CLI > env > config).
-Voices are named `<locale>-<Voice>Neural`, e.g.
-`ja-JP-MasaruMultilingualNeural`. See the
+**Azure Neural TTS** reads the subscription key and region from `AZURE_TTS_KEY`
+/ `AZURE_TTS_REGION` environment variables, the `azure_tts_key` /
+`azure_tts_region` config keys, or the `--api-key` / `--azure-region` CLI flags
+(in that precedence: CLI > env > config). Voices are named
+`<locale>-<Voice>Neural`, e.g. `ja-JP-MasaruMultilingualNeural`. See the
 [Azure voice list](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support)
 for the full catalog.
 
-**Google Cloud Text-to-Speech** reads the API key from `GOOGLE_TTS_KEY`,
-the `google_tts_key` config key, or the `--api-key` CLI flag (CLI > env
-> config). The API key comes from a Google Cloud project that has
-Text-to-Speech enabled. Voices are named `<lang>-<REGION>-<style>-<id>`,
-e.g. `ja-JP-Neural2-B`, `en-US-Wavenet-D`, or `cmn-CN-Wavenet-A`; the
-`languageCode` is derived from the first two segments so you only need
-to supply a full voice name. The `tts.speed` setting is forwarded as
-`audioConfig.speakingRate`. See the
-[Google voice list](https://cloud.google.com/text-to-speech/docs/voices)
-for the full catalog.
+**Google Cloud Text-to-Speech** reads the API key from `GOOGLE_TTS_KEY`, the
+`google_tts_key` config key, or the `--api-key` CLI flag (CLI > env
 
-**Amazon Polly** reads credentials from the standard AWS environment
-variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally
+> config). The API key comes from a Google Cloud project that has Text-to-Speech
+> enabled. Voices are named `<lang>-<REGION>-<style>-<id>`, e.g.
+> `ja-JP-Neural2-B`, `en-US-Wavenet-D`, or `cmn-CN-Wavenet-A`; the
+> `languageCode` is derived from the first two segments so you only need to
+> supply a full voice name. The `tts.speed` setting is forwarded as
+> `audioConfig.speakingRate`. See the
+> [Google voice list](https://cloud.google.com/text-to-speech/docs/voices) for
+> the full catalog.
+
+**Amazon Polly** reads credentials from the standard AWS environment variables
+(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally
 `AWS_SESSION_TOKEN` for temporary credentials), the matching
-`aws_tts_access_key_id` / `aws_tts_secret_access_key` config keys, or
-the `--aws-access-key-id` / `--aws-secret-access-key` CLI flags
-(CLI > env > config). Region precedence is `tts.region` in YAML >
-`--aws-region` > `AWS_REGION` / `AWS_DEFAULT_REGION` >
-`aws_tts_region` in config. Voices use Polly `VoiceId`s (e.g. `Joanna`,
-`Matthew`, `Takumi`, `Mizuki`) and the Polly `Engine` is selected via
-`tts.model` / `--tts-model`: one of `standard`, `neural`, `generative`,
-or `long-form`. Requests are signed with AWS SigV4 directly — no
-`boto3` or `aws-sdk` dependency. See the
+`aws_tts_access_key_id` / `aws_tts_secret_access_key` config keys, or the
+`--aws-access-key-id` / `--aws-secret-access-key` CLI flags (CLI > env >
+config). Region precedence is `tts.region` in YAML > `--aws-region` >
+`AWS_REGION` / `AWS_DEFAULT_REGION` > `aws_tts_region` in config. Voices use
+Polly `VoiceId`s (e.g. `Joanna`, `Matthew`, `Takumi`, `Mizuki`) and the Polly
+`Engine` is selected via `tts.model` / `--tts-model`: one of `standard`,
+`neural`, `generative`, or `long-form`. Requests are signed with AWS SigV4
+directly — no `boto3` or `aws-sdk` dependency. See the
 [Polly voice list](https://docs.aws.amazon.com/polly/latest/dg/voicelist.html)
 for the full catalog.
 
 **Useful flags:**
 
-- `<deck>` / `--query <q>` — source selection. Takes a deck name
-  positionally, or an Anki search query via `--query`. Exactly one is
-  required.
+- `<deck>` / `--query <q>` — source selection. Takes a deck name positionally,
+  or an Anki search query via `--query`. Exactly one is required.
 - `--field <name>` — target field to write `[sound:...]` into (required).
-- `--template <path>` / `--text-field <name>` — source text: either a
-  template file using `{field}` placeholders, or a raw source field. Exactly
-  one is required.
+- `--template <path>` / `--text-field <name>` — source text: either a template
+  file using `{field}` placeholders, or a raw source field. Exactly one is
+  required.
 - `--note-type <name>` — required when the source spans multiple note types.
-- `--voice <name>` — voice identifier (required unless `tts_voice` is set
-  in the config).
-- `--provider <id>` — TTS provider. Accepts `openai`, `azure`, `google`,
-  or `amazon`; defaults to `openai`.
+- `--voice <name>` — voice identifier (required unless `tts_voice` is set in the
+  config).
+- `--provider <id>` — TTS provider. Accepts `openai`, `azure`, `google`, or
+  `amazon`; defaults to `openai`.
 - `--tts-model <id>` — for OpenAI, the backing model (defaults to
-  `gpt-4o-mini-tts`); for Amazon Polly, the `Engine` name (`standard`,
-  `neural`, `generative`, `long-form`); ignored by Azure and Google.
+  `gpt-4o-mini-tts`); for Amazon Polly, the `Engine` name (`standard`, `neural`,
+  `generative`, `long-form`); ignored by Azure and Google.
 - `--format <ext>` — output audio format (defaults to `mp3`).
-- `--speed <n>` — playback speed. Forwarded as `speakingRate` for
-  Google; ignored by Azure and Amazon.
-- `--api-key <key>` — OpenAI bearer token, Azure subscription key, or
-  Google TTS API key (depending on the active provider).
-- `--azure-region <region>` — Azure region (e.g. `eastus`). Required
-  when `--provider azure` in flag mode, not allowed otherwise.
+- `--speed <n>` — playback speed. Forwarded as `speakingRate` for Google;
+  ignored by Azure and Amazon.
+- `--api-key <key>` — OpenAI bearer token, Azure subscription key, or Google TTS
+  API key (depending on the active provider).
+- `--azure-region <region>` — Azure region (e.g. `eastus`). Required when
+  `--provider azure` in flag mode, not allowed otherwise.
 - `--aws-region <region>` — AWS region for Polly (e.g. `us-east-1`).
-- `--aws-access-key-id <id>` / `--aws-secret-access-key <secret>` —
-  Amazon Polly credentials (flag mode).
+- `--aws-access-key-id <id>` / `--aws-secret-access-key <secret>` — Amazon Polly
+  credentials (flag mode).
 - `--batch-size <n>` — concurrent TTS requests.
 - `--retries <n>` — retries on transient failures (429, 5xx, timeouts).
 - `--force` — regenerate even if target field is already populated.
 - `--dry-run` — preview without calling the TTS API or mutating Anki.
 - `--limit <n>` — process at most N notes.
+
+---
+
+### `anki-llm tts-voices`
+
+Interactive ratatui browser over the full voice catalog for every supported
+provider (OpenAI, Azure Neural TTS, Google Cloud TTS, Amazon Polly). Use it when
+you need to find the exact voice string to drop into a `tts:` YAML block or pass
+to `--voice`, without clicking through four different provider doc sites.
+
+**Controls:**
+
+- Type to fuzzy-filter across provider, voice id, display name, language code,
+  gender, and tags. Every whitespace-separated token must match (substring,
+  case-insensitive). Example: `ja female neural` narrows to Japanese female
+  neural voices across every provider.
+- `↑`/`↓`, `PageUp`/`PageDown` — move through the filtered list.
+- `Space` — audition the highlighted voice. A short pangram-style sample is
+  synthesized through the same `TtsService` + on-disk cache the batch command
+  uses, then played through a system player (`afplay` on macOS,
+  `mpv`/`ffplay`/`paplay` on Linux, PowerShell `Media.SoundPlayer` on Windows).
+  Subsequent previews of the same voice are instant because the cache already
+  has the mp3.
+- `Enter` — copy the voice id to the clipboard and print a complete pasteable
+  `tts:` YAML scaffold to stdout, then exit. The scaffold includes `provider`,
+  `voice`, `region` for Azure/Polly, and `model` for Polly voices that require a
+  non-default engine. You still need to fill in `target` and `source.field`.
+- `Esc` / `Ctrl-C` — cancel with no output.
+
+**Pre-filters (CLI flags):**
+
+- `--lang <prefix>` — language code prefix, e.g. `ja`, `en-US`, `cmn`.
+  Multilingual voices (OpenAI) are always included.
+- `--provider <id>` — narrow to one of `openai`, `azure`, `google`, `amazon`.
+- `-q`, `--query <text>` — seed the omni-search input.
+
+**Credentials.** Browsing works even with no credentials set — only the preview
+action (`Space`) needs API access. Providers with missing keys show an inline
+`Unavailable` status in the detail pane and the preview request fails fast with
+the exact env var or config key to set, instead of crashing the browser.
+Credentials are resolved from the same env vars and config keys the
+`anki-llm tts` batch command uses (see Provider configuration above).
+
+**Cache.** Previews hit the shared on-disk audio cache at
+`~/.cache/anki-llm/tts/` just like regular synthesis, so auditioning a voice
+during discovery and later generating a real note with the same voice will reuse
+the same bytes.
+
+**Examples:**
+
+```bash
+# Browse all voices
+anki-llm tts-voices
+
+# Japanese voices, pre-filtered, with an initial query
+anki-llm tts-voices --lang ja -q "female neural"
+
+# Only Amazon Polly
+anki-llm tts-voices --provider amazon -q neural
+
+# Pipe the emitted YAML straight into a prompt template
+anki-llm tts-voices --lang ja -q Nanami >> prompts/japanese.yaml
+```
+
+The voice catalog is a committed static snapshot at
+`src/tts/voices/snapshot.json` — the TUI loads it instantly and has no network
+dependency at startup.
 
 ---
 
