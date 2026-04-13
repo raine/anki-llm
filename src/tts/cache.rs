@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn different_text_format_different_key() {
-        let mut r1 = req("hi");
+        let r1 = req("hi");
         let mut r2 = req("hi");
         r2.text_format = TextFormat::Ssml;
         assert_ne!(TtsCache::key(&r1), TtsCache::key(&r2));

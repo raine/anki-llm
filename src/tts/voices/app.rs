@@ -574,10 +574,8 @@ impl App {
                     .as_ref()
                     .map(|overlay| overlay.facet.multi_select())
                     .unwrap_or(false);
-                if multi {
-                    if let Some(row) = rows.get(selected) {
-                        self.apply_overlay_action(row.action.clone(), false);
-                    }
+                if multi && let Some(row) = rows.get(selected) {
+                    self.apply_overlay_action(row.action.clone(), false);
                 }
             }
             _ => {
@@ -628,7 +626,13 @@ impl App {
             return;
         }
 
-        if key.code != KeyCode::Char(' ') || key.modifiers.contains(KeyModifiers::SHIFT) {
+        let keeps_playing = matches!(
+            key.code,
+            KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown
+        );
+        if !keeps_playing
+            && (key.code != KeyCode::Char(' ') || key.modifiers.contains(KeyModifiers::SHIFT))
+        {
             self.stop_player();
         }
 
