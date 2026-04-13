@@ -23,7 +23,7 @@ use super::media::AnkiMediaStore;
 use super::process_row::{TtsProcessConfig, build_tts_process_fn};
 use super::provider::build as build_provider;
 use super::runtime::{TtsRuntimeArgs, build_tts_runtime};
-use super::spec::{CliOverrides, ResolvedTtsSpec, resolve as resolve_tts_spec};
+use super::spec::{CliOverrides, ResolvedProvider, ResolvedTtsSpec, resolve as resolve_tts_spec};
 use super::template::TemplateSource;
 
 fn deck_row_id(row: &Row) -> String {
@@ -223,6 +223,7 @@ fn run_prompt_mode(args: TtsArgs) -> Result<()> {
     let overrides = CliOverrides {
         api_key: args.api_key.as_deref(),
         api_base_url: args.api_base_url.as_deref(),
+        azure_region: args.azure_region.as_deref(),
         batch_size: args.batch_size,
         retries: args.retries,
         force: args.force,
@@ -294,6 +295,7 @@ fn run_flag_mode(args: TtsArgs) -> Result<()> {
         speed: args.speed,
         api_key: args.api_key.as_deref(),
         api_base_url: args.api_base_url.as_deref(),
+        azure_region: args.azure_region.as_deref(),
         batch_size: args.batch_size,
         retries: args.retries,
         force: args.force,
@@ -316,8 +318,6 @@ fn run_flag_mode(args: TtsArgs) -> Result<()> {
         model: runtime.model,
         format: runtime.format,
         speed: runtime.speed,
-        api_key: runtime.api_key,
-        api_base_url: runtime.api_base_url,
         target: field,
         source,
         batch_size: runtime.batch_size,
@@ -547,18 +547,32 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
 
     if resolved.dry_run {
         eprintln!("\n--- DRY RUN MODE ---");
-        eprintln!("Provider: {}", resolved.provider);
+        eprintln!("Provider: {}", resolved.provider.id());
         eprintln!("Voice:    {}", resolved.voice);
         if let Some(ref m) = resolved.model {
             eprintln!("Model:    {m}");
         }
+        if let ResolvedProvider::Azure { ref region, .. } = resolved.provider {
+            eprintln!("Region:   {region}");
+        }
         eprintln!("Source:   {}", resolved.source.display_label());
         if let Some(first) = rows_to_process.first() {
-            match resolved.source.expand(first) {
+            let eval = super::process_row::build_eval_row(first, field_map_for_projection);
+            match resolved.source.expand(&eval) {
                 Ok(text) => {
                     let normalized = super::text::normalize(&text);
                     eprintln!("\nSample raw:        {text}");
                     eprintln!("Sample normalized: {normalized}");
+                    match super::ir::parse_furigana(&normalized) {
+                        Ok(utterance) => {
+                            let payload = match resolved.provider.id() {
+                                "azure" => super::render::render_ssml(&utterance, &resolved.voice),
+                                _ => super::render::render_plain_text(&utterance),
+                            };
+                            eprintln!("Sample payload:    {payload}");
+                        }
+                        Err(e) => eprintln!("Parser error: {e}"),
+                    }
                 }
                 Err(e) => eprintln!("\nTemplate error: {e}"),
             }
@@ -566,12 +580,8 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
         return Ok(());
     }
 
-    let provider = build_provider(
-        &resolved.provider,
-        resolved.api_key.clone(),
-        resolved.api_base_url.clone(),
-    )
-    .map_err(anyhow::Error::msg)?;
+    let endpoint_identity = resolved.provider.endpoint_identity();
+    let provider = build_provider(resolved.provider.clone().into_selection());
 
     let cache_dir = TtsCache::default_dir()
         .context("failed to locate cache directory (home dir unavailable)")?;
@@ -589,7 +599,7 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
         model: resolved.model.clone(),
         format: resolved.format,
         speed: resolved.speed,
-        endpoint: resolved.api_base_url.clone(),
+        endpoint: endpoint_identity,
         field_map: field_map_for_projection.cloned(),
     });
 
@@ -627,7 +637,7 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
             },
             InfoField {
                 label: "Voice".into(),
-                value: format!("{} ({})", resolved.voice, resolved.provider),
+                value: format!("{} ({})", resolved.voice, resolved.provider.id()),
             },
             InfoField {
                 label: "Text".into(),

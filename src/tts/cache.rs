@@ -162,12 +162,11 @@ mod tests {
 
     #[test]
     fn different_provider_different_key() {
-        let mut r1 = req("hi");
+        let r1 = req("hi");
         let mut r2 = req("hi");
         r2.provider_id = "azure".into();
         r2.text_format = TextFormat::Ssml;
         assert_ne!(TtsCache::key(&r1), TtsCache::key(&r2));
-        r1.provider_id = "openai".into();
     }
 
     #[test]

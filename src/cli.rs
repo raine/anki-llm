@@ -96,13 +96,18 @@ pub struct TtsArgs {
     #[arg(long)]
     pub speed: Option<f32>,
 
-    /// API base URL override
+    /// API base URL override (OpenAI or OpenAI-compatible providers)
     #[arg(long)]
     pub api_base_url: Option<String>,
 
-    /// API key override
+    /// API key override. Used as the OpenAI bearer token or the Azure
+    /// subscription key depending on the active provider.
     #[arg(long)]
     pub api_key: Option<String>,
+
+    /// Azure region override (flag mode; provider must be 'azure')
+    #[arg(long = "azure-region")]
+    pub azure_region: Option<String>,
 
     /// Filter by note type (flag mode; rejected in --prompt mode)
     #[arg(long, short = 'n')]

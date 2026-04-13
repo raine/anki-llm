@@ -12,7 +12,7 @@ use crate::template::fill_template;
 /// string from a YAML `tts.source.template`) expanded per row with
 /// `{field}` placeholders, or a bare field reference for the common
 /// "just speak this field" case.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum TemplateSource {
     File { path: PathBuf, contents: String },
     Inline { label: String, contents: String },

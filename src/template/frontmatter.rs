@@ -36,10 +36,17 @@ pub struct TtsSpec {
     pub target: String,
     /// Where the spoken text comes from.
     pub source: TtsSource,
-    /// Provider voice identifier (e.g. "alloy", "nova").
+    /// Provider voice identifier. For OpenAI, e.g. "alloy" / "nova". For
+    /// Azure, the full neural voice name, e.g. "ja-JP-MasaruMultilingualNeural".
     pub voice: String,
+    /// TTS provider identifier. Defaults to "openai". Accepted values:
+    /// "openai", "azure".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
+    /// Azure region, e.g. "eastus". Required when `provider: azure`,
+    /// forbidden otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -193,6 +200,44 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
             return Err(TemplateError::InvalidFrontmatter(
                 "tts.speed must be > 0".into(),
             ));
+        }
+
+        let provider = tts.provider.as_deref().unwrap_or("openai");
+        match provider {
+            "openai" => {
+                if tts.region.is_some() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.region is only valid when tts.provider is 'azure'".into(),
+                    ));
+                }
+            }
+            "azure" => {
+                let region = tts
+                    .region
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty());
+                if region.is_none() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.region is required when tts.provider is 'azure'".into(),
+                    ));
+                }
+                if tts.model.is_some() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.model is not supported with tts.provider 'azure'".into(),
+                    ));
+                }
+                if tts.speed.is_some() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.speed is not supported with tts.provider 'azure'".into(),
+                    ));
+                }
+            }
+            other => {
+                return Err(TemplateError::InvalidFrontmatter(format!(
+                    "tts.provider '{other}' is not supported (expected: openai or azure)"
+                )));
+            }
         }
         match (&tts.source.field, &tts.source.template) {
             (Some(_), Some(_)) | (None, None) => {
@@ -576,6 +621,133 @@ tts:
 body";
         let err = parse_prompt_file(content).unwrap_err();
         assert!(err.to_string().contains("speed"));
+    }
+
+    #[test]
+    fn tts_azure_requires_region() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+tts:
+  target: Audio
+  source:
+    field: front
+  voice: ja-JP-MasaruMultilingualNeural
+  provider: azure
+---
+
+body";
+        let err = parse_prompt_file(content).unwrap_err();
+        assert!(err.to_string().contains("tts.region is required"));
+    }
+
+    #[test]
+    fn tts_azure_with_region_parses() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+tts:
+  target: Audio
+  source:
+    field: front
+  voice: ja-JP-MasaruMultilingualNeural
+  provider: azure
+  region: eastus
+---
+
+body";
+        let parsed = parse_prompt_file(content).unwrap();
+        let tts = parsed.frontmatter.tts.unwrap();
+        assert_eq!(tts.provider.as_deref(), Some("azure"));
+        assert_eq!(tts.region.as_deref(), Some("eastus"));
+    }
+
+    #[test]
+    fn tts_azure_rejects_model() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+tts:
+  target: Audio
+  source:
+    field: front
+  voice: ja-JP-MasaruMultilingualNeural
+  provider: azure
+  region: eastus
+  model: something
+---
+
+body";
+        let err = parse_prompt_file(content).unwrap_err();
+        assert!(err.to_string().contains("tts.model"));
+    }
+
+    #[test]
+    fn tts_azure_rejects_speed() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+tts:
+  target: Audio
+  source:
+    field: front
+  voice: ja-JP-MasaruMultilingualNeural
+  provider: azure
+  region: eastus
+  speed: 1.25
+---
+
+body";
+        let err = parse_prompt_file(content).unwrap_err();
+        assert!(err.to_string().contains("tts.speed"));
+    }
+
+    #[test]
+    fn tts_openai_rejects_region() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+tts:
+  target: Audio
+  source:
+    field: front
+  voice: alloy
+  region: eastus
+---
+
+body";
+        let err = parse_prompt_file(content).unwrap_err();
+        assert!(err.to_string().contains("tts.region"));
+    }
+
+    #[test]
+    fn tts_unknown_provider_rejected() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+tts:
+  target: Audio
+  source:
+    field: front
+  voice: alloy
+  provider: polly
+---
+
+body";
+        let err = parse_prompt_file(content).unwrap_err();
+        assert!(err.to_string().contains("polly"));
     }
 
     #[test]

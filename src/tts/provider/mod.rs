@@ -1,3 +1,4 @@
+pub mod azure;
 pub mod openai;
 
 use std::sync::Arc;
@@ -77,23 +78,31 @@ pub trait TtsProvider: Send + Sync {
     fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError>;
 }
 
-/// Build an OpenAI provider instance. Azure is constructed via
-/// [`build_azure`] — it needs a `region` argument that the unified
-/// `build` signature can't express without leaking provider-specific
-/// knowledge into every caller.
-pub fn build(
-    provider: &str,
-    api_key: Option<String>,
-    api_base_url: Option<String>,
-) -> Result<Arc<dyn TtsProvider>, String> {
-    match provider {
-        "openai" => Ok(Arc::new(openai::OpenAiTtsProvider::new(
+/// Typed provider identity used for constructing `Arc<dyn TtsProvider>`
+/// instances. Providers that need different credentials, endpoints, or
+/// regional routing own their own variant so `build` can't drop any
+/// required field.
+#[derive(Debug, Clone)]
+pub enum ProviderSelection {
+    OpenAi {
+        api_key: Option<String>,
+        api_base_url: Option<String>,
+    },
+    Azure {
+        subscription_key: String,
+        region: String,
+    },
+}
+
+pub fn build(selection: ProviderSelection) -> Arc<dyn TtsProvider> {
+    match selection {
+        ProviderSelection::OpenAi {
             api_key,
             api_base_url,
-        ))),
-        other => Err(format!(
-            "unknown TTS provider '{other}' (expected: openai or azure — \
-             use build_azure for azure)"
-        )),
+        } => Arc::new(openai::OpenAiTtsProvider::new(api_key, api_base_url)),
+        ProviderSelection::Azure {
+            subscription_key,
+            region,
+        } => Arc::new(azure::AzureTtsProvider::new(subscription_key, region)),
     }
 }

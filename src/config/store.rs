@@ -29,6 +29,12 @@ pub struct AppConfig {
     /// Default TTS output format (currently only "mp3").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tts_format: Option<String>,
+    /// Azure Cognitive Services subscription key for TTS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub azure_tts_key: Option<String>,
+    /// Azure region for TTS (e.g. "eastus").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub azure_tts_region: Option<String>,
 }
 
 impl AppConfig {
@@ -43,6 +49,8 @@ impl AppConfig {
             "tts_voice" => self.tts_voice.clone(),
             "tts_model" => self.tts_model.clone(),
             "tts_format" => self.tts_format.clone(),
+            "azure_tts_key" => self.azure_tts_key.clone(),
+            "azure_tts_region" => self.azure_tts_region.clone(),
             _ => None,
         }
     }
@@ -82,6 +90,14 @@ impl AppConfig {
                 self.tts_format = Some(value.to_string());
                 true
             }
+            "azure_tts_key" => {
+                self.azure_tts_key = Some(value.to_string());
+                true
+            }
+            "azure_tts_region" => {
+                self.azure_tts_region = Some(value.to_string());
+                true
+            }
             _ => false,
         }
     }
@@ -112,6 +128,12 @@ impl AppConfig {
         }
         if let Some(ref v) = self.tts_format {
             out.push(("tts_format".into(), v.clone()));
+        }
+        if let Some(ref v) = self.azure_tts_key {
+            out.push(("azure_tts_key".into(), v.clone()));
+        }
+        if let Some(ref v) = self.azure_tts_region {
+            out.push(("azure_tts_region".into(), v.clone()));
         }
         out
     }
