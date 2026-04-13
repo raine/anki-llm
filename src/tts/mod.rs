@@ -7,6 +7,7 @@ pub mod process_row;
 pub mod provider;
 pub mod render;
 pub mod runtime;
+pub mod service;
 pub mod spec;
 pub mod template;
 pub mod text;
