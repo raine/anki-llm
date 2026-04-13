@@ -71,7 +71,9 @@ interactively, and add selected cards to your deck.
 - **Copy mode**: Alternatively, generate cards without API keys by pasting LLM
   responses from browser interfaces (ChatGPT, Claude, etc.).
 - **TTS audio**: Generate text-to-speech audio for notes with
-  `anki-llm tts` — cached on disk, uploaded via AnkiConnect's
+  `anki-llm tts` (bulk-fill existing decks) or `anki-llm generate`
+  (auto-finalize audio for newly generated cards at import time, with
+  an in-TUI preview hotkey). Cached on disk, uploaded via AnkiConnect's
   `storeMediaFile`, and written as `[sound:...]` tags.
 
 ## Installation
@@ -762,7 +764,13 @@ card with feedback (e.g. "make the definition simpler"). Press `e` to edit a
 card in your `$EDITOR`. Press `d` to remove a card from the list, `c` to copy to
 clipboard. Switch model with `Ctrl+O` (type to filter, `Ctrl+N`/`Ctrl+P` to
 navigate). When cards from multiple models are present, each card shows its
-model. Confirm with `Enter`.
+model. If the prompt declares a `tts:` block and a system audio player
+(`afplay` / `mpv` / `ffplay`) is on `PATH`, press `p` to preview the focused
+card's audio — synthesized once on first press, played back on demand from
+the local cache, with a second press toggling playback off. Selected cards
+get their audio finalized (synthesized + uploaded to Anki's media store)
+automatically at import time, so a cancelled run leaves no orphan media
+behind. Confirm with `Enter`.
 
 **Quality check review** — If quality checking is enabled, flagged cards are
 presented one at a time with the LLM's reasoning. Keep (`k`/`y`/`Enter`) or
@@ -1063,7 +1071,11 @@ Pick whichever fits the task — neither is deprecated.
 The TTS settings for a deck (voice, model, target field, source text)
 are usually fixed and belong with the rest of the deck's design. They
 can be declared in the same YAML frontmatter `anki-llm generate` uses,
-under a top-level `tts:` block:
+under a top-level `tts:` block. **Both** `anki-llm tts --prompt` (for
+bulk-filling existing notes) and `anki-llm generate` (for new cards)
+read the same block — generate synthesizes + uploads audio for the
+cards you confirm at import time, and offers an in-TUI `p` preview
+hotkey while you're reviewing them. Example:
 
 ```yaml
 ---
