@@ -1,4 +1,5 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
+use std::collections::HashSet;
 
 use indexmap::IndexMap;
 use ratatui::Frame;
@@ -15,7 +16,9 @@ use crate::tui::theme::{Glyphs, SPINNER_FRAMES, THEME};
 pub(in crate::generate::tui) struct SelectionState {
     pub(in crate::generate::tui) cards: Vec<ValidatedCard>,
     pub(in crate::generate::tui) cursor: usize,
-    pub(in crate::generate::tui) selected: BTreeSet<usize>,
+    /// Selected cards routed by stable `card_id`. Membership survives
+    /// row removal and regeneration without index-shifting math.
+    pub(in crate::generate::tui) selected: HashSet<u64>,
     pub(in crate::generate::tui) list_state: ListState,
     pub(in crate::generate::tui) detail_scroll: u16,
     /// True while a refresh (load more) request is in flight.
@@ -24,8 +27,8 @@ pub(in crate::generate::tui) struct SelectionState {
     pub(in crate::generate::tui) term_input: Option<LineInput>,
     /// When Some, an inline feedback input is active for regenerating the focused card.
     pub(in crate::generate::tui) feedback_input: Option<LineInput>,
-    /// Card index currently being regenerated (in flight).
-    pub(in crate::generate::tui) regen_in_flight: Option<usize>,
+    /// `card_id` of the card currently being regenerated (in flight).
+    pub(in crate::generate::tui) regen_in_flight: Option<u64>,
     /// Per-card TTS preview state, keyed by stable `ValidatedCard.card_id`.
     pub(in crate::generate::tui) tts_states: HashMap<u64, TtsUiState>,
 }
@@ -34,11 +37,10 @@ impl SelectionState {
     pub(in crate::generate::tui) fn new(cards: Vec<ValidatedCard>) -> Self {
         let mut list_state = ListState::default();
         list_state.select(Some(0));
-        let selected = BTreeSet::new();
         Self {
             cards,
             cursor: 0,
-            selected,
+            selected: HashSet::new(),
             list_state,
             detail_scroll: 0,
             refresh_in_flight: false,
@@ -47,6 +49,16 @@ impl SelectionState {
             regen_in_flight: None,
             tts_states: HashMap::new(),
         }
+    }
+
+    /// Cards the user has selected, in the order they appear on screen.
+    /// This is what `Enter` ships to the worker.
+    pub(in crate::generate::tui) fn selected_cards_in_order(&self) -> Vec<ValidatedCard> {
+        self.cards
+            .iter()
+            .filter(|c| self.selected.contains(&c.card_id))
+            .cloned()
+            .collect()
     }
 
     pub(in crate::generate::tui) fn move_up(&mut self) {
@@ -66,18 +78,17 @@ impl SelectionState {
     }
 
     pub(in crate::generate::tui) fn toggle_current(&mut self) {
-        if self
-            .cards
-            .get(self.cursor)
-            .map(|c| c.is_duplicate)
-            .unwrap_or(false)
-        {
+        let Some(card) = self.cards.get(self.cursor) else {
+            return;
+        };
+        if card.is_duplicate {
             return; // Duplicates cannot be selected (use force_toggle_duplicate)
         }
-        if self.selected.contains(&self.cursor) {
-            self.selected.remove(&self.cursor);
+        let id = card.card_id;
+        if self.selected.contains(&id) {
+            self.selected.remove(&id);
         } else {
-            self.selected.insert(self.cursor);
+            self.selected.insert(id);
         }
     }
 
@@ -91,13 +102,14 @@ impl SelectionState {
         }
         // Clear duplicate status and select it
         card.is_duplicate = false;
-        self.selected.insert(self.cursor);
+        let id = card.card_id;
+        self.selected.insert(id);
     }
 
     pub(in crate::generate::tui) fn select_all(&mut self) {
-        for (i, c) in self.cards.iter().enumerate() {
+        for c in &self.cards {
             if !c.is_duplicate {
-                self.selected.insert(i);
+                self.selected.insert(c.card_id);
             }
         }
     }
@@ -107,28 +119,19 @@ impl SelectionState {
     }
 
     /// Remove the card at the current cursor position from the list.
-    /// Returns `true` if a card was removed, `false` if the list is empty.
+    /// Drops the card's id from `selected` and `tts_states`. Returns
+    /// `true` if a card was removed, `false` if the list is empty.
     pub(in crate::generate::tui) fn remove_current(&mut self) -> bool {
         if self.cards.is_empty() {
             return false;
         }
 
-        let removed = self.cursor;
-        self.cards.remove(removed);
+        let removed_id = self.cards[self.cursor].card_id;
+        self.cards.remove(self.cursor);
+        self.selected.remove(&removed_id);
+        self.tts_states.remove(&removed_id);
 
-        // Rebuild selected set: drop the removed index, shift higher indices down
-        let mut new_selected = BTreeSet::new();
-        for &i in &self.selected {
-            if i < removed {
-                new_selected.insert(i);
-            } else if i > removed {
-                new_selected.insert(i - 1);
-            }
-            // i == removed is dropped
-        }
-        self.selected = new_selected;
-
-        // Adjust cursor
+        // Adjust cursor to stay in bounds.
         if self.cards.is_empty() {
             self.cursor = 0;
         } else if self.cursor >= self.cards.len() {
@@ -174,9 +177,10 @@ pub(in crate::generate::tui) fn draw_selecting(
         .iter()
         .enumerate()
         .map(|(i, card)| {
+            let is_selected = state.selected.contains(&card.card_id);
             let checkbox = if card.is_duplicate {
                 "  "
-            } else if state.selected.contains(&i) {
+            } else if is_selected {
                 glyphs.checkbox_checked
             } else {
                 glyphs.checkbox_unchecked
@@ -188,7 +192,7 @@ pub(in crate::generate::tui) fn draw_selecting(
                 .next()
                 .map(|v| crate::generate::selector::strip_html_tags(v))
                 .unwrap_or_default();
-            let is_regenerating = state.regen_in_flight == Some(i);
+            let is_regenerating = state.regen_in_flight == Some(card.card_id);
             let dup_note = if card.is_duplicate { " [dup]" } else { "" };
             let regen_note = if is_regenerating {
                 let spinner = SPINNER_FRAMES[tick as usize % SPINNER_FRAMES.len()];
@@ -218,7 +222,7 @@ pub(in crate::generate::tui) fn draw_selecting(
                     .add_modifier(Modifier::BOLD)
             } else if card.is_duplicate {
                 Style::default().fg(THEME.dimmed)
-            } else if state.selected.contains(&i) {
+            } else if is_selected {
                 Style::default().fg(THEME.success)
             } else {
                 Style::default()

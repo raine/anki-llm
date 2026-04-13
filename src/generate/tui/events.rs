@@ -35,11 +35,15 @@ pub enum BackendEvent {
     },
     RequestSelection(Vec<ValidatedCard>),
     AppendCards(Vec<ValidatedCard>), // refresh: new unique cards to append
+    /// Single-card regeneration result. `previous_card_id` is the
+    /// stable id of the card that was sent for regeneration; the TUI
+    /// looks up its current row by id and replaces it. If the user has
+    /// removed or edited the card meanwhile, the reply is dropped.
     ReplaceCard {
-        index: usize,
+        previous_card_id: u64,
         card: ValidatedCard,
-    }, // single-card regeneration result
-    RegenError(String),              // single-card regeneration failed
+    },
+    RegenError(String), // single-card regeneration failed
     RequestReview(Vec<FlaggedCard>),
     CostUpdate {
         input_tokens: u64,
@@ -68,17 +72,24 @@ pub enum WorkerCommand {
     Start(String),           // term to generate cards for
     Refresh,                 // generate more cards for the same term
     RefreshWithTerm(String), // generate more cards with a different term
+    /// Regenerate a single card with feedback. The card payload is the
+    /// TUI's current snapshot, so any local edits are picked up by the
+    /// LLM. `card.card_id` is the routing key for the eventual
+    /// `BackendEvent::ReplaceCard` reply.
     RegenerateCard {
-        index: usize,
+        card: ValidatedCard,
         feedback: String,
-    }, // regenerate a single card with feedback
-    /// Synthesize TTS preview audio for a card. Routed by stable
-    /// `card_id`; the worker looks up the current card by id inside the
-    /// selection loop. No-op when the session has no `tts:` block.
-    PreviewTts {
-        card_id: u64,
     },
-    Selection(Vec<usize>),
+    /// Synthesize TTS preview audio for a card. The card payload is
+    /// the TUI's current snapshot — never a stale worker-side copy —
+    /// so synthesis always uses the user's most recent edits.
+    PreviewTts {
+        card: ValidatedCard,
+    },
+    /// User confirmed selection. Carries the actual cards in visible
+    /// order (with edits, removes, and force-toggled duplicates
+    /// applied), not indices into a worker-side mirror.
+    Selection(Vec<ValidatedCard>),
     Review(Vec<bool>), // true = keep, false = discard
     SetModel(String),  // change model between runs
     Cancel,            // abandon current run, go back to input

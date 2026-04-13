@@ -62,11 +62,16 @@ pub trait PipelineProgress: Send + Sync {
 }
 
 pub enum SelectionAction {
-    Selected(Vec<usize>),
+    Selected(Vec<ValidatedCard>),
     Refresh,
     RefreshWithTerm(String),
-    RegenerateCard { index: usize, feedback: String },
-    PreviewTts { card_id: u64 },
+    RegenerateCard {
+        card: ValidatedCard,
+        feedback: String,
+    },
+    PreviewTts {
+        card: ValidatedCard,
+    },
     Cancel,
     Quit,
 }
@@ -79,7 +84,7 @@ pub enum ReviewResult {
 pub trait PipelineInteraction {
     fn begin_selection(&self, cards: Vec<ValidatedCard>);
     fn append_selection(&self, cards: Vec<ValidatedCard>);
-    fn replace_card(&self, index: usize, card: ValidatedCard);
+    fn replace_card(&self, previous_card_id: u64, card: ValidatedCard);
     fn regen_error(&self, message: String);
     fn wait_selection(&self) -> SelectionAction;
     fn request_review(&self, flagged: Vec<FlaggedCard>) -> ReviewResult;
@@ -249,22 +254,26 @@ fn regenerate_single_card(
 /// Wait for a selection action, handling inline card regeneration and
 /// TTS preview requests. Returns only terminal actions (Refresh,
 /// RefreshWithTerm, Selected, Cancel, Quit).
+///
+/// The worker holds no card state during this loop. Regeneration and
+/// preview actions both carry the TUI's current `ValidatedCard` snapshot
+/// in the message payload, so any local edits the user has applied are
+/// reflected in what the worker operates on.
 fn wait_selection_with_regen(
     config: &PipelineConfig,
     interaction: &dyn PipelineInteraction,
     progress: &dyn PipelineProgress,
-    all_validated: &mut [ValidatedCard],
 ) -> SelectionAction {
     loop {
         match interaction.wait_selection() {
-            SelectionAction::RegenerateCard { index, feedback } => {
+            SelectionAction::RegenerateCard { card, feedback } => {
+                let previous_card_id = card.card_id;
                 progress.log(&format!(
-                    "Regenerating card {index} with feedback: \"{feedback}\""
+                    "Regenerating card {previous_card_id} with feedback: \"{feedback}\""
                 ));
-                match regenerate_single_card(config, &all_validated[index], &feedback, progress) {
+                match regenerate_single_card(config, &card, &feedback, progress) {
                     Ok(new_card) => {
-                        all_validated[index] = new_card.clone();
-                        interaction.replace_card(index, new_card);
+                        interaction.replace_card(previous_card_id, new_card);
                         progress.log("Card regenerated successfully");
                     }
                     Err(e) => {
@@ -274,8 +283,8 @@ fn wait_selection_with_regen(
                 }
                 continue;
             }
-            SelectionAction::PreviewTts { card_id } => {
-                handle_preview_tts(config, interaction, progress, all_validated, card_id);
+            SelectionAction::PreviewTts { card } => {
+                handle_preview_tts(config, interaction, progress, &card);
                 continue;
             }
             other => return other,
@@ -291,8 +300,7 @@ fn handle_preview_tts(
     config: &PipelineConfig,
     interaction: &dyn PipelineInteraction,
     progress: &dyn PipelineProgress,
-    all_validated: &[ValidatedCard],
-    card_id: u64,
+    card: &ValidatedCard,
 ) {
     use super::tui::events::TtsUiState;
 
@@ -301,10 +309,7 @@ fn handle_preview_tts(
         // never send this command in that case, but defend anyway.
         return;
     };
-    let Some(card) = all_validated.iter().find(|c| c.card_id == card_id) else {
-        // Card was replaced before the worker picked up the request.
-        return;
-    };
+    let card_id = card.card_id;
 
     interaction.tts_state(card_id, TtsUiState::Synthesizing);
 
@@ -358,14 +363,21 @@ pub fn run_pipeline_for_term(
     };
 
     let mut generation_cost = 0.0;
-    let mut all_validated: Vec<ValidatedCard> = Vec::new();
     let mut seen_keys: HashSet<String> = HashSet::new();
     let mut is_refresh = false;
     let mut current_term = term.to_string();
 
     // --- Generate / validate / select loop (supports refresh) ---
+    //
+    // The worker holds no card state between iterations: each batch's
+    // validated cards are handed to the TUI via `begin_selection` /
+    // `append_selection`, and the TUI is the source of truth for every
+    // mutation (selection, edit, remove, force-toggle) until the user
+    // submits. `seen_keys` is the only worker-side state that survives
+    // a refresh, and it's purely a normalized-text dedup set for the
+    // LLM exclude list — it never indexes into a card collection.
 
-    let selected_indices = loop {
+    let selected_cards = loop {
         let mut exclude: Vec<String> = seen_keys.iter().cloned().collect();
         exclude.sort();
         exclude.extend_from_slice(exclude_terms);
@@ -413,18 +425,13 @@ pub fn run_pipeline_for_term(
                     interaction.append_selection(Vec::new());
                     progress.step_error(PipelineStep::Generate, &format!("{e}"));
 
-                    match wait_selection_with_regen(
-                        config,
-                        interaction,
-                        progress,
-                        &mut all_validated,
-                    ) {
+                    match wait_selection_with_regen(config, interaction, progress) {
                         SelectionAction::Refresh => continue,
                         SelectionAction::RefreshWithTerm(t) => {
                             current_term = t;
                             continue;
                         }
-                        SelectionAction::Selected(indices) => break indices,
+                        SelectionAction::Selected(cards) => break cards,
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
                         SelectionAction::RegenerateCard { .. }
@@ -537,18 +544,13 @@ pub fn run_pipeline_for_term(
                     interaction.append_selection(Vec::new());
                     progress.step_error(PipelineStep::Validate, &format!("{e}"));
 
-                    match wait_selection_with_regen(
-                        config,
-                        interaction,
-                        progress,
-                        &mut all_validated,
-                    ) {
+                    match wait_selection_with_regen(config, interaction, progress) {
                         SelectionAction::Refresh => continue,
                         SelectionAction::RefreshWithTerm(t) => {
                             current_term = t;
                             continue;
                         }
-                        SelectionAction::Selected(indices) => break indices,
+                        SelectionAction::Selected(cards) => break cards,
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
                         SelectionAction::RegenerateCard { .. }
@@ -603,8 +605,7 @@ pub fn run_pipeline_for_term(
             } else {
                 progress.log(&format!("{} new card(s) added", new_cards.len()));
             }
-            interaction.append_selection(new_cards.clone());
-            all_validated.extend(new_cards);
+            interaction.append_selection(new_cards);
         } else {
             // Dry-run display
             if config.dry_run {
@@ -637,13 +638,14 @@ pub fn run_pipeline_for_term(
                 });
             }
 
-            all_validated = new_cards;
             progress.step_start(PipelineStep::Select, None);
-            interaction.begin_selection(all_validated.clone());
+            interaction.begin_selection(new_cards);
         }
 
-        // Wait for user action
-        match wait_selection_with_regen(config, interaction, progress, &mut all_validated) {
+        // Wait for user action. The TUI is the source of truth for
+        // selection-phase card data from this point on; the worker
+        // does not retain any mirror of the cards it just sent.
+        match wait_selection_with_regen(config, interaction, progress) {
             SelectionAction::Refresh => {
                 is_refresh = true;
                 continue;
@@ -653,7 +655,7 @@ pub fn run_pipeline_for_term(
                 current_term = t;
                 continue;
             }
-            SelectionAction::Selected(indices) => break indices,
+            SelectionAction::Selected(cards) => break cards,
             SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
             SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
             SelectionAction::RegenerateCard { .. } | SelectionAction::PreviewTts { .. } => {
@@ -662,7 +664,7 @@ pub fn run_pipeline_for_term(
         }
     };
 
-    if selected_indices.is_empty() {
+    if selected_cards.is_empty() {
         return Ok(PipelineOutcome::Success {
             message: "No cards selected.".to_string(),
             cards: Vec::new(),
@@ -670,10 +672,7 @@ pub fn run_pipeline_for_term(
         });
     }
 
-    let mut selected: Vec<ValidatedCard> = selected_indices
-        .iter()
-        .filter_map(|&i| all_validated.get(i).cloned())
-        .collect();
+    let mut selected: Vec<ValidatedCard> = selected_cards;
 
     progress.step_done(
         PipelineStep::Select,
@@ -918,7 +917,7 @@ pub fn run_pipeline_for_term(
             media: &bundle.media,
         });
         let result = import_cards_to_anki(
-            &final_cards,
+            &mut final_cards,
             config.frontmatter,
             config.anki,
             tts_finalize,

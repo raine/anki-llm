@@ -29,8 +29,13 @@ pub struct TtsFinalize<'a> {
 /// Add cards to Anki as new notes. If `tts` is `Some`, run the TTS
 /// finalizer against the cards (synthesize-on-miss, upload, rewrite the
 /// target field) before `add_notes` is called.
+///
+/// Mutates `cards` in place: TTS finalization writes the resulting
+/// `[sound:...]` tags into both `anki_fields[target]` and
+/// `raw_anki_fields[target]` so the post-import "Done" view shows the
+/// same data that was sent to `addNotes`.
 pub fn import_cards_to_anki(
-    cards: &[ValidatedCard],
+    cards: &mut [ValidatedCard],
     frontmatter: &Frontmatter,
     anki: &AnkiClient,
     tts: Option<TtsFinalize<'_>>,
@@ -44,13 +49,8 @@ pub fn import_cards_to_anki(
         });
     }
 
-    // Clone up front so finalize_tts can mutate without rippling back into
-    // the caller's in-memory review state. The caller keeps its own copy
-    // of the reviewed `ValidatedCard` list for post-import display.
-    let mut cards = cards.to_vec();
-
     if let Some(finalizer) = tts {
-        finalize_tts(&mut cards, frontmatter, finalizer, on_log)?;
+        finalize_tts(cards, frontmatter, finalizer, on_log)?;
     }
 
     on_log(&format!("Adding {} card(s) to Anki...", cards.len()));

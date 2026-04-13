@@ -357,12 +357,35 @@ impl App {
                     state.refresh_in_flight = false;
                 }
             }
-            BackendEvent::ReplaceCard { index, card } => {
+            BackendEvent::ReplaceCard {
+                previous_card_id,
+                card,
+            } => {
                 if let AppMode::Selecting(ref mut state) = self.mode {
-                    if index < state.cards.len() {
-                        state.cards[index] = card;
+                    // Look up the row by stable id, not index. If the
+                    // user removed or edited the card while regen was
+                    // in flight, the reply has nothing to attach to —
+                    // drop it silently.
+                    let Some(slot) = state
+                        .cards
+                        .iter_mut()
+                        .find(|c| c.card_id == previous_card_id)
+                    else {
+                        if state.regen_in_flight == Some(previous_card_id) {
+                            state.regen_in_flight = None;
+                        }
+                        return;
+                    };
+                    let was_selected = state.selected.remove(&previous_card_id);
+                    state.tts_states.remove(&previous_card_id);
+                    let new_id = card.card_id;
+                    *slot = card;
+                    if was_selected {
+                        state.selected.insert(new_id);
                     }
-                    state.regen_in_flight = None;
+                    if state.regen_in_flight == Some(previous_card_id) {
+                        state.regen_in_flight = None;
+                    }
                     self.toast = Some(Toast {
                         message: "Card regenerated".into(),
                         tick: self.tick,
@@ -833,12 +856,14 @@ impl App {
                         .as_ref()
                         .map(|i| i.value().trim().to_string())
                         .unwrap_or_default();
-                    let index = state.cursor;
                     state.feedback_input = None;
-                    if !feedback.is_empty() && state.regen_in_flight.is_none() {
-                        state.regen_in_flight = Some(index);
+                    if let Some(card) = state.cards.get(state.cursor).cloned()
+                        && !feedback.is_empty()
+                        && state.regen_in_flight.is_none()
+                    {
+                        state.regen_in_flight = Some(card.card_id);
                         self.worker_tx
-                            .send(WorkerCommand::RegenerateCard { index, feedback })
+                            .send(WorkerCommand::RegenerateCard { card, feedback })
                             .ok();
                     }
                 }
@@ -957,8 +982,8 @@ impl App {
                 else {
                     return;
                 };
-                let indices: Vec<usize> = state.selected.into_iter().collect();
-                self.worker_tx.send(WorkerCommand::Selection(indices)).ok();
+                let cards = state.selected_cards_in_order();
+                self.worker_tx.send(WorkerCommand::Selection(cards)).ok();
             }
             KeyCode::Char('f') => {
                 state.force_toggle_duplicate();
@@ -983,7 +1008,7 @@ impl App {
                 if !enabled || self.player.is_none() {
                     return;
                 }
-                let Some(card) = state.cards.get(state.cursor) else {
+                let Some(card) = state.cards.get(state.cursor).cloned() else {
                     return;
                 };
                 let card_id = card.card_id;
@@ -999,10 +1024,10 @@ impl App {
                         }
                     }
                     _ => {
-                        // Idle or failed: ask the worker to synthesize.
-                        self.worker_tx
-                            .send(WorkerCommand::PreviewTts { card_id })
-                            .ok();
+                        // Idle or failed: ask the worker to synthesize
+                        // from the current card snapshot. The worker
+                        // never looks at any stale mirror.
+                        self.worker_tx.send(WorkerCommand::PreviewTts { card }).ok();
                     }
                 }
             }
@@ -1214,16 +1239,32 @@ fn edit_card_in_editor(terminal: &mut DefaultTerminal, app: &mut App, card_index
         false
     };
 
-    // Apply edits to the card
+    // Apply edits to the card. Mint a new `card_id` so any stale TTS
+    // preview state (cached `Ready` path pointing at pre-edit audio,
+    // or an in-flight `Synthesizing` reply) is invalidated by id
+    // mismatch. Transfer selection/regen-flight membership from the
+    // old id to the new one.
     let AppMode::Selecting(ref mut state) = app.mode else {
         return;
     };
     if let Some(card) = state.cards.get_mut(card_index) {
+        let old_id = card.card_id;
+        let new_id = crate::generate::cards::next_card_id();
+        card.card_id = new_id;
         card.fields = new_fields;
         card.anki_fields = new_anki_fields;
         card.raw_anki_fields = new_raw_anki_fields;
         card.is_duplicate = is_duplicate;
         card.flags.clear(); // clear stale flags after manual edit
+
+        if state.selected.remove(&old_id) {
+            state.selected.insert(new_id);
+        }
+        if state.regen_in_flight == Some(old_id) {
+            state.regen_in_flight = Some(new_id);
+        }
+        state.tts_states.remove(&old_id);
+
         app.toast = Some(Toast {
             message: "Card updated".into(),
             tick: app.tick,

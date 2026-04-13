@@ -227,8 +227,13 @@ impl PipelineInteraction for TuiInteraction<'_> {
         self.tx.send(BackendEvent::AppendCards(cards)).ok();
     }
 
-    fn replace_card(&self, index: usize, card: ValidatedCard) {
-        self.tx.send(BackendEvent::ReplaceCard { index, card }).ok();
+    fn replace_card(&self, previous_card_id: u64, card: ValidatedCard) {
+        self.tx
+            .send(BackendEvent::ReplaceCard {
+                previous_card_id,
+                card,
+            })
+            .ok();
     }
 
     fn regen_error(&self, message: String) {
@@ -239,11 +244,11 @@ impl PipelineInteraction for TuiInteraction<'_> {
         match self.rx.recv() {
             Ok(WorkerCommand::Refresh) => SelectionAction::Refresh,
             Ok(WorkerCommand::RefreshWithTerm(term)) => SelectionAction::RefreshWithTerm(term),
-            Ok(WorkerCommand::RegenerateCard { index, feedback }) => {
-                SelectionAction::RegenerateCard { index, feedback }
+            Ok(WorkerCommand::RegenerateCard { card, feedback }) => {
+                SelectionAction::RegenerateCard { card, feedback }
             }
-            Ok(WorkerCommand::PreviewTts { card_id }) => SelectionAction::PreviewTts { card_id },
-            Ok(WorkerCommand::Selection(indices)) => SelectionAction::Selected(indices),
+            Ok(WorkerCommand::PreviewTts { card }) => SelectionAction::PreviewTts { card },
+            Ok(WorkerCommand::Selection(cards)) => SelectionAction::Selected(cards),
             Ok(WorkerCommand::Cancel) => SelectionAction::Cancel,
             Ok(WorkerCommand::Quit) | Err(_) => SelectionAction::Quit,
             _ => SelectionAction::Cancel,
@@ -453,7 +458,7 @@ impl PipelineInteraction for LegacyInteraction {
         unreachable!("Legacy mode does not support refresh");
     }
 
-    fn replace_card(&self, _index: usize, _card: ValidatedCard) {
+    fn replace_card(&self, _previous_card_id: u64, _card: ValidatedCard) {
         unreachable!("Legacy mode does not support regeneration");
     }
 
@@ -464,7 +469,17 @@ impl PipelineInteraction for LegacyInteraction {
     fn wait_selection(&self) -> SelectionAction {
         let cards = self.cards.borrow();
         match select_cards_legacy(&cards) {
-            Ok(indices) => SelectionAction::Selected(indices),
+            Ok(indices) => {
+                // Map indices to cloned cards so the new
+                // `Selected(Vec<ValidatedCard>)` shape is honored. The
+                // legacy interactive selector still works on indices
+                // internally; we just adapt at the boundary.
+                let selected: Vec<ValidatedCard> = indices
+                    .into_iter()
+                    .filter_map(|i| cards.get(i).cloned())
+                    .collect();
+                SelectionAction::Selected(selected)
+            }
             Err(_) => SelectionAction::Cancel,
         }
     }
@@ -697,7 +712,7 @@ fn run_copy_mode(
     }
 
     let selected_indices = select_cards_legacy(&validated)?;
-    let selected: Vec<ValidatedCard> = selected_indices
+    let mut selected: Vec<ValidatedCard> = selected_indices
         .iter()
         .filter_map(|&i| validated.get(i).cloned())
         .collect();
@@ -730,7 +745,7 @@ fn run_copy_mode(
                 service: &b.service,
                 media: &b.media,
             });
-        let result = import_cards_to_anki(&selected, frontmatter, &anki, tts_finalize, on_log)?;
+        let result = import_cards_to_anki(&mut selected, frontmatter, &anki, tts_finalize, on_log)?;
         report_import_result(&result, &frontmatter.deck);
 
         if result.failures > 0 {
