@@ -59,39 +59,40 @@ pub struct TtsArgs {
     #[arg(long, short = 'q')]
     pub query: Option<String>,
 
-    /// Path to generate prompt YAML; reads `tts:` block from frontmatter
+    /// Path to a generate prompt YAML; reads its `tts:` block instead of
+    /// taking deck-design flags on the CLI
     #[arg(long)]
     pub prompt: Option<PathBuf>,
 
-    /// Target field to write [sound:...] into (legacy flag-only mode)
+    /// Target field to write [sound:...] into (flag mode; required)
     #[arg(long)]
     pub field: Option<String>,
 
-    /// Path to prompt template file (legacy flag-only mode)
+    /// Path to prompt template file (flag mode)
     #[arg(long, short = 'p')]
     pub template: Option<PathBuf>,
 
-    /// Source field name (legacy flag-only mode; alternative to --template)
+    /// Source field name (flag mode; alternative to --template)
     #[arg(long = "text-field")]
     pub text_field: Option<String>,
 
-    /// TTS provider identifier (legacy flag-only mode; defaults to "openai")
+    /// TTS provider identifier (flag mode; defaults to "openai")
     #[arg(long)]
     pub provider: Option<String>,
 
-    /// Voice name (legacy flag-only mode; provider-specific, e.g. alloy)
+    /// Voice name (flag mode; provider-specific, e.g. alloy)
     #[arg(long)]
     pub voice: Option<String>,
 
-    /// TTS backing model (legacy flag-only mode; e.g. gpt-4o-mini-tts)
+    /// TTS backing model (flag mode; e.g. gpt-4o-mini-tts)
     #[arg(long = "tts-model")]
     pub tts_model: Option<String>,
 
-    /// Output audio format (legacy flag-only mode; defaults to "mp3")
+    /// Output audio format (flag mode; defaults to "mp3")
     #[arg(long)]
     pub format: Option<String>,
 
-    /// Playback speed (legacy flag-only mode; 1.0 = normal)
+    /// Playback speed (flag mode; 1.0 = normal)
     #[arg(long)]
     pub speed: Option<f32>,
 
@@ -103,7 +104,7 @@ pub struct TtsArgs {
     #[arg(long)]
     pub api_key: Option<String>,
 
-    /// Filter by note type (legacy flag-only mode; rejected in --prompt mode)
+    /// Filter by note type (flag mode; rejected in --prompt mode)
     #[arg(long, short = 'n')]
     pub note_type: Option<String>,
 

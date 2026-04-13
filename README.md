@@ -1018,7 +1018,22 @@ anki-llm tts Japanese \
 
 Templates use the same `{field}` placeholder syntax as `process-deck`.
 
-**Using a prompt YAML (recommended)**
+**Two ways to use it**
+
+`anki-llm tts` has two first-class modes:
+
+1. **Flag mode** (shown in the quick start above) — pass voice / target
+   field / source text / provider on the CLI. Best for one-shot fills,
+   trying TTS for the first time, or processing decks you don't
+   maintain.
+2. **Prompt mode** (`--prompt <file>`) — read the deck's TTS settings
+   from a YAML frontmatter alongside its LLM prompt. Best for decks you
+   maintain in version control, where the voice and source-text strategy
+   are inherent to the deck's design.
+
+Pick whichever fits the task — neither is deprecated.
+
+**Using a prompt YAML**
 
 The TTS settings for a deck (voice, model, target field, source text)
 are usually fixed and belong with the rest of the deck's design. They
@@ -1060,14 +1075,12 @@ target a different deck (still using the YAML's voice/source/etc.) or
 `--query` for a custom Anki search. CLI flags for voice, model, format,
 target field, source text, provider, speed, and note type are **not
 allowed** in `--prompt` mode — edit the YAML if you need to change them.
+That's the whole point of prompt mode: one place to look.
 
 `tts.target` is an Anki field name (not a `field_map` key); audio is
 not an LLM-generated output. `tts.source.field` and the placeholders in
 `tts.source.template` reference `field_map` keys, so they read the same
 LLM-facing names the prompt body uses.
-
-The flag-only mode below is deprecated and will be removed in a future
-release. New decks should use `--prompt`.
 
 **Skip-existing behavior**
 

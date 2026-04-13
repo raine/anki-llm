@@ -153,11 +153,19 @@ impl BatchSession for TtsDeckSession {
 }
 
 /// Dispatcher: branch on whether the user passed `--prompt <file>`.
+///
+/// Both modes are first-class:
+/// - **Prompt mode** (`--prompt <file>`) reads a YAML's `tts:` block.
+///   Use this when the deck has a stable design checked into version
+///   control alongside the LLM prompt.
+/// - **Flag mode** (no `--prompt`) takes voice/target/source directly
+///   on the CLI. Use this for one-shot fills against decks you don't
+///   maintain or for trying TTS before authoring a YAML.
 pub fn run(args: TtsArgs) -> Result<()> {
     if args.prompt.is_some() {
         run_prompt_mode(args)
     } else {
-        run_legacy_mode(args)
+        run_flag_mode(args)
     }
 }
 
@@ -259,12 +267,7 @@ fn run_prompt_mode(args: TtsArgs) -> Result<()> {
     })
 }
 
-fn run_legacy_mode(args: TtsArgs) -> Result<()> {
-    eprintln!(
-        "warning: `anki-llm tts` flag-only mode is deprecated; \
-         define a `tts:` block in your prompt YAML and pass --prompt"
-    );
-
+fn run_flag_mode(args: TtsArgs) -> Result<()> {
     // Manual enforcement of the old clap ArgGroups, now that they've been
     // dropped so --prompt mode can reuse the same struct.
     if args.deck.is_none() && args.query.is_none() {
@@ -281,7 +284,7 @@ fn run_legacy_mode(args: TtsArgs) -> Result<()> {
     let field = args
         .field
         .clone()
-        .context("--field is required in legacy flag-only mode")?;
+        .context("--field is required (or pass --prompt with a YAML containing a tts: block)")?;
 
     let runtime = build_tts_runtime(TtsRuntimeArgs {
         provider: Some(args.provider.as_deref().unwrap_or("openai")),
@@ -303,10 +306,10 @@ fn run_legacy_mode(args: TtsArgs) -> Result<()> {
         _ => unreachable!("checked above"),
     };
 
-    // Reshape the legacy TtsRuntime into the unified ResolvedTtsSpec so the
-    // shared body has a single input type. This is a shim, not a merge —
-    // build_tts_runtime is still responsible for legacy-mode defaulting
-    // (including AppConfig.tts_* fallbacks).
+    // Reshape the flag-mode TtsRuntime into the unified ResolvedTtsSpec so
+    // the shared body has a single input type. This is a shim, not a merge
+    // — build_tts_runtime is still responsible for flag-mode defaulting
+    // (including AppConfig.tts_* fallbacks, which prompt mode skips).
     let resolved = ResolvedTtsSpec {
         provider: runtime.provider,
         voice: runtime.voice,
