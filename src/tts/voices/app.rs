@@ -321,13 +321,16 @@ impl App {
             return;
         }
         match outcome {
-            Ok(path) => match player::spawn(&path) {
-                Ok(child) => {
-                    self.active_player = Some(child);
-                    self.status_line = "Playing sample...".into();
+            Ok(path) => {
+                self.stop_player();
+                match player::spawn(&path) {
+                    Ok(child) => {
+                        self.active_player = Some(child);
+                        self.status_line = "Playing sample...".into();
+                    }
+                    Err(msg) => self.status_line = format!("Player: {msg}"),
                 }
-                Err(msg) => self.status_line = format!("Player: {msg}"),
-            },
+            }
             Err(msg) => self.status_line = msg,
         }
         self.preview_busy = false;
