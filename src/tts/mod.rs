@@ -1,6 +1,7 @@
 pub mod cache;
 pub mod command;
 pub mod error;
+pub mod ir;
 pub mod media;
 pub mod process_row;
 pub mod provider;
