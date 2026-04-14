@@ -315,8 +315,8 @@ fn handle_preview_tts(
     let bundle = match session_tts.bundle() {
         Ok(b) => b,
         Err(e) => {
-            progress.log(&format!("TTS unavailable: {e}"));
-            interaction.tts_state(card_id, TtsUiState::Failed(e.to_string()));
+            progress.log(&format!("TTS unavailable: {e:#}"));
+            interaction.tts_state(card_id, TtsUiState::Failed(format!("{e:#}")));
             return;
         }
     };
@@ -327,8 +327,8 @@ fn handle_preview_tts(
     {
         Ok(p) => p,
         Err(e) => {
-            progress.log(&format!("TTS prepare failed: {e}"));
-            interaction.tts_state(card_id, TtsUiState::Failed(e.to_string()));
+            progress.log(&format!("TTS prepare failed: {e:#}"));
+            interaction.tts_state(card_id, TtsUiState::Failed(format!("{e:#}")));
             return;
         }
     };
@@ -347,8 +347,8 @@ fn handle_preview_tts(
             );
         }
         Err(e) => {
-            progress.log(&format!("TTS synthesis failed: {e}"));
-            interaction.tts_state(card_id, TtsUiState::Failed(e.to_string()));
+            progress.log(&format!("TTS synthesis failed: {e:#}"));
+            interaction.tts_state(card_id, TtsUiState::Failed(format!("{e:#}")));
         }
     }
 }
