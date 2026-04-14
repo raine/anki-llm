@@ -1073,7 +1073,12 @@ declared in the same YAML frontmatter `anki-llm generate` uses, under a
 top-level `tts:` block. **Both** `anki-llm tts --prompt` (for bulk-filling
 existing notes) and `anki-llm generate` (for new cards) read the same block —
 generate synthesizes + uploads audio for the cards you confirm at import time,
-and offers an in-TUI `p` preview hotkey while you're reviewing them. Example:
+and offers an in-TUI `p` preview hotkey while you're reviewing them. TTS
+credentials are read from environment variables and `~/.config/anki-llm/config.toml`
+(see Provider configuration below) — `anki-llm generate`'s `--api-key` /
+`--api-base-url` flags are LLM-only and are never forwarded to the TTS provider,
+so you can point generate at OpenRouter / Ollama / a local proxy while still
+synthesizing audio against OpenAI or Azure. Example:
 
 ```yaml
 ---

@@ -123,12 +123,16 @@ fn prepare_session(
     let client = LlmClient::from_config(&runtime);
 
     let tts = if let Some(ref spec) = loaded.frontmatter.tts {
+        // TTS credentials are resolved from env/config (`AZURE_TTS_KEY`,
+        // `OPENAI_API_KEY`, `~/.config/anki-llm/config.toml`'s `tts_*` fields),
+        // not from `--api-key`/`--api-base-url` which are LLM-only transport
+        // flags and may legitimately point at OpenRouter, Ollama, etc.
         let bundle = crate::tts::service::build_bundle(
             spec,
             AnkiClient::new(),
             crate::tts::service::TtsBundleOptions {
-                api_key: args.api_key.as_deref(),
-                api_base_url: args.api_base_url.as_deref(),
+                api_key: None,
+                api_base_url: None,
                 azure_region: None,
             },
         )
@@ -729,12 +733,14 @@ fn run_copy_mode(
         export_cards(&selected, output_path, on_log)?;
     } else {
         let tts_bundle = if let Some(ref spec) = frontmatter.tts {
+            // TTS credentials come from env/config, not from generate's
+            // `--api-key`/`--api-base-url` which target the LLM endpoint.
             Some(crate::tts::service::build_bundle(
                 spec,
                 AnkiClient::new(),
                 crate::tts::service::TtsBundleOptions {
-                    api_key: args.api_key.as_deref(),
-                    api_base_url: args.api_base_url.as_deref(),
+                    api_key: None,
+                    api_base_url: None,
                     azure_region: None,
                 },
             )?)
