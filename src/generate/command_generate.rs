@@ -10,6 +10,7 @@ use crate::llm::parse_json::try_parse_json_array;
 use crate::llm::provider::available_models;
 use crate::llm::runtime::{RuntimeConfig, RuntimeConfigArgs, build_runtime_config};
 use crate::template::frontmatter::{Frontmatter, parse_prompt_file};
+use crate::tts::service::SessionTts;
 
 use crate::style::{Style, style};
 
@@ -61,11 +62,15 @@ struct PreparedSession {
     anki: AnkiClient,
     client: LlmClient,
     logger: LlmLogger,
-    /// Bundled TTS service + media store, built once per session when the
-    /// prompt has a `tts:` block. Shared by the (future) preview path and
-    /// the import-time finalizer so both hit the same cache and the same
-    /// upload-dedup map.
-    tts: Option<crate::tts::service::TtsBundle>,
+    /// Lazy TTS bundle. Holds the `TtsSpec` from the prompt frontmatter
+    /// and a `OnceCell<TtsBundle>` that's populated on first access via
+    /// `SessionTts::bundle()`. Deferring construction means
+    /// `--dry-run` / `--output` and sessions that never press `p` never
+    /// trigger TTS credential resolution — previously `prepare_session`
+    /// would fail at startup with "Azure TTS requires a subscription
+    /// key" for any prompt declaring a `tts:` block, regardless of
+    /// whether the run actually needed audio.
+    tts: Option<SessionTts>,
 }
 
 /// Load and parse a prompt file, validating required placeholders.
@@ -122,24 +127,14 @@ fn prepare_session(
     let field_map_keys: Vec<String> = loaded.frontmatter.field_map.keys().cloned().collect();
     let client = LlmClient::from_config(&runtime);
 
-    let tts = if let Some(ref spec) = loaded.frontmatter.tts {
-        // TTS credentials resolve from env/config (`AZURE_TTS_KEY`,
-        // `OPENAI_API_KEY`, `~/.config/anki-llm/config.toml`'s `tts_*` fields).
-        // `TtsBundleOptions` intentionally does not accept `api_key` /
-        // `api_base_url` — those are LLM-only flags and may point at
-        // OpenRouter/Ollama/etc.
-        let bundle = crate::tts::service::build_bundle(
-            spec,
-            AnkiClient::new(),
-            crate::tts::service::TtsBundleOptions { azure_region: None },
-        )
-        .inspect_err(|e| {
-            progress.step_error(PipelineStep::ValidateAnki, &e.to_string());
-        })?;
-        Some(bundle)
-    } else {
-        None
-    };
+    // TTS bundle is built lazily on first access via `SessionTts::bundle()`
+    // so `--dry-run` / `--output` — and sessions where the user never
+    // triggers preview or import — don't pay the credential-resolution
+    // cost. Credentials flow through env/config
+    // (`AZURE_TTS_KEY`, `OPENAI_API_KEY`,
+    // `~/.config/anki-llm/config.toml`'s `tts_*` fields); generate's
+    // `--api-key` / `--api-base-url` are LLM-only and never forwarded.
+    let tts = loaded.frontmatter.tts.clone().map(SessionTts::new);
 
     Ok(PreparedSession {
         frontmatter: loaded.frontmatter,
@@ -308,7 +303,9 @@ pub fn run_pipeline(
     // Worker-side only knows whether the YAML declares `tts:`. The TUI
     // main thread owns audio-backend detection and player ownership,
     // and combines this flag with its own detection result to decide
-    // whether to show the preview keybind.
+    // whether to show the preview keybind. This is derived from the
+    // spec's presence, not from a materialized bundle — the bundle is
+    // lazily built on first use (preview or import).
     let tts_configured = session.tts.is_some();
 
     tx.send(BackendEvent::SessionReady(SessionInfo {
@@ -318,7 +315,7 @@ pub fn run_pipeline(
         available_models: models.clone(),
         field_map: session.frontmatter.field_map.clone(),
         first_field_name: session.validation.note_type_fields[0].clone(),
-        tts_preview_enabled: tts_configured,
+        tts_configured,
     }))
     .ok();
 
@@ -418,7 +415,7 @@ pub fn run_pipeline(
                             available_models: models.clone(),
                             field_map: session.frontmatter.field_map.clone(),
                             first_field_name: session.validation.note_type_fields[0].clone(),
-                            tts_preview_enabled: tts_configured,
+                            tts_configured,
                         }))
                         .ok();
                     }

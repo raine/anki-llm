@@ -112,10 +112,12 @@ pub struct PipelineConfig<'a> {
     pub count: u32,
     pub dry_run: bool,
     pub output: Option<&'a std::path::Path>,
-    /// Optional TTS bundle. When present, `finalize_tts` runs before
-    /// `add_notes` to synthesize + upload missing audio and rewrite the
-    /// target field.
-    pub tts: Option<&'a crate::tts::service::TtsBundle>,
+    /// Optional lazy TTS handle. When present, the preview and import
+    /// paths resolve the underlying `TtsBundle` via
+    /// `SessionTts::bundle()` on first use; neither `--dry-run` nor
+    /// `--output` touch this field, so TTS credential resolution is
+    /// deferred (or skipped) for those flows.
+    pub tts: Option<&'a crate::tts::service::SessionTts>,
 }
 
 pub enum PipelineOutcome {
@@ -297,7 +299,7 @@ fn handle_preview_tts(
 ) {
     use super::tui::events::TtsUiState;
 
-    let Some(bundle) = config.tts else {
+    let Some(session_tts) = config.tts else {
         // No TTS configured — silently drop the request. The TUI should
         // never send this command in that case, but defend anyway.
         return;
@@ -305,6 +307,19 @@ fn handle_preview_tts(
     let card_id = card.card_id;
 
     interaction.tts_state(card_id, TtsUiState::Synthesizing);
+
+    // First preview in a session materializes the bundle via
+    // `spec::resolve`. If credentials are missing the failure surfaces
+    // here as a per-card `Failed` state, not a session-wide fatal — the
+    // user can fix the env and retry without losing their curation.
+    let bundle = match session_tts.bundle() {
+        Ok(b) => b,
+        Err(e) => {
+            progress.log(&format!("TTS unavailable: {e}"));
+            interaction.tts_state(card_id, TtsUiState::Failed(e.to_string()));
+            return;
+        }
+    };
 
     let prepared = match bundle
         .service
@@ -911,9 +926,30 @@ pub fn run_pipeline_for_term(
             failed: false,
         })
     } else {
-        let tts_finalize = config.tts.map(|bundle| TtsFinalize {
-            service: &bundle.service,
-            media: &bundle.media,
+        // Resolve the TTS bundle lazily for import finalization. A
+        // failure here — e.g. missing `AZURE_TTS_KEY` — becomes the
+        // same "Import failed" surface as any other late-stage error,
+        // preserving the curated card list via
+        // `PipelineOutcome::Success { failed: true, .. }` instead of
+        // tearing down the selection state.
+        let bundle = match config.tts {
+            Some(session_tts) => match session_tts.bundle() {
+                Ok(b) => Some(b),
+                Err(e) => {
+                    progress.step_error(PipelineStep::Finish, &format!("{e}"));
+                    return Ok(PipelineOutcome::Success {
+                        message: format!("Import failed: {e}"),
+                        cards: final_cards,
+                        note_ids: Vec::new(),
+                        failed: true,
+                    });
+                }
+            },
+            None => None,
+        };
+        let tts_finalize = bundle.map(|b| TtsFinalize {
+            service: &b.service,
+            media: &b.media,
         });
         Ok(run_import_step(
             final_cards,

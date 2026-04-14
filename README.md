@@ -725,13 +725,15 @@ in a single session.
 - `-m, --model`: AI model to use (defaults to `gpt-5-mini` or `gemini-2.5-flash`
   depending on your API key; can also be set via `config set model`).
 - `-d, --dry-run`: Display generated cards without starting the interactive
-  selection or import process.
+  selection or import process. Works without TTS credentials even when the
+  prompt declares a `tts:` block.
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
 - `-t, --temperature`: LLM temperature, a value between 0 and 2 that controls
   creativity (default: `1.0`).
 - `--max-tokens`: Set a maximum number of tokens for the LLM response.
 - `-o, --output`: Export cards to a file instead of importing to Anki (e.g.,
-  `cards.yaml`, `cards.csv`).
+  `cards.yaml`, `cards.csv`). Works without TTS credentials even when the
+  prompt declares a `tts:` block.
 - `--log`: Enable logging of LLM responses to a file (useful for debugging).
 - `--copy`: Copy the LLM prompt to clipboard and wait for manual response
   pasting. Useful when you don't have API access and want to use a browser LLM

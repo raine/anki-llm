@@ -266,7 +266,7 @@ impl App {
             // Lazy-init the audio player the first time we see a session
             // where TTS preview is live (frontmatter has a `tts:` block
             // AND a playback binary was found at startup).
-            if info.tts_preview_enabled && self.player.is_none() {
+            if info.tts_configured && self.player.is_none() {
                 if let Some(bin) = self.player_binary.clone() {
                     self.player = Some(crate::audio::spawn_player(bin));
                 } else {
@@ -1047,7 +1047,7 @@ impl App {
                 let enabled = self
                     .session_info
                     .as_ref()
-                    .map(|info| info.tts_preview_enabled)
+                    .map(|info| info.tts_configured)
                     .unwrap_or(false);
                 if !enabled || self.player.is_none() {
                     return;
@@ -1473,7 +1473,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             if app
                 .session_info
                 .as_ref()
-                .map(|info| info.tts_preview_enabled)
+                .map(|info| info.tts_configured)
                 .unwrap_or(false)
                 && app.player.is_some()
             {
@@ -1795,7 +1795,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             if app
                 .session_info
                 .as_ref()
-                .map(|info| info.tts_preview_enabled)
+                .map(|info| info.tts_configured)
                 .unwrap_or(false)
                 && app.player.is_some()
             {

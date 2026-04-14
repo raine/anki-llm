@@ -15,10 +15,12 @@ pub struct SessionInfo {
     /// duplicate-check path so we look up the right field regardless of
     /// how the user rearranged their YAML.
     pub first_field_name: String,
-    /// Whether the current session has a `tts:` block AND a valid audio
-    /// backend was found at startup. When false, the TUI hides the
-    /// preview keybind.
-    pub tts_preview_enabled: bool,
+    /// Whether the prompt declares a `tts:` block. Derived from the
+    /// spec's presence — not from a materialized `TtsBundle`, which is
+    /// built lazily on first preview or import. The TUI combines this
+    /// flag with its own audio-backend detection result to decide
+    /// whether to show the preview keybind.
+    pub tts_configured: bool,
 }
 
 /// Per-card TTS preview state, routed by stable `card_id`. The TUI owns

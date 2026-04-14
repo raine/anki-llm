@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -186,6 +187,68 @@ impl TtsService {
 pub struct TtsBundle {
     pub service: Arc<TtsService>,
     pub media: Arc<AnkiMediaStore>,
+}
+
+/// Session-scoped TTS state: the spec from the prompt frontmatter plus a
+/// lazily-initialized `TtsBundle`. The generate pipeline constructs this
+/// at session startup when the prompt declares a `tts:` block, but
+/// defers the actual bundle build (which resolves credentials via
+/// `spec::resolve`) until the first preview or import-time finalization.
+///
+/// This matters because `--dry-run` and `--output` (export to YAML) —
+/// and any session where the user hits Esc before submitting — never
+/// need TTS. Eagerly building the bundle used to fail those runs with
+/// `Azure TTS requires a subscription key` even though no synthesis
+/// ever happens.
+///
+/// `std::cell::OnceCell` is single-threaded, which matches the
+/// `PreparedSession` ownership model: it's created on the worker thread
+/// (TUI mode) or the main thread (legacy mode) and never shared across
+/// threads.
+pub struct SessionTts {
+    spec: TtsSpec,
+    bundle: OnceCell<TtsBundle>,
+}
+
+impl SessionTts {
+    pub fn new(spec: TtsSpec) -> Self {
+        Self {
+            spec,
+            bundle: OnceCell::new(),
+        }
+    }
+
+    /// Return the cached `TtsBundle`, building it on first call.
+    ///
+    /// Construction failures are NOT cached — a later retry after the
+    /// user fixes their environment (e.g. exports `AZURE_TTS_KEY` and
+    /// presses `p` again) will rebuild from scratch. Successful builds
+    /// are cached for the lifetime of the session.
+    pub fn bundle(&self) -> Result<&TtsBundle> {
+        if let Some(b) = self.bundle.get() {
+            return Ok(b);
+        }
+        let built = build_bundle(
+            &self.spec,
+            AnkiClient::new(),
+            TtsBundleOptions { azure_region: None },
+        )?;
+        // Single-threaded OnceCell — nothing else can beat us to `set`.
+        let _ = self.bundle.set(built);
+        Ok(self
+            .bundle
+            .get()
+            .expect("bundle was just set; get cannot fail"))
+    }
+
+    /// For tests only: inject a pre-built bundle so callers can exercise
+    /// the lazy-resolution code path without touching real credentials.
+    #[cfg(test)]
+    pub fn with_bundle(spec: TtsSpec, bundle: TtsBundle) -> Self {
+        let cell = OnceCell::new();
+        let _ = cell.set(bundle);
+        Self { spec, bundle: cell }
+    }
 }
 
 /// Inputs needed to build a `TtsBundle` from a `TtsSpec`. Only the
@@ -487,4 +550,104 @@ mod tests {
     // the test file scope linking against the same crate.
     #[allow(dead_code)]
     fn _touch(_: AnkiClient) {}
+
+    // ----- SessionTts (lazy bundle) -----
+    //
+    // These tests pin the "do not resolve credentials until first use"
+    // contract. Prior to the lazy refactor, sessions with a `tts:`
+    // block in frontmatter would fail at startup — breaking
+    // `--dry-run`, `--output`, and any run where the user never
+    // pressed `p` — because `prepare_session` eagerly called
+    // `build_bundle` → `spec::resolve`.
+
+    use crate::template::frontmatter::{TtsSource, TtsSpec};
+
+    fn bad_spec() -> TtsSpec {
+        // `unknown-provider` fails deterministically inside
+        // `spec::resolve` without depending on any env vars, so the
+        // test is hermetic regardless of whether the developer has
+        // AZURE_TTS_KEY / OPENAI_API_KEY set in their shell.
+        TtsSpec {
+            target: "Audio".into(),
+            source: TtsSource {
+                field: Some("front".into()),
+                template: None,
+            },
+            voice: "alloy".into(),
+            provider: Some("unknown-provider".into()),
+            region: None,
+            model: None,
+            format: None,
+            speed: None,
+        }
+    }
+
+    #[test]
+    fn session_tts_new_does_not_resolve_credentials() {
+        // If `SessionTts::new` resolved credentials eagerly, this
+        // `bad_spec` would panic here. The whole point of the lazy
+        // refactor is that construction is side-effect free.
+        let _ = SessionTts::new(bad_spec());
+    }
+
+    #[test]
+    fn session_tts_bundle_errors_on_bad_spec_and_retries() {
+        let session = SessionTts::new(bad_spec());
+
+        let first_msg = match session.bundle() {
+            Ok(_) => panic!("bad spec must surface a resolve error"),
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            first_msg.contains("unknown TTS provider"),
+            "expected provider error, got: {first_msg}"
+        );
+
+        // Errors are NOT cached — a second call re-runs resolution,
+        // which matches the documented OnceCell semantics (failures
+        // don't populate the cell, so the next caller retries).
+        assert!(
+            session.bundle().is_err(),
+            "second call must also error (build_bundle is not cached on failure)"
+        );
+    }
+
+    #[test]
+    fn session_tts_bundle_caches_successful_build() {
+        // Build a minimal bundle by hand and stash it via the test-only
+        // `with_bundle` constructor. Subsequent `bundle()` calls must
+        // return the same handle without re-running resolution —
+        // verified by comparing pointer identity of the inner `Arc`s.
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let provider: Arc<dyn TtsProvider> =
+            Arc::new(MockProvider::new("mock", TextFormat::PlainText));
+        let service = Arc::new(mk_service(
+            provider,
+            cache,
+            TemplateSource::field("front".into()),
+            "Audio",
+        ));
+        let media = Arc::new(AnkiMediaStore::new(AnkiClient::new()));
+        let bundle = TtsBundle {
+            service: service.clone(),
+            media: media.clone(),
+        };
+
+        let session = SessionTts::with_bundle(bad_spec(), bundle);
+
+        let first = session.bundle().expect("pre-seeded bundle must resolve");
+        let second = session.bundle().expect("cached bundle must resolve");
+        assert!(
+            Arc::ptr_eq(&first.service, &second.service),
+            "cached bundle must return the same service handle"
+        );
+        assert!(
+            Arc::ptr_eq(&first.media, &second.media),
+            "cached bundle must return the same media handle"
+        );
+        // Also verify the service pointer matches the one we injected,
+        // proving `bundle()` did not rebuild from the spec.
+        assert!(Arc::ptr_eq(&first.service, &service));
+    }
 }
