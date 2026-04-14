@@ -441,31 +441,9 @@ anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.tx
 anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --force -m gpt-4o-mini
 ```
 
-**Key features:**
-
-- ✅ **Interactive TUI**: Preflight confirmation, live per-row progress with
-  spinner and elapsed time, cost tracking, and failure triage with retry
-- ✅ **Automatic resume**: Skips already-processed notes
-- ✅ **Incremental saves**: Progress saved continuously
-- ✅ **Review before import**: You can inspect/edit the output file before
-  importing
-
-**When to use this command:**
-
-This command provides a file-based workflow for batch processing notes. It is
-the primary alternative to the `process-deck` command, which modifies notes
-directly in your Anki collection.
-
-Use `process-file` instead of `process-deck` when you:
-
-- **Require a manual review step.** The command outputs to a file, creating a
-  safe staging area to inspect results before you commit them to your Anki deck.
-- **Need to process a large number of notes where interruptions are possible.**
-  Its resume capability ensures you don't lose progress if the process fails
-  midway.
-- **Are operating in an environment without a running Anki instance.** This
-  command is fully self-contained and does not need to connect to the Anki
-  application.
+Use `process-file` when you want a reviewable staging file, resume support
+for large runs, or when Anki isn't running. Use `process-deck` when you want
+to update notes directly in-place.
 
 ---
 
@@ -519,11 +497,6 @@ explanation and an example.
 - Anki Desktop must be running
 - AnkiConnect add-on must be installed
 
-**Workflow:**
-
-- Single command:
-  `anki-llm process-deck "My Deck" --field Translation -p prompt.txt -m gpt-4o-mini`
-
 **Examples:**
 
 ```bash
@@ -548,34 +521,13 @@ anki-llm process-deck --query "rated:7:1" --field Notes -p prompt.txt
 
 **Undoing a run:**
 
-Every `process-deck` run automatically saves a snapshot of the original field
-values. The run ID is printed at the end of the run, e.g.:
+Every `process-deck` run is automatically snapshotted. The run ID is printed
+at the end; pass it to `anki-llm rollback <run-id>` to revert all changes.
+Use [`anki-llm history`](#anki-llm-history) to list past runs.
 
-```
-Snapshot saved: ~/.local/state/anki-llm/snapshots/20260411T153000_123Z.json
-(use `anki-llm rollback 20260411T153000_123Z` to undo)
-```
-
-To revert all changes from that run:
-
-```bash
-anki-llm rollback 20260411T153000_123Z
-```
-
-Use [`anki-llm history`](#anki-llm-history) to list past runs if you forgot the
-ID, or [`anki-llm rollback`](#anki-llm-rollback-run-id) for the full rollback
-options (dry-run, conflict handling).
-
-**Key features:**
-
-- ✅ **Interactive TUI**: Preflight confirmation, live per-row progress with
-  spinner and elapsed time, cost tracking, and failure triage with retry
-- ✅ **No intermediate files**: Process and update in one step
-- ✅ **Batch updates**: Efficient bulk updates to Anki
-- ✅ **Error logging**: Failed notes logged to `[deck-name]-errors.jsonl`
-- ✅ **Automatic snapshots**: Every run is saved so you can rollback later
-- ❌ **No resume support**: Must complete in one run (use `process-file` for
-  large datasets)
+`process-deck` does not support resume — use `process-file` for large runs
+where interruptions are likely. Failed notes are logged to
+`<deck-name>-errors.jsonl` in the working directory.
 
 ---
 
@@ -672,8 +624,7 @@ card generation.
 
 **Common options:**
 
-- `-m, --model`: The LLM model to use for the smart prompt generation step
-  (e.g., `gemini-2.5-pro`).
+- `-m, --model`: The LLM model to use for the smart prompt generation step.
 - `-t, --temperature`: Temperature for LLM generation (0.0-2.0, default varies
   by model). Lower values produce more consistent output.
 - `--copy`: Copy the LLM prompt to clipboard and wait for manual response
@@ -682,7 +633,7 @@ card generation.
 
 <!-- prettier-ignore -->
 > [!TIP]
-> Using a more capable reasoning model like `gemini-2.5-pro` for the
+> Using a more capable reasoning model like `gemini-3.1-pro-preview` for the
 > `generate-init` step can produce higher-quality prompt templates that better
 > capture the nuances and style of your existing cards.
 
@@ -736,48 +687,18 @@ in a single session.
 
 <img src="meta/generate-tui.webp" alt="Generate TUI screenshot" width="700">
 
-The generate command runs in a full-screen terminal UI with a sidebar showing
-pipeline progress and session info (deck, note type, model, cost) alongside the
-main content area. Press `?` at any time to see available keyboard shortcuts for
-the current mode.
+The generate command runs in a full-screen terminal UI. Enter a term, review
+the generated cards, and confirm which ones to import. Duplicates are flagged
+against your existing deck with a field-by-field diff. You can regenerate a
+card with feedback, edit any card in your `$EDITOR`, switch models
+mid-session, or queue multiple terms for batch processing.
 
-**Input** — Type or paste a term to generate cards for. Use `↑`/`↓` to browse
-previous terms (history is persisted across sessions). Press `Enter` to start
-generation. After a run completes, you're returned to the input to generate
-cards for another term. **Batch input**: press `Tab` to queue the current term
-and type another, or paste a multi-line list — all queued terms are processed
-sequentially and their cards accumulate into a single selection screen.
+If the prompt declares a `tts:` block and a system audio player is available,
+press `p` to preview the focused card's audio; audio for selected cards is
+finalized automatically at import time.
 
-**Generation** — The sidebar tracks each pipeline step (load prompt, validate,
-generate, post-process, check duplicates, etc.) with real-time status. The main
-area shows a scrollable log. You can cancel with `Esc` to go back to input.
-
-**Card selection** — Browse generated cards with a list on the left and a detail
-pane on the right. Toggle cards with `Space`, select all/none with `a`/`n`.
-Duplicates are flagged with `[dup]` and show a field-by-field diff against the
-existing Anki note; press `f` to force-select a duplicate for import. Press `r`
-to generate more cards for the same term, or `t` to generate for a different
-term — both keep your current selection. Press `R` to regenerate the focused
-card with feedback (e.g. "make the definition simpler"). Press `e` to edit a
-card in your `$EDITOR`. Press `d` to remove a card from the list, `c` to copy to
-clipboard. Switch model with `Ctrl+O` (type to filter, `Ctrl+N`/`Ctrl+P` to
-navigate). When cards from multiple models are present, each card shows its
-model. If the prompt declares a `tts:` block and a system audio player (`afplay`
-/ `mpv` / `ffplay`) is on `PATH`, press `p` to preview the focused card's audio
-— synthesized once on first press, played back on demand from the local cache,
-with a second press toggling playback off. Audio for selected cards is
-generated automatically at import time. Confirm with `Enter`.
-
-**Quality check review** — If quality checking is enabled, flagged cards are
-presented one at a time with the LLM's reasoning. Keep (`k`/`y`/`Enter`) or
-discard (`d`/`n`) each card, keep/discard all remaining with `a`/`x`, or go back
-to reconsider with `u`.
-
-**Error recovery** — On error, press `r` to retry the same term or `n` to enter
-a new one.
-
-**Cost tracking** — Token usage and estimated cost are displayed in the sidebar,
-accumulated across the entire session.
+Press `?` at any time to see keyboard shortcuts for the current mode. Token
+usage and estimated cost are tracked in the sidebar across the session.
 
 #### **Understanding the Prompt File**
 
