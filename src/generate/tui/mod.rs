@@ -1238,28 +1238,29 @@ fn edit_card_in_editor(terminal: &mut DefaultTerminal, app: &mut App, card_index
         }
     }
 
-    // Re-check duplicate status. Look up the first-field value by the
-    // authoritative first-field name from `SessionInfo` — `new_anki_fields`
-    // preserves whatever order the user wrote in `$EDITOR`, so trusting
-    // its insertion order would query Anki against the wrong field whenever
-    // the user rearranged the YAML.
+    // Re-check duplicate status against the authoritative first-field
+    // name from `SessionInfo` — `new_anki_fields` preserves whatever
+    // order the user wrote in `$EDITOR`, so trusting its insertion
+    // order would query Anki against the wrong field whenever the user
+    // rearranged the YAML. Refresh the full duplicate metadata shape
+    // (note id + fields) via the shared helper so the selection
+    // screen's diff panel renders against up-to-date data rather than
+    // the pre-edit (or stale) existing-note fields.
     let first_field_value = new_anki_fields
         .get(&info.first_field_name)
         .cloned()
         .unwrap_or_default();
-    let is_duplicate = if !first_field_value.is_empty() {
+    let (new_dup_note_id, new_duplicate_fields) = {
         let anki = AnkiClient::new();
-        anki.find_notes(&format!(
-            "\"note:{}\" \"deck:{}\" \"{}\"",
-            info.note_type,
-            info.deck,
-            super::cards::escape_anki_query(&first_field_value),
-        ))
-        .map(|ids| !ids.is_empty())
-        .unwrap_or(false)
-    } else {
-        false
+        super::cards::lookup_duplicate_metadata(
+            &anki,
+            &first_field_value,
+            &info.note_type,
+            &info.deck,
+        )
+        .unwrap_or((None, None))
     };
+    let is_duplicate = new_dup_note_id.is_some();
 
     // Apply edits to the card. Mint a new `card_id` so any stale TTS
     // preview state (cached `Ready` path pointing at pre-edit audio,
@@ -1277,6 +1278,8 @@ fn edit_card_in_editor(terminal: &mut DefaultTerminal, app: &mut App, card_index
         card.anki_fields = new_anki_fields;
         card.raw_anki_fields = new_raw_anki_fields;
         card.is_duplicate = is_duplicate;
+        card.duplicate_note_id = new_dup_note_id;
+        card.duplicate_fields = new_duplicate_fields;
         card.flags.clear(); // clear stale flags after manual edit
 
         if state.selected.remove(&old_id) {

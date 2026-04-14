@@ -66,16 +66,6 @@ pub fn escape_anki_query(value: &str) -> String {
         .replace('_', "\\_")
 }
 
-/// Check if a note with this first field value already exists (public wrapper).
-pub fn check_duplicate_pub(
-    anki: &AnkiClient,
-    first_field_value: &str,
-    note_type: &str,
-    deck: &str,
-) -> Result<bool, anyhow::Error> {
-    Ok(check_duplicate(anki, first_field_value, note_type, deck)?.is_some())
-}
-
 /// Check if a note with this first field value already exists.
 /// Returns the note ID of the first match, or None if no duplicate found.
 fn check_duplicate(
@@ -103,6 +93,32 @@ fn fetch_note_fields(
     Ok(note.fields.into_iter().map(|(k, v)| (k, v.value)).collect())
 }
 
+/// The full duplicate-metadata shape returned by
+/// `lookup_duplicate_metadata` — paired `note_id` + existing-note
+/// fields so callers can populate `ValidatedCard.duplicate_note_id` /
+/// `duplicate_fields` in one shot.
+pub(super) type DuplicateMetadata = (Option<i64>, Option<IndexMap<String, String>>);
+
+/// Resolve the full duplicate-metadata shape (`duplicate_note_id` +
+/// `duplicate_fields`) for a given first-field value. Used by both
+/// freshly generated cards (`build_validated_card`) and the TUI's
+/// post-`$EDITOR` duplicate refresh — previously the edit path only
+/// recomputed `is_duplicate` and left the diff panel rendering against
+/// stale (or missing) metadata.
+pub(super) fn lookup_duplicate_metadata(
+    anki: &AnkiClient,
+    first_field_value: &str,
+    note_type: &str,
+    deck: &str,
+) -> Result<DuplicateMetadata, anyhow::Error> {
+    if first_field_value.is_empty() {
+        return Ok((None, None));
+    }
+    let dup_note_id = check_duplicate(anki, first_field_value, note_type, deck)?;
+    let duplicate_fields = dup_note_id.and_then(|id| fetch_note_fields(anki, id).ok());
+    Ok((dup_note_id, duplicate_fields))
+}
+
 /// Build a fully-populated `ValidatedCard` from already-sanitized LLM-keyed
 /// fields and the corresponding raw (pre-sanitization) strings. Handles the
 /// field-map projection, the duplicate check against Anki's first-field value,
@@ -122,17 +138,16 @@ pub(super) fn build_validated_card(
     let anki_fields = map_fields_to_anki(&sanitized, &frontmatter.field_map)?;
     let raw_anki_fields = map_fields_to_anki(raw_strings, &frontmatter.field_map)?;
 
-    let dup_note_id = anki_fields
+    let first_field_value = anki_fields
         .get(first_field_name)
-        .filter(|v| !v.is_empty())
-        .map(|v| check_duplicate(anki, v, &frontmatter.note_type, &frontmatter.deck))
-        .unwrap_or(Ok(None))?;
-
-    let duplicate_fields = if let Some(note_id) = dup_note_id {
-        fetch_note_fields(anki, note_id).ok()
-    } else {
-        None
-    };
+        .map(String::as_str)
+        .unwrap_or("");
+    let (dup_note_id, duplicate_fields) = lookup_duplicate_metadata(
+        anki,
+        first_field_value,
+        &frontmatter.note_type,
+        &frontmatter.deck,
+    )?;
 
     Ok(ValidatedCard {
         card_id: next_card_id(),
