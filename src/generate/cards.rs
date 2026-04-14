@@ -200,7 +200,7 @@ pub fn validate_cards(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
     use std::thread;
 
@@ -228,32 +228,66 @@ mod tests {
     }
 
     /// Spawn a minimal AnkiConnect mock on an ephemeral loopback port.
-    /// Serves exactly `response_count` JSON responses in `responses` in
-    /// order, matching the request order the helper makes (findNotes,
-    /// then notesInfo). The caller must `join()` the returned handle.
-    fn spawn_mock_anki(responses: Vec<&'static str>) -> (String, thread::JoinHandle<()>) {
+    /// Serves the JSON responses in `responses` one per accepted
+    /// connection, in order, matching the request order the helper
+    /// makes (findNotes, then notesInfo). Parses request headers,
+    /// respects `Content-Length`, and drains the request body before
+    /// replying so the HTTP client never sees an early socket close
+    /// (which would surface as `ECONNRESET`/`EPIPE` if the body
+    /// arrived in a separate TCP segment).
+    ///
+    /// The returned worker thread is detached — the caller must not
+    /// `join()` it. If the test finishes after serving fewer requests
+    /// than expected (e.g. an early error path), the thread stays
+    /// blocked in `accept()` and is reaped when the process exits;
+    /// `join()`ing in that case would deadlock the test.
+    fn spawn_mock_anki(responses: Vec<&'static str>) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let url = format!("http://{addr}");
-        let handle = thread::spawn(move || {
+        thread::spawn(move || {
             for body in responses {
-                let (mut stream, _) = listener.accept().unwrap();
-                // Drain the request headers + body. We don't actually
-                // parse them — the test only cares about request order.
-                // Read up to 8 KiB which comfortably covers a small
-                // AnkiConnect JSON POST.
-                let mut buf = vec![0u8; 8192];
-                let _ = stream.read(&mut buf).unwrap();
+                let Ok((stream, _)) = listener.accept() else {
+                    return;
+                };
+                let mut reader = BufReader::new(stream);
+                // Parse the request line + headers until the blank
+                // line terminator. We only care about Content-Length;
+                // everything else gets discarded.
+                let mut content_length: usize = 0;
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    if line == "\r\n" || line == "\n" {
+                        break;
+                    }
+                    if let Some(rest) = line
+                        .strip_prefix("Content-Length:")
+                        .or_else(|| line.strip_prefix("content-length:"))
+                    {
+                        content_length = rest.trim().parse().unwrap_or(0);
+                    }
+                }
+                // Drain exactly the body bytes so the client's write
+                // half has fully landed before we reply.
+                if content_length > 0 {
+                    let mut body_buf = vec![0u8; content_length];
+                    let _ = reader.read_exact(&mut body_buf);
+                }
+                // Reclaim the underlying stream for writing.
+                let mut stream = reader.into_inner();
                 let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(),
                     body
                 );
-                stream.write_all(response.as_bytes()).unwrap();
+                let _ = stream.write_all(response.as_bytes());
                 let _ = stream.shutdown(std::net::Shutdown::Write);
             }
         });
-        (url, handle)
+        url
     }
 
     #[test]
@@ -263,7 +297,7 @@ mod tests {
         // sequence `build_validated_card` goes through on a duplicate.
         let find_notes_body = r#"{"result":[12345],"error":null}"#;
         let notes_info_body = r#"{"result":[{"noteId":12345,"tags":[],"fields":{"Front":{"value":"日本語","order":0},"Back":{"value":"japanese (existing)","order":1}},"modelName":"Basic","cards":[1]}],"error":null}"#;
-        let (url, handle) = spawn_mock_anki(vec![find_notes_body, notes_info_body]);
+        let url = spawn_mock_anki(vec![find_notes_body, notes_info_body]);
 
         let anki = AnkiClient::with_url(&url);
         let mut sanitized: HashMap<String, String> = HashMap::new();
@@ -293,8 +327,6 @@ mod tests {
             "gpt-test",
         )
         .unwrap();
-
-        handle.join().unwrap();
 
         assert!(card.is_duplicate, "should flag the card as a duplicate");
         assert_eq!(card.duplicate_note_id, Some(12345));
