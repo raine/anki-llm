@@ -31,6 +31,10 @@ pub enum PipelineStep {
     Select,
     QualityCheck,
     Finish,
+    /// UI-only terminal step. The pipeline never emits events for it;
+    /// the TUI marks it Done when the run reaches `RunDone` and routes
+    /// the run summary view to this step's sidebar entry.
+    Summary,
 }
 
 impl PipelineStep {
@@ -44,6 +48,7 @@ impl PipelineStep {
             Self::Select => "Select cards",
             Self::QualityCheck => "Post-select processing",
             Self::Finish => "Import / export",
+            Self::Summary => "Summary",
         }
     }
 }

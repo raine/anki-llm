@@ -41,7 +41,15 @@ const ALL_STEPS: &[PipelineStep] = &[
     PipelineStep::Select,
     PipelineStep::QualityCheck,
     PipelineStep::Finish,
+    PipelineStep::Summary,
 ];
+
+fn summary_step_idx() -> usize {
+    ALL_STEPS
+        .iter()
+        .position(|s| matches!(s, PipelineStep::Summary))
+        .expect("Summary step must be in ALL_STEPS")
+}
 
 struct StepRecord {
     step: PipelineStep,
@@ -453,6 +461,14 @@ impl App {
                 note_ids,
                 failed,
             } => {
+                let summary_idx = summary_step_idx();
+                if let Some(record) = self.steps.get_mut(summary_idx) {
+                    record.status = if failed {
+                        StepStatus::Error(message.clone())
+                    } else {
+                        StepStatus::Done(None)
+                    };
+                }
                 self.mode = AppMode::Done {
                     message,
                     cards,
@@ -460,6 +476,8 @@ impl App {
                     failed,
                 };
                 self.current_step_idx = None;
+                self.browse_step = Some(summary_idx);
+                self.browse_scroll = 0;
             }
             BackendEvent::RunError(msg) => {
                 // During batch: log the error and try to continue with next term
@@ -1416,7 +1434,11 @@ fn draw(frame: &mut Frame, app: &App) {
             failed,
             ..
         } => {
-            if let Some(step_idx) = app.browse_step {
+            let on_summary = matches!(app.browse_step, Some(idx) if matches!(app.steps.get(idx).map(|r| r.step), Some(PipelineStep::Summary)))
+                || app.browse_step.is_none();
+            if on_summary {
+                draw_done(frame, app, message, cards, *failed, main_area);
+            } else if let Some(step_idx) = app.browse_step {
                 let record = &app.steps[step_idx];
                 draw_step_logs(
                     frame,
@@ -1425,12 +1447,14 @@ fn draw(frame: &mut Frame, app: &App) {
                     app.browse_scroll,
                     main_area,
                 );
-            } else {
-                draw_done(frame, app, message, cards, *failed, main_area);
             }
         }
         AppMode::Error(msg) => {
-            if let Some(step_idx) = app.browse_step {
+            let on_summary = matches!(app.browse_step, Some(idx) if matches!(app.steps.get(idx).map(|r| r.step), Some(PipelineStep::Summary)))
+                || app.browse_step.is_none();
+            if on_summary {
+                draw_error(frame, msg, main_area);
+            } else if let Some(step_idx) = app.browse_step {
                 let record = &app.steps[step_idx];
                 draw_step_logs(
                     frame,
@@ -1439,8 +1463,6 @@ fn draw(frame: &mut Frame, app: &App) {
                     app.browse_scroll,
                     main_area,
                 );
-            } else {
-                draw_error(frame, msg, main_area);
             }
         }
     }
