@@ -241,6 +241,27 @@ fn format_model_price(input: f64, output: f64) -> String {
     format!("{}/{}", fmt(input), fmt(output))
 }
 
+/// Render a log line as a styled `Line`. Post-select field diffs use
+/// `    + ` / `    - ` prefixes which are colorized green/red so the
+/// user can spot them at a glance in the log stream.
+fn log_line(msg: &str) -> Line<'_> {
+    if let Some(rest) = msg.strip_prefix("    + ") {
+        Line::from(vec![
+            Span::raw("    "),
+            Span::styled("+ ", Style::default().fg(THEME.success)),
+            Span::styled(rest, Style::default().fg(THEME.success)),
+        ])
+    } else if let Some(rest) = msg.strip_prefix("    - ") {
+        Line::from(vec![
+            Span::raw("    "),
+            Span::styled("- ", Style::default().fg(THEME.danger)),
+            Span::styled(rest, Style::default().fg(THEME.danger)),
+        ])
+    } else {
+        Line::from(msg)
+    }
+}
+
 pub(super) fn draw_log_panel(frame: &mut Frame, logs: &[String], log_scroll: u16, area: Rect) {
     let visible_height = area.height.saturating_sub(2) as usize;
     let total_logs = logs.len();
@@ -251,7 +272,7 @@ pub(super) fn draw_log_panel(frame: &mut Frame, logs: &[String], log_scroll: u16
 
     let log_text: Text = logs[start..end]
         .iter()
-        .map(|l| Line::from(l.as_str()))
+        .map(|l| log_line(l))
         .collect::<Vec<_>>()
         .into();
 
@@ -294,11 +315,7 @@ pub(super) fn draw_step_logs(
         return;
     }
 
-    let log_text: Text = logs
-        .iter()
-        .map(|l| Line::from(l.as_str()))
-        .collect::<Vec<_>>()
-        .into();
+    let log_text: Text = logs.iter().map(|l| log_line(l)).collect::<Vec<_>>().into();
 
     let log_block = Block::default()
         .borders(Borders::ALL.difference(Borders::LEFT))
