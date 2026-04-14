@@ -771,8 +771,8 @@ model. If the prompt declares a `tts:` block and a system audio player (`afplay`
 / `mpv` / `ffplay`) is on `PATH`, press `p` to preview the focused card's audio
 — synthesized once on first press, played back on demand from the local cache,
 with a second press toggling playback off. `Enter` and `Esc` are briefly blocked
-while a preview is mid-synthesis so a confirm or cancel can't race with the
-in-flight request. Selected cards get their audio finalized (synthesized +
+whenever any card's preview is mid-synthesis so a confirm or cancel can't queue
+behind the in-flight request on the worker's FIFO command channel. Selected cards get their audio finalized (synthesized +
 uploaded to Anki's media store) automatically at import time, so a cancelled run
 leaves no orphan media behind. If the import-time TTS finalization fails
 (transient synthesis/upload error, AnkiConnect blip), your curated selection

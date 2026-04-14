@@ -991,7 +991,7 @@ impl App {
                 // The preview resolves in a couple seconds; asking the
                 // user to wait is simpler than the worker-side
                 // preemption refactor.
-                if focused_card_synthesizing(state) {
+                if any_card_synthesizing(state) {
                     self.toast = Some(Toast {
                         message: "TTS preview in progress".into(),
                         tick: self.tick,
@@ -1014,7 +1014,7 @@ impl App {
             }
             KeyCode::Enter if !state.refresh_in_flight => {
                 // See the Esc arm for the race rationale; same guard.
-                if focused_card_synthesizing(state) {
+                if any_card_synthesizing(state) {
                     self.toast = Some(Toast {
                         message: "TTS preview in progress".into(),
                         tick: self.tick,
@@ -2250,24 +2250,29 @@ fn parse_edited_anki_fields(
     serde_yaml::from_str(yaml)
 }
 
-/// True when the focused selection row has a TTS preview in flight.
+/// True when *any* card in the selection has a TTS preview in flight.
 /// Used by the Enter/Esc guards to block terminal actions that would
 /// otherwise race the worker's FIFO action queue behind an in-flight
 /// `PreviewTts` — issue #9. The optimistic `Synthesizing` state set
 /// on the `p` keypress is what makes this guard fire immediately,
 /// before the worker's own `TtsState::Synthesizing` reply
 /// round-trips.
-fn focused_card_synthesizing(state: &SelectionState) -> bool {
+///
+/// The check is selection-global, not focused-row-local: the worker
+/// command channel is a shared FIFO, so once *any* card is in
+/// `Synthesizing`, any `Selection` or `Cancel` the user sends queues
+/// behind that `PreviewTts` and re-opens the race — moving the
+/// cursor to a different card doesn't help.
+fn any_card_synthesizing(state: &SelectionState) -> bool {
     state
-        .cards
-        .get(state.cursor)
-        .and_then(|card| state.tts_states.get(&card.card_id))
-        .is_some_and(|s| matches!(s, TtsUiState::Synthesizing))
+        .tts_states
+        .values()
+        .any(|s| matches!(s, TtsUiState::Synthesizing))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SelectionState, TtsUiState, focused_card_synthesizing, parse_edited_anki_fields};
+    use super::{SelectionState, TtsUiState, any_card_synthesizing, parse_edited_anki_fields};
     use crate::generate::cards::{ValidatedCard, next_card_id};
     use indexmap::IndexMap;
 
@@ -2291,14 +2296,15 @@ mod tests {
     }
 
     /// Guards Enter/Esc in `handle_key_selection` against a race with
-    /// an in-flight TTS preview on the focused row. The actual key
-    /// handler sits on an `App` value that requires mpsc plumbing to
-    /// construct, so we drive the pure helper directly; any future
-    /// change that decouples the guard from this helper will break
-    /// this test and force a rewrite to the (at that point
-    /// reachable) App-level path.
+    /// an in-flight TTS preview. The guard must be selection-global,
+    /// not focused-row-local: the worker command channel is a shared
+    /// FIFO, so a `Selection` / `Cancel` sent while *any* card's
+    /// preview is in flight still queues behind that `PreviewTts` and
+    /// re-opens the race. The actual key handler sits on an `App`
+    /// value that requires mpsc plumbing to construct, so we drive
+    /// the pure helper directly.
     #[test]
-    fn focused_synthesizing_guard_fires_when_in_flight() {
+    fn any_synthesizing_guard_fires_even_when_focus_moves() {
         let a = mk_card();
         let b = mk_card();
         let a_id = a.card_id;
@@ -2306,28 +2312,41 @@ mod tests {
         let mut state = SelectionState::new(vec![a, b]);
 
         // Idle: guard off.
-        assert!(!focused_card_synthesizing(&state));
+        assert!(!any_card_synthesizing(&state));
 
-        // Focused card synthesizing: guard on.
+        // Card A synthesizing while focused on A: guard on.
         state.tts_states.insert(a_id, TtsUiState::Synthesizing);
-        assert!(focused_card_synthesizing(&state));
+        assert!(any_card_synthesizing(&state));
 
-        // Move focus to a sibling card that isn't synthesizing: guard
-        // off (matches the spec's focused_card_id check — see issue
-        // #9 rationale).
+        // Move focus to B (which is NOT synthesizing) — guard must
+        // stay on. This is the regression a focused-row-local check
+        // would miss: pressing `p` on A, arrowing down, then hitting
+        // Enter would queue a Selection behind A's in-flight
+        // PreviewTts and trigger the race from issue #9.
         state.move_down();
         assert_eq!(state.cursor, 1);
-        assert!(!focused_card_synthesizing(&state));
+        assert!(
+            any_card_synthesizing(&state),
+            "guard must stay on while any card is synthesizing, even after cursor moves"
+        );
 
-        // Other card in a non-synthesizing terminal state: guard
-        // stays off.
+        // B in a terminal Ready state; A still synthesizing: guard on.
         state.tts_states.insert(
             b_id,
             TtsUiState::Ready {
                 cache_path: std::path::PathBuf::from("/tmp/x.mp3"),
             },
         );
-        assert!(!focused_card_synthesizing(&state));
+        assert!(any_card_synthesizing(&state));
+
+        // A resolves to Ready — no more in-flight previews: guard off.
+        state.tts_states.insert(
+            a_id,
+            TtsUiState::Ready {
+                cache_path: std::path::PathBuf::from("/tmp/a.mp3"),
+            },
+        );
+        assert!(!any_card_synthesizing(&state));
     }
 
     #[test]
