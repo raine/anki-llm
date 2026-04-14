@@ -192,7 +192,14 @@ fn run_player_loop(binary: PlayerBinary, rx: mpsc::Receiver<PlayerCommand>) {
                             active = Some(a);
                         }
                         Err(_) => {
-                            // OS error polling — drop the handle.
+                            // `try_wait` hit an OS error. Dropping the
+                            // `Child` alone does NOT kill the process —
+                            // `Child`'s `Drop` is a no-op by design — so
+                            // we must kill + wait ourselves or the
+                            // `afplay` / `mpv` subprocess leaks and keeps
+                            // playing past the TUI session.
+                            let _ = a.child.kill();
+                            let _ = a.child.wait();
                         }
                     }
                 }
