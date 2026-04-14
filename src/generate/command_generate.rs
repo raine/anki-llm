@@ -320,6 +320,7 @@ pub fn run_pipeline(
         model: session.runtime.model.clone(),
         available_models: models.clone(),
         field_map: session.frontmatter.field_map.clone(),
+        first_field_name: session.validation.note_type_fields[0].clone(),
         tts_preview_enabled: tts_configured,
     }))
     .ok();
@@ -416,6 +417,7 @@ pub fn run_pipeline(
                             model: session.runtime.model.clone(),
                             available_models: models.clone(),
                             field_map: session.frontmatter.field_map.clone(),
+                            first_field_name: session.validation.note_type_fields[0].clone(),
                             tts_preview_enabled: tts_configured,
                         }))
                         .ok();

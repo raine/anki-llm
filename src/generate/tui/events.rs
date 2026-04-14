@@ -10,6 +10,11 @@ pub struct SessionInfo {
     pub model: String,
     pub available_models: Vec<String>,
     pub field_map: indexmap::IndexMap<String, String>,
+    /// Authoritative first-field name of the note type, sourced from
+    /// `validation.note_type_fields[0]`. Used by the post-`$EDITOR`
+    /// duplicate-check path so we look up the right field regardless of
+    /// how the user rearranged their YAML.
+    pub first_field_name: String,
     /// Whether the current session has a `tts:` block AND a valid audio
     /// backend was found at startup. When false, the TUI hides the
     /// preview keybind.

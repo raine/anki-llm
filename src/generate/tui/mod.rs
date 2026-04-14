@@ -1205,7 +1205,7 @@ fn edit_card_in_editor(terminal: &mut DefaultTerminal, app: &mut App, card_index
 
     // Parse edited YAML (Anki field names → raw markdown)
     let edited_anki_fields: indexmap::IndexMap<String, String> =
-        match serde_yaml::from_str(&edited_yaml) {
+        match parse_edited_anki_fields(&edited_yaml) {
             Ok(m) => m,
             Err(e) => {
                 app.toast = Some(Toast {
@@ -1238,8 +1238,15 @@ fn edit_card_in_editor(terminal: &mut DefaultTerminal, app: &mut App, card_index
         }
     }
 
-    // Re-check duplicate status
-    let first_field_value = new_anki_fields.values().next().cloned().unwrap_or_default();
+    // Re-check duplicate status. Look up the first-field value by the
+    // authoritative first-field name from `SessionInfo` — `new_anki_fields`
+    // preserves whatever order the user wrote in `$EDITOR`, so trusting
+    // its insertion order would query Anki against the wrong field whenever
+    // the user rearranged the YAML.
+    let first_field_value = new_anki_fields
+        .get(&info.first_field_name)
+        .cloned()
+        .unwrap_or_default();
     let is_duplicate = if !first_field_value.is_empty() {
         let anki = AnkiClient::new();
         anki.find_notes(&format!(
@@ -2176,3 +2183,46 @@ pub fn run_tui(mut args: GenerateArgs) -> anyhow::Result<()> {
 }
 
 use prompt_picker::run_prompt_picker;
+
+/// Deserialize the user's edited YAML back into an Anki-field-name
+/// keyed map. Extracted so the post-`$EDITOR` parse + first-field
+/// lookup is unit-testable without spawning an editor.
+fn parse_edited_anki_fields(
+    yaml: &str,
+) -> Result<indexmap::IndexMap<String, String>, serde_yaml::Error> {
+    serde_yaml::from_str(yaml)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_edited_anki_fields;
+
+    #[test]
+    fn edited_yaml_first_field_lookup_is_order_independent() {
+        // User rearranged fields in `$EDITOR` so the note type's first
+        // field (`Front`) is no longer the first key in the YAML.
+        let yaml = "Back: gloss\nAudio: ''\nFront: 日本語\n";
+        let parsed = parse_edited_anki_fields(yaml).unwrap();
+
+        // The authoritative first-field name comes from
+        // `SessionInfo.first_field_name` — sourced from
+        // `validation.note_type_fields[0]`, not YAML insertion order.
+        let first_field_name = "Front";
+        let first_field_value = parsed.get(first_field_name).cloned().unwrap_or_default();
+
+        assert_eq!(
+            first_field_value, "日本語",
+            "lookup by authoritative first-field name must survive YAML reorder"
+        );
+
+        // Guard against the pre-fix regression: the first *entry* of the
+        // parsed map is `Back`, not `Front` — if we ever went back to
+        // `values().next()` this test would catch it.
+        let naive_first = parsed.values().next().cloned().unwrap_or_default();
+        assert_ne!(
+            naive_first, first_field_value,
+            "naive insertion-order lookup must not match authoritative lookup \
+             in the reordered case"
+        );
+    }
+}
