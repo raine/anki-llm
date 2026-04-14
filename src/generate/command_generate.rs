@@ -587,9 +587,18 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         PipelineOutcome::Success {
             message, failed, ..
         } => {
-            if failed && !message.is_empty() {
-                eprintln!("\n  {}", s.error_text(&message));
-                return Ok(());
+            if failed {
+                // Non-TUI generate has no Done view to recover cards
+                // from, so surface the failure as a non-zero exit so
+                // shell scripts and batch runners see it.
+                anyhow::bail!(
+                    "{}",
+                    if message.is_empty() {
+                        "import failed".to_string()
+                    } else {
+                        message
+                    }
+                );
             }
             if !message.is_empty() {
                 eprintln!("\n  {}", s.green(&message));
