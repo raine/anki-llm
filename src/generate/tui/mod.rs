@@ -984,6 +984,20 @@ impl App {
                 self.open_model_picker();
             }
             KeyCode::Esc => {
+                // Block while the focused card has a TTS preview in
+                // flight: the worker's action channel is FIFO, so a
+                // `Cancel` queued behind `PreviewTts` still runs after
+                // synthesis bills the user and may race with import.
+                // The preview resolves in a couple seconds; asking the
+                // user to wait is simpler than the worker-side
+                // preemption refactor.
+                if focused_card_synthesizing(state) {
+                    self.toast = Some(Toast {
+                        message: "TTS preview in progress".into(),
+                        tick: self.tick,
+                    });
+                    return;
+                }
                 self.pending_model = None;
                 self.batch_queue.clear();
                 self.batch_progress = None;
@@ -999,6 +1013,14 @@ impl App {
                 self.user_quit = true;
             }
             KeyCode::Enter if !state.refresh_in_flight => {
+                // See the Esc arm for the race rationale; same guard.
+                if focused_card_synthesizing(state) {
+                    self.toast = Some(Toast {
+                        message: "TTS preview in progress".into(),
+                        tick: self.tick,
+                    });
+                    return;
+                }
                 self.pending_model = None;
                 let AppMode::Selecting(state) = std::mem::replace(&mut self.mode, AppMode::Running)
                 else {
@@ -1049,6 +1071,14 @@ impl App {
                         // Idle or failed: ask the worker to synthesize
                         // from the current card snapshot. The worker
                         // never looks at any stale mirror.
+                        //
+                        // Mark `Synthesizing` optimistically so the
+                        // Enter/Esc guards see the in-flight state on the
+                        // very next key event — before the worker's
+                        // `BackendEvent::TtsState::Synthesizing` reply
+                        // round-trips. This is what blocks the
+                        // press-p-then-Enter race on the same card.
+                        state.tts_states.insert(card_id, TtsUiState::Synthesizing);
                         self.worker_tx.send(WorkerCommand::PreviewTts { card }).ok();
                     }
                 }
@@ -2220,9 +2250,85 @@ fn parse_edited_anki_fields(
     serde_yaml::from_str(yaml)
 }
 
+/// True when the focused selection row has a TTS preview in flight.
+/// Used by the Enter/Esc guards to block terminal actions that would
+/// otherwise race the worker's FIFO action queue behind an in-flight
+/// `PreviewTts` — issue #9. The optimistic `Synthesizing` state set
+/// on the `p` keypress is what makes this guard fire immediately,
+/// before the worker's own `TtsState::Synthesizing` reply
+/// round-trips.
+fn focused_card_synthesizing(state: &SelectionState) -> bool {
+    state
+        .cards
+        .get(state.cursor)
+        .and_then(|card| state.tts_states.get(&card.card_id))
+        .is_some_and(|s| matches!(s, TtsUiState::Synthesizing))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse_edited_anki_fields;
+    use super::{SelectionState, TtsUiState, focused_card_synthesizing, parse_edited_anki_fields};
+    use crate::generate::cards::{ValidatedCard, next_card_id};
+    use indexmap::IndexMap;
+
+    fn mk_card() -> ValidatedCard {
+        use std::collections::HashMap;
+        let mut fields: HashMap<String, String> = HashMap::new();
+        fields.insert("front".into(), "x".into());
+        let mut anki_fields: IndexMap<String, String> = IndexMap::new();
+        anki_fields.insert("Front".into(), "x".into());
+        ValidatedCard {
+            card_id: next_card_id(),
+            fields,
+            anki_fields: anki_fields.clone(),
+            raw_anki_fields: anki_fields,
+            is_duplicate: false,
+            duplicate_note_id: None,
+            duplicate_fields: None,
+            flags: Vec::new(),
+            model: "test".into(),
+        }
+    }
+
+    /// Guards Enter/Esc in `handle_key_selection` against a race with
+    /// an in-flight TTS preview on the focused row. The actual key
+    /// handler sits on an `App` value that requires mpsc plumbing to
+    /// construct, so we drive the pure helper directly; any future
+    /// change that decouples the guard from this helper will break
+    /// this test and force a rewrite to the (at that point
+    /// reachable) App-level path.
+    #[test]
+    fn focused_synthesizing_guard_fires_when_in_flight() {
+        let a = mk_card();
+        let b = mk_card();
+        let a_id = a.card_id;
+        let b_id = b.card_id;
+        let mut state = SelectionState::new(vec![a, b]);
+
+        // Idle: guard off.
+        assert!(!focused_card_synthesizing(&state));
+
+        // Focused card synthesizing: guard on.
+        state.tts_states.insert(a_id, TtsUiState::Synthesizing);
+        assert!(focused_card_synthesizing(&state));
+
+        // Move focus to a sibling card that isn't synthesizing: guard
+        // off (matches the spec's focused_card_id check — see issue
+        // #9 rationale).
+        state.move_down();
+        assert_eq!(state.cursor, 1);
+        assert!(!focused_card_synthesizing(&state));
+
+        // Other card in a non-synthesizing terminal state: guard
+        // stays off.
+        state.tts_states.insert(
+            b_id,
+            TtsUiState::Ready {
+                cache_path: std::path::PathBuf::from("/tmp/x.mp3"),
+            },
+        );
+        assert!(!focused_card_synthesizing(&state));
+    }
 
     #[test]
     fn edited_yaml_first_field_lookup_is_order_independent() {
