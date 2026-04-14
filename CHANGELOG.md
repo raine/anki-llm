@@ -1,3 +1,28 @@
+## v2.0.8 (2026-04-14)
+
+### TTS (text-to-speech)
+
+- Added `tts` command — synthesize audio for Anki card fields and upload to Anki
+  as media
+- Added support for multiple TTS providers: OpenAI, Azure Neural, Google Cloud,
+  and Amazon Polly
+- Added `tts-voices` subcommand — browse, filter, and preview voices from all
+  providers in an interactive TUI
+- TTS is now integrated into the `generate` pipeline — audio is synthesized
+  automatically as a pipeline step before cards are added to Anki
+- Added TTS preview hotkey in the generate selection screen — press P to preview
+  audio before committing
+- Added utterance IR with furigana parsing for better Japanese pronunciation
+
+### `generate` improvements
+
+- Post-select processing now shows per-card field diffs, making it easy to see
+  what each processing step changed
+- Added per-step cost reporting after post-select processing
+- Added Summary step in the sidebar for run completion view
+- Legacy (non-TUI) mode now correctly fails on import errors instead of silently
+  exiting successfully
+
 ## v2.0.7 (2026-04-12)
 
 - Added interactive batch TUI for `process-deck` — same live progress, row
