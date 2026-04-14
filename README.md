@@ -356,9 +356,8 @@ field) are updated, while new entries create new notes.
 Batch-process notes from a CSV/YAML file using an LLM and user-defined prompts.
 This command saves the transformed results to an output file and features
 automatic resume, allowing it to safely skip completed notes if interrupted or
-re-run. When run in a terminal, it displays an interactive TUI with a preflight
-confirmation screen, live progress with per-row status, cost tracking, and
-failure triage with retry. Falls back to a progress bar when output is piped.
+re-run. Runs as an interactive TUI in a terminal, or prints a progress bar when
+output is piped.
 
 - `<input>`: Input file path (CSV or YAML).
 
@@ -476,10 +475,8 @@ Use `process-file` instead of `process-deck` when you:
 
 Batch-process notes directly in Anki using an LLM and user-defined prompts,
 updating them in-place. No intermediate files needed. Select notes by deck name
-or by an Anki search query. When run in a terminal, it displays an interactive
-TUI with a preflight confirmation screen, live progress with per-row status,
-cost tracking, and failure triage with retry. Falls back to a progress bar when
-output is piped.
+or by an Anki search query. Runs as an interactive TUI in a terminal, or prints
+a progress bar when output is piped.
 
 - `<deck>`: Name of the Anki deck to process.
 - `-q, --query`: Anki search query to select notes (alternative to deck name).
@@ -772,14 +769,11 @@ navigate). When cards from multiple models are present, each card shows its
 model. If the prompt declares a `tts:` block and a system audio player (`afplay`
 / `mpv` / `ffplay`) is on `PATH`, press `p` to preview the focused card's audio
 — synthesized once on first press, played back on demand from the local cache,
-with a second press toggling playback off. `Enter` and `Esc` are briefly blocked
-whenever any card's preview is mid-synthesis so a confirm or cancel can't queue
-behind the in-flight request on the worker's FIFO command channel. Selected cards get their audio finalized (synthesized +
-uploaded to Anki's media store) automatically at import time, so a cancelled run
-leaves no orphan media behind. If the import-time TTS finalization fails
-(transient synthesis/upload error, AnkiConnect blip), your curated selection
-survives in the "Failed" summary view — the cards are still available for
-copy-to-clipboard (`c`) so you don't lose the review work. Confirm with `Enter`.
+with a second press toggling playback off. Selected cards get their audio
+finalized automatically at import time, so a cancelled run leaves no orphan
+media behind. If import-time TTS finalization fails, your curated selection
+survives in the "Failed" summary view so you can still copy the cards to the
+clipboard (`c`). Confirm with `Enter`.
 
 **Quality check review** — If quality checking is enabled, flagged cards are
 presented one at a time with the LLM's reasoning. Keep (`k`/`y`/`Enter`) or
@@ -1227,20 +1221,14 @@ Before parsing, raw field values are normalized: HTML tags are stripped,
 `[sound:...]` tags are dropped, HTML entities are decoded, and whitespace is
 collapsed.
 
-The normalized text is then parsed into a provider-neutral intermediate
-representation that binds inline furigana `[reading]` annotations to the
-preceding CJK cluster. Each provider renders the IR into its own preferred
-format (plain kana for OpenAI / Google / Amazon Polly, SSML `<sub alias>` for
-Azure), and the rendered payload is what the cache keys on and what the provider
-actually POSTs.
+Inline `[reading]` furigana annotations are bound to the preceding CJK
+cluster and rendered correctly by each provider (plain kana for OpenAI,
+Google, and Polly; SSML for Azure).
 
 **On-disk audio cache**
 
-Generated audio is cached at `~/.cache/anki-llm/tts/anki-llm-tts-<sha256>.mp3`.
-The hash keys on the prepared provider payload, provider id, text format (plain
-text vs SSML), voice, model, speed, endpoint identity, and a cache schema
-version, so identical requests across runs reuse the same file without
-re-billing the TTS API. To clear the cache, simply
+Generated audio is cached at `~/.cache/anki-llm/tts/`. Identical requests
+reuse the cached file without re-billing the TTS API. To clear the cache,
 `rm -rf ~/.cache/anki-llm/tts`.
 
 **Provider configuration**
@@ -1301,8 +1289,7 @@ config). Region precedence is `tts.region` in YAML > `--aws-region` >
 `AWS_REGION` / `AWS_DEFAULT_REGION` > `aws_tts_region` in config. Voices use
 Polly `VoiceId`s (e.g. `Joanna`, `Matthew`, `Takumi`, `Mizuki`) and the Polly
 `Engine` is selected via `tts.model` / `--tts-model`: one of `standard`,
-`neural`, `generative`, or `long-form`. Requests are signed with AWS SigV4
-directly — no `boto3` or `aws-sdk` dependency. See the
+`neural`, `generative`, or `long-form`. See the
 [Polly voice list](https://docs.aws.amazon.com/polly/latest/dg/voicelist.html)
 for the full catalog.
 
@@ -1342,7 +1329,7 @@ for the full catalog.
 
 ### `anki-llm tts-voices`
 
-Interactive ratatui browser over the full voice catalog for every supported
+Interactive terminal browser over the full voice catalog for every supported
 provider (OpenAI, Azure Neural TTS, Google Cloud TTS, Amazon Polly). Use it when
 you need to find the exact voice string to drop into a `tts:` YAML block or pass
 to `--voice`, without clicking through four different provider doc sites.
@@ -1400,10 +1387,6 @@ anki-llm tts-voices --provider amazon -q neural
 # Pipe the emitted YAML straight into a prompt template
 anki-llm tts-voices --lang ja -q Nanami >> prompts/japanese.yaml
 ```
-
-The voice catalog is a committed static snapshot at
-`src/tts/voices/snapshot.json` — the TUI loads it instantly and has no network
-dependency at startup.
 
 ---
 
