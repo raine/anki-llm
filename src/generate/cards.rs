@@ -103,6 +103,50 @@ fn fetch_note_fields(
     Ok(note.fields.into_iter().map(|(k, v)| (k, v.value)).collect())
 }
 
+/// Build a fully-populated `ValidatedCard` from already-sanitized LLM-keyed
+/// fields and the corresponding raw (pre-sanitization) strings. Handles the
+/// field-map projection, the duplicate check against Anki's first-field value,
+/// and the on-duplicate fetch of the existing note's fields — the same
+/// sequence `validate_cards` uses for freshly generated cards, exposed so
+/// `regenerate_single_card` can reuse it and end up with populated
+/// `duplicate_fields` and `model` instead of the placeholder values its
+/// inline constructor used to hardcode.
+pub(super) fn build_validated_card(
+    sanitized: HashMap<String, String>,
+    raw_strings: &HashMap<String, String>,
+    frontmatter: &Frontmatter,
+    first_field_name: &str,
+    anki: &AnkiClient,
+    model: &str,
+) -> Result<ValidatedCard, anyhow::Error> {
+    let anki_fields = map_fields_to_anki(&sanitized, &frontmatter.field_map)?;
+    let raw_anki_fields = map_fields_to_anki(raw_strings, &frontmatter.field_map)?;
+
+    let dup_note_id = anki_fields
+        .get(first_field_name)
+        .filter(|v| !v.is_empty())
+        .map(|v| check_duplicate(anki, v, &frontmatter.note_type, &frontmatter.deck))
+        .unwrap_or(Ok(None))?;
+
+    let duplicate_fields = if let Some(note_id) = dup_note_id {
+        fetch_note_fields(anki, note_id).ok()
+    } else {
+        None
+    };
+
+    Ok(ValidatedCard {
+        card_id: next_card_id(),
+        fields: sanitized,
+        anki_fields,
+        raw_anki_fields,
+        is_duplicate: dup_note_id.is_some(),
+        duplicate_note_id: dup_note_id,
+        duplicate_fields,
+        flags: Vec::new(),
+        model: model.to_string(),
+    })
+}
+
 /// Validate cards: map fields to Anki names and check for duplicates.
 pub fn validate_cards(
     cards: Vec<(CardCandidate, HashMap<String, String>)>,
@@ -113,8 +157,6 @@ pub fn validate_cards(
 ) -> Result<Vec<ValidatedCard>, anyhow::Error> {
     let mut validated = Vec::new();
     for (candidate, sanitized) in cards {
-        let anki_fields = map_fields_to_anki(&sanitized, &frontmatter.field_map)?;
-
         // Build raw (pre-sanitization) field strings for terminal display.
         let raw_strings: HashMap<String, String> = candidate
             .fields
@@ -127,31 +169,15 @@ pub fn validate_cards(
                 (k.clone(), s)
             })
             .collect();
-        let raw_anki_fields = map_fields_to_anki(&raw_strings, &frontmatter.field_map)?;
 
-        let dup_note_id = anki_fields
-            .get(first_field_name)
-            .filter(|v| !v.is_empty())
-            .map(|v| check_duplicate(anki, v, &frontmatter.note_type, &frontmatter.deck))
-            .unwrap_or(Ok(None))?;
-
-        let duplicate_fields = if let Some(note_id) = dup_note_id {
-            fetch_note_fields(anki, note_id).ok()
-        } else {
-            None
-        };
-
-        validated.push(ValidatedCard {
-            card_id: next_card_id(),
-            fields: sanitized,
-            anki_fields,
-            raw_anki_fields,
-            is_duplicate: dup_note_id.is_some(),
-            duplicate_note_id: dup_note_id,
-            duplicate_fields,
-            flags: Vec::new(),
-            model: model.to_string(),
-        });
+        validated.push(build_validated_card(
+            sanitized,
+            &raw_strings,
+            frontmatter,
+            first_field_name,
+            anki,
+            model,
+        )?);
     }
     Ok(validated)
 }
@@ -159,6 +185,9 @@ pub fn validate_cards(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
 
     #[test]
     fn escape_special_chars() {
@@ -181,5 +210,92 @@ mod tests {
         let result = map_fields_to_anki(&sanitized, &field_map).unwrap();
         assert_eq!(result["Front"], "hello");
         assert_eq!(result["Back"], "world");
+    }
+
+    /// Spawn a minimal AnkiConnect mock on an ephemeral loopback port.
+    /// Serves exactly `response_count` JSON responses in `responses` in
+    /// order, matching the request order the helper makes (findNotes,
+    /// then notesInfo). The caller must `join()` the returned handle.
+    fn spawn_mock_anki(responses: Vec<&'static str>) -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let url = format!("http://{addr}");
+        let handle = thread::spawn(move || {
+            for body in responses {
+                let (mut stream, _) = listener.accept().unwrap();
+                // Drain the request headers + body. We don't actually
+                // parse them — the test only cares about request order.
+                // Read up to 8 KiB which comfortably covers a small
+                // AnkiConnect JSON POST.
+                let mut buf = vec![0u8; 8192];
+                let _ = stream.read(&mut buf).unwrap();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+                let _ = stream.shutdown(std::net::Shutdown::Write);
+            }
+        });
+        (url, handle)
+    }
+
+    #[test]
+    fn build_validated_card_populates_duplicate_fields_and_model() {
+        // Mock AnkiConnect: first findNotes returns a single hit; then
+        // notesInfo returns that note's fields. This is exactly the
+        // sequence `build_validated_card` goes through on a duplicate.
+        let find_notes_body = r#"{"result":[12345],"error":null}"#;
+        let notes_info_body = r#"{"result":[{"noteId":12345,"tags":[],"fields":{"Front":{"value":"日本語","order":0},"Back":{"value":"japanese (existing)","order":1}},"modelName":"Basic","cards":[1]}],"error":null}"#;
+        let (url, handle) = spawn_mock_anki(vec![find_notes_body, notes_info_body]);
+
+        let anki = AnkiClient::with_url(&url);
+        let mut sanitized: HashMap<String, String> = HashMap::new();
+        sanitized.insert("front".into(), "日本語".into());
+        sanitized.insert("back".into(), "japanese (regenerated)".into());
+        let raw_strings = sanitized.clone();
+
+        let mut field_map: IndexMap<String, String> = IndexMap::new();
+        field_map.insert("front".into(), "Front".into());
+        field_map.insert("back".into(), "Back".into());
+        let frontmatter = Frontmatter {
+            title: None,
+            description: None,
+            deck: "Test".into(),
+            note_type: "Basic".into(),
+            field_map,
+            processing: None,
+            tts: None,
+        };
+
+        let card = build_validated_card(
+            sanitized,
+            &raw_strings,
+            &frontmatter,
+            "Front",
+            &anki,
+            "gpt-test",
+        )
+        .unwrap();
+
+        handle.join().unwrap();
+
+        assert!(card.is_duplicate, "should flag the card as a duplicate");
+        assert_eq!(card.duplicate_note_id, Some(12345));
+        let dup_fields = card
+            .duplicate_fields
+            .as_ref()
+            .expect("duplicate_fields must be populated on duplicate hit");
+        assert_eq!(dup_fields.get("Front").map(String::as_str), Some("日本語"));
+        assert_eq!(
+            dup_fields.get("Back").map(String::as_str),
+            Some("japanese (existing)"),
+            "duplicate_fields must carry the existing Anki note's values, not the regenerated card's"
+        );
+        assert_eq!(
+            card.model, "gpt-test",
+            "model label must survive regeneration for multi-model sessions"
+        );
     }
 }

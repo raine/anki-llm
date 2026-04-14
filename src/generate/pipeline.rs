@@ -207,10 +207,15 @@ fn regenerate_single_card(
         fields.insert(key.clone(), coerced);
     }
 
-    // Sanitize and map
+    // Sanitize and hand off to the shared rebuild helper — this gives
+    // us anki_fields + raw_anki_fields, the duplicate lookup, and the
+    // on-duplicate `duplicate_fields` fetch, matching `validate_cards`'s
+    // shape. Previously this constructor hardcoded
+    // `duplicate_note_id: None`, `duplicate_fields: None`, and
+    // `model: String::new()`, which silently broke the duplicate diff
+    // panel for regenerated cards and dropped the model label in
+    // multi-model sessions.
     let sanitized = sanitize_fields(&fields);
-    let anki_fields = map_fields_to_anki(&sanitized, &config.frontmatter.field_map)?;
-
     let raw_strings: std::collections::HashMap<String, String> = fields
         .iter()
         .map(|(k, v)| {
@@ -221,34 +226,15 @@ fn regenerate_single_card(
             (k.clone(), s)
         })
         .collect();
-    let raw_anki_fields = map_fields_to_anki(&raw_strings, &config.frontmatter.field_map)?;
-
-    // Check duplicate
     let first_field_name = &config.validation.note_type_fields[0];
-    let is_duplicate = anki_fields
-        .get(first_field_name)
-        .filter(|v| !v.is_empty())
-        .map(|v| {
-            super::cards::check_duplicate_pub(
-                config.anki,
-                v,
-                &config.frontmatter.note_type,
-                &config.frontmatter.deck,
-            )
-        })
-        .unwrap_or(Ok(false))?;
-
-    Ok(ValidatedCard {
-        card_id: super::cards::next_card_id(),
-        fields: sanitized,
-        anki_fields,
-        raw_anki_fields,
-        is_duplicate,
-        duplicate_note_id: None,
-        duplicate_fields: None,
-        flags: Vec::new(),
-        model: String::new(),
-    })
+    super::cards::build_validated_card(
+        sanitized,
+        &raw_strings,
+        config.frontmatter,
+        first_field_name,
+        config.anki,
+        config.model,
+    )
 }
 
 /// Wait for a selection action, handling inline card regeneration and
