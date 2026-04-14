@@ -109,8 +109,15 @@ pub fn finalize_tts(
         // silently destroy their work. The standalone `anki-llm tts`
         // command applies the same guard via `field_has_sound_tag` by
         // default; there's no `--tts-force` flag on generate yet.
+        //
+        // Check against `raw_anki_fields` — the same field map
+        // `prepare_from_anki_fields` reads from below — so the skip
+        // decision and the synthesis decision always look at the same
+        // bytes. Checking the sanitized `anki_fields` sibling would
+        // drift if a future post-processor rewrote one map but not the
+        // other.
         let existing = card
-            .anki_fields
+            .raw_anki_fields
             .get(&tts_target)
             .map(String::as_str)
             .unwrap_or("");
