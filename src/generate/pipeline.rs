@@ -377,7 +377,6 @@ pub fn run_pipeline_for_term(
         progress.log(msg);
     };
 
-    let mut generation_cost = 0.0;
     let mut seen_keys: HashSet<String> = HashSet::new();
     let mut is_refresh = false;
     let mut current_term = term.to_string();
@@ -462,7 +461,6 @@ pub fn run_pipeline_for_term(
         };
 
         if let Some(ref cost) = gen_result.cost {
-            generation_cost += cost.total_cost;
             progress.cost_update(cost.input_tokens, cost.output_tokens, cost.total_cost);
             progress.log(&format!(
                 "Tokens: {} in / {} out | Cost: {}",
@@ -514,7 +512,6 @@ pub fn run_pipeline_for_term(
             )?;
             candidates = proc_result.cards;
             pre_select_flags = proc_result.flags;
-            generation_cost += proc_result.cost;
             if proc_result.cost > 0.0 {
                 progress.cost_update(
                     proc_result.input_tokens,
@@ -723,7 +720,6 @@ pub fn run_pipeline_for_term(
         .map(|p| p.post_select.as_slice())
         .unwrap_or_default();
 
-    let mut post_select_cost = 0.0;
     let mut post_errors: Vec<String> = Vec::new();
     let mut final_cards: Vec<ValidatedCard> = selected;
 
@@ -754,7 +750,6 @@ pub fn run_pipeline_for_term(
             on_log,
         )?;
 
-        post_select_cost = proc_result.cost;
         if proc_result.cost > 0.0 {
             progress.cost_update(
                 proc_result.input_tokens,
@@ -904,11 +899,6 @@ pub fn run_pipeline_for_term(
             note_ids: Vec::new(),
             failed: false,
         });
-    }
-
-    let total_cost = generation_cost + post_select_cost;
-    if total_cost > 0.0 {
-        progress.log(&format!("Total cost: {}", pricing::format_cost(total_cost)));
     }
 
     progress.step_done(PipelineStep::QualityCheck, None);
