@@ -187,6 +187,29 @@ pub fn run_processors(
                     match outcome {
                         StepOutcome::Transform(updates) => {
                             let mut card = card;
+                            let write_fields = step.write_fields();
+                            for field in &write_fields {
+                                let Some(new_value) = updates.get(*field) else {
+                                    continue;
+                                };
+                                let old_value = card
+                                    .fields
+                                    .get(*field)
+                                    .map(|v| match v {
+                                        Value::String(s) => s.clone(),
+                                        other => other.to_string(),
+                                    })
+                                    .unwrap_or_default();
+                                if old_value != *new_value {
+                                    emit_field_diff(
+                                        on_progress,
+                                        idx + 1,
+                                        field,
+                                        &old_value,
+                                        new_value,
+                                    );
+                                }
+                            }
                             for (key, value) in updates {
                                 card.fields.insert(key, Value::String(value));
                             }
@@ -248,6 +271,33 @@ pub fn run_processors(
 enum StepOutcome {
     Transform(HashMap<String, String>),
     Check(CheckVerdict, Option<String>),
+}
+
+/// Emit a per-line before/after diff for a transformed field via the
+/// progress callback. One log line per emitted row so the TUI log panel
+/// renders each on its own line.
+fn emit_field_diff(
+    on_progress: &(dyn Fn(&str) + Send + Sync),
+    card_num: usize,
+    field: &str,
+    old: &str,
+    new: &str,
+) {
+    on_progress(&format!("  Card {card_num} [{field}]:"));
+    if old.is_empty() {
+        on_progress("    - (empty)");
+    } else {
+        for line in old.lines() {
+            on_progress(&format!("    - {line}"));
+        }
+    }
+    if new.is_empty() {
+        on_progress("    + (empty)");
+    } else {
+        for line in new.lines() {
+            on_progress(&format!("    + {line}"));
+        }
+    }
 }
 
 fn build_system_prompt(step: &ProcessorStep) -> String {
@@ -566,6 +616,67 @@ mod tests {
                 assert!(json_schema.strict);
             }
         }
+    }
+
+    #[test]
+    fn emit_diff_single_line() {
+        let captured: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let captured_clone = Arc::clone(&captured);
+        let on_log: Box<dyn Fn(&str) + Send + Sync> = Box::new(move |msg: &str| {
+            captured_clone.lock().unwrap().push(msg.to_string());
+        });
+        emit_field_diff(
+            on_log.as_ref(),
+            1,
+            "read",
+            "日本語を勉強しています",
+            "日本語[にほんご]を 勉強[べんきょう]しています",
+        );
+        let logs = captured.lock().unwrap();
+        assert_eq!(logs.len(), 3);
+        assert_eq!(logs[0], "  Card 1 [read]:");
+        assert_eq!(logs[1], "    - 日本語を勉強しています");
+        assert_eq!(
+            logs[2],
+            "    + 日本語[にほんご]を 勉強[べんきょう]しています"
+        );
+    }
+
+    #[test]
+    fn emit_diff_multiline() {
+        let captured: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let captured_clone = Arc::clone(&captured);
+        let on_log: Box<dyn Fn(&str) + Send + Sync> = Box::new(move |msg: &str| {
+            captured_clone.lock().unwrap().push(msg.to_string());
+        });
+        emit_field_diff(
+            on_log.as_ref(),
+            2,
+            "context",
+            "line one\nline two",
+            "line one\nchanged",
+        );
+        let logs = captured.lock().unwrap();
+        assert_eq!(logs.len(), 5);
+        assert_eq!(logs[0], "  Card 2 [context]:");
+        assert_eq!(logs[1], "    - line one");
+        assert_eq!(logs[2], "    - line two");
+        assert_eq!(logs[3], "    + line one");
+        assert_eq!(logs[4], "    + changed");
+    }
+
+    #[test]
+    fn emit_diff_empty_old() {
+        let captured: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let captured_clone = Arc::clone(&captured);
+        let on_log: Box<dyn Fn(&str) + Send + Sync> = Box::new(move |msg: &str| {
+            captured_clone.lock().unwrap().push(msg.to_string());
+        });
+        emit_field_diff(on_log.as_ref(), 3, "read", "", "something");
+        let logs = captured.lock().unwrap();
+        assert_eq!(logs.len(), 3);
+        assert_eq!(logs[1], "    - (empty)");
+        assert_eq!(logs[2], "    + something");
     }
 
     #[test]
