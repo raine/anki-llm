@@ -510,7 +510,13 @@ impl App {
                         let all_cards = std::mem::take(&mut self.batch_cards);
                         self.mode = AppMode::Selecting(SelectionState::new(all_cards));
                     } else {
+                        let summary_idx = summary_step_idx();
+                        if let Some(record) = self.steps.get_mut(summary_idx) {
+                            record.status = StepStatus::Error(msg.clone());
+                        }
                         self.mode = AppMode::Error(msg);
+                        self.browse_step = Some(summary_idx);
+                        self.browse_scroll = 0;
                     }
                 }
             }
@@ -526,7 +532,13 @@ impl App {
                         break;
                     }
                 }
+                let summary_idx = summary_step_idx();
+                if let Some(record) = self.steps.get_mut(summary_idx) {
+                    record.status = StepStatus::Error(msg.clone());
+                }
                 self.mode = AppMode::Error(msg);
+                self.browse_step = Some(summary_idx);
+                self.browse_scroll = 0;
                 self.is_fatal = true;
             }
         }
@@ -692,40 +704,26 @@ impl App {
                     self.should_quit = true;
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
-                    if let Some(idx) = self.browse_step {
-                        if idx > 0 {
-                            self.browse_step = Some(idx - 1);
-                            self.browse_scroll = 0;
-                        } else {
-                            self.browse_step = None;
-                            self.browse_scroll = 0;
-                        }
-                    }
-                }
-                KeyCode::Down | KeyCode::Char('j') => match self.browse_step {
-                    None => {
-                        self.browse_step = Some(0);
+                    if let Some(idx) = self.browse_step
+                        && idx > 0
+                    {
+                        self.browse_step = Some(idx - 1);
                         self.browse_scroll = 0;
                     }
-                    Some(idx) if idx + 1 < self.steps.len() => {
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(idx) = self.browse_step
+                        && idx + 1 < self.steps.len()
+                    {
                         self.browse_step = Some(idx + 1);
                         self.browse_scroll = 0;
                     }
-                    _ => {}
-                },
+                }
                 KeyCode::PageUp => {
                     self.browse_scroll = self.browse_scroll.saturating_sub(10);
                 }
                 KeyCode::PageDown => {
-                    if self.browse_step.is_some() {
-                        self.browse_scroll += 10;
-                    }
-                }
-                KeyCode::Esc => {
-                    if self.browse_step.is_some() {
-                        self.browse_step = None;
-                        self.browse_scroll = 0;
-                    }
+                    self.browse_scroll += 10;
                 }
                 KeyCode::Char('c') => {
                     if let AppMode::Done { ref cards, .. } = self.mode {
@@ -1434,12 +1432,11 @@ fn draw(frame: &mut Frame, app: &App) {
             failed,
             ..
         } => {
-            let on_summary = matches!(app.browse_step, Some(idx) if matches!(app.steps.get(idx).map(|r| r.step), Some(PipelineStep::Summary)))
-                || app.browse_step.is_none();
-            if on_summary {
+            let step_idx = app.browse_step.unwrap_or_else(summary_step_idx);
+            let record = &app.steps[step_idx];
+            if matches!(record.step, PipelineStep::Summary) {
                 draw_done(frame, app, message, cards, *failed, main_area);
-            } else if let Some(step_idx) = app.browse_step {
-                let record = &app.steps[step_idx];
+            } else {
                 draw_step_logs(
                     frame,
                     record.step.label(),
@@ -1450,12 +1447,11 @@ fn draw(frame: &mut Frame, app: &App) {
             }
         }
         AppMode::Error(msg) => {
-            let on_summary = matches!(app.browse_step, Some(idx) if matches!(app.steps.get(idx).map(|r| r.step), Some(PipelineStep::Summary)))
-                || app.browse_step.is_none();
-            if on_summary {
+            let step_idx = app.browse_step.unwrap_or_else(summary_step_idx);
+            let record = &app.steps[step_idx];
+            if matches!(record.step, PipelineStep::Summary) {
                 draw_error(frame, msg, main_area);
-            } else if let Some(step_idx) = app.browse_step {
-                let record = &app.steps[step_idx];
+            } else {
                 draw_step_logs(
                     frame,
                     record.step.label(),
