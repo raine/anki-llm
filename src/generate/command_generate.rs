@@ -14,7 +14,7 @@ use crate::tts::service::SessionTts;
 
 use crate::style::{Style, style};
 
-use super::anki_import::{import_cards_to_anki, report_import_result};
+use super::anki_import::{finalize_tts, import_cards_to_anki, report_import_result};
 use super::cards::ValidatedCard;
 use super::exporter::export_cards;
 use super::manual::get_llm_response_manually;
@@ -757,13 +757,14 @@ fn run_copy_mode(
         } else {
             None
         };
-        let tts_finalize = tts_bundle
-            .as_ref()
-            .map(|b| crate::generate::anki_import::TtsFinalize {
+        if let Some(b) = tts_bundle.as_ref() {
+            let finalizer = crate::generate::anki_import::TtsFinalize {
                 service: &b.service,
                 media: b.media.as_ref(),
-            });
-        let result = import_cards_to_anki(&mut selected, frontmatter, &anki, tts_finalize, on_log)?;
+            };
+            finalize_tts(&mut selected, frontmatter, finalizer, on_log)?;
+        }
+        let result = import_cards_to_anki(&mut selected, frontmatter, &anki, on_log)?;
         report_import_result(&result, &frontmatter.deck);
 
         if result.failures > 0 {

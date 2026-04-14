@@ -16,29 +16,21 @@ pub struct ImportResult {
     pub note_ids: Vec<i64>,
 }
 
-/// TTS finalization hook for `import_cards_to_anki`. When present, the
-/// importer calls `finalize_tts` on the mutable card slice just before
-/// building the `AddNoteParams` vector. This keeps audio out of Anki's
-/// media store until the user has actually confirmed an import — a
-/// cancelled selection never leaks orphan uploads.
+/// TTS finalization hook for `finalize_tts`. Bundles the synth service
+/// with the media uploader the pipeline will push audio blobs through.
 pub struct TtsFinalize<'a> {
     pub service: &'a TtsService,
     pub media: &'a dyn MediaUploader,
 }
 
-/// Add cards to Anki as new notes. If `tts` is `Some`, run the TTS
-/// finalizer against the cards (synthesize-on-miss, upload, rewrite the
-/// target field) before `add_notes` is called.
-///
-/// Mutates `cards` in place: TTS finalization writes the resulting
-/// `[sound:...]` tags into both `anki_fields[target]` and
-/// `raw_anki_fields[target]` so the post-import "Done" view shows the
-/// same data that was sent to `addNotes`.
+/// Add cards to Anki as new notes. The caller is responsible for
+/// running `finalize_tts` first when the deck's frontmatter declares a
+/// `tts:` block — keeping finalization separate lets the pipeline
+/// surface it as its own sidebar step.
 pub fn import_cards_to_anki(
     cards: &mut [ValidatedCard],
     frontmatter: &Frontmatter,
     anki: &AnkiClient,
-    tts: Option<TtsFinalize<'_>>,
     on_log: &dyn Fn(&str),
 ) -> Result<ImportResult, anyhow::Error> {
     if cards.is_empty() {
@@ -47,10 +39,6 @@ pub fn import_cards_to_anki(
             failures: 0,
             note_ids: Vec::new(),
         });
-    }
-
-    if let Some(finalizer) = tts {
-        finalize_tts(cards, frontmatter, finalizer, on_log)?;
     }
 
     on_log(&format!("Adding {} card(s) to Anki...", cards.len()));

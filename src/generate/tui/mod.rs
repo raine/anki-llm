@@ -40,6 +40,7 @@ const ALL_STEPS: &[PipelineStep] = &[
     PipelineStep::Validate,
     PipelineStep::Select,
     PipelineStep::QualityCheck,
+    PipelineStep::FinalizeTts,
     PipelineStep::Finish,
     PipelineStep::Summary,
 ];
