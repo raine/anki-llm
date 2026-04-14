@@ -75,6 +75,11 @@ pub enum BackendEvent {
         cards: Vec<ValidatedCard>,
         /// Anki note IDs of imported cards (empty for exports/dry runs).
         note_ids: Vec<i64>,
+        /// When true, the run finished with a non-fatal failure (e.g.
+        /// TTS finalization error) and the Done view should render the
+        /// message in an error style while still showing `cards` so the
+        /// user can recover their curation.
+        failed: bool,
     },
     RunError(String),         // single run failed (can retry with new term)
     ModelChangeError(String), // model switch failed

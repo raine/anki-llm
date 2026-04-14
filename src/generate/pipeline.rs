@@ -123,6 +123,12 @@ pub enum PipelineOutcome {
         message: String,
         cards: Vec<ValidatedCard>,
         note_ids: Vec<i64>,
+        /// When true, the run finished with a non-fatal failure and the
+        /// message should be rendered in an error style. The cards are
+        /// still returned so the user can recover them (copy-to-clipboard
+        /// from the Done view). Used to preserve user-curated state when
+        /// late-stage steps like `finalize_tts` fail transiently.
+        failed: bool,
     },
     Cancelled,
     Quit,
@@ -614,6 +620,7 @@ pub fn run_pipeline_for_term(
                     message: "Dry run complete. No cards were imported.".to_string(),
                     cards: Vec::new(),
                     note_ids: Vec::new(),
+                    failed: false,
                 });
             }
 
@@ -622,6 +629,7 @@ pub fn run_pipeline_for_term(
                     message: "No cards to select from.".to_string(),
                     cards: Vec::new(),
                     note_ids: Vec::new(),
+                    failed: false,
                 });
             }
 
@@ -656,6 +664,7 @@ pub fn run_pipeline_for_term(
             message: "No cards selected.".to_string(),
             cards: Vec::new(),
             note_ids: Vec::new(),
+            failed: false,
         });
     }
 
@@ -680,6 +689,7 @@ pub fn run_pipeline_for_term(
             message: "No non-duplicate cards selected.".to_string(),
             cards: Vec::new(),
             note_ids: Vec::new(),
+            failed: false,
         });
     }
 
@@ -870,6 +880,7 @@ pub fn run_pipeline_for_term(
             message: msg,
             cards: Vec::new(),
             note_ids: Vec::new(),
+            failed: false,
         });
     }
 
@@ -897,50 +908,241 @@ pub fn run_pipeline_for_term(
             ),
             cards: final_cards,
             note_ids: Vec::new(),
+            failed: false,
         })
     } else {
         let tts_finalize = config.tts.map(|bundle| TtsFinalize {
             service: &bundle.service,
             media: &bundle.media,
         });
-        let result = import_cards_to_anki(
-            &mut final_cards,
+        Ok(run_import_step(
+            final_cards,
             config.frontmatter,
             config.anki,
             tts_finalize,
+            progress,
             on_log,
-        )?;
-        let note_ids = result.note_ids.clone();
+        ))
+    }
+}
 
-        if result.failures > 0 {
-            progress.step_done(
-                PipelineStep::Finish,
-                Some(format!(
-                    "{} added, {} failed",
-                    result.successes, result.failures
-                )),
-            );
-            Ok(PipelineOutcome::Success {
-                message: format!(
-                    "Import completed with errors: {} added, {} failed.",
-                    result.successes, result.failures
-                ),
+/// Import `final_cards` into Anki (including TTS finalization when
+/// requested) and convert the result into a `PipelineOutcome`. Import
+/// errors — including transient TTS synth/upload failures — are
+/// surfaced as `PipelineOutcome::Success { failed: true, cards, .. }`
+/// so the user's curated selection state survives the Done view
+/// instead of getting torn down by the TUI's `RunError` handler.
+fn run_import_step(
+    mut final_cards: Vec<ValidatedCard>,
+    frontmatter: &Frontmatter,
+    anki: &AnkiClient,
+    tts: Option<TtsFinalize<'_>>,
+    progress: &dyn PipelineProgress,
+    on_log: &(dyn Fn(&str) + Send + Sync),
+) -> PipelineOutcome {
+    let result = match import_cards_to_anki(&mut final_cards, frontmatter, anki, tts, on_log) {
+        Ok(result) => result,
+        Err(e) => {
+            progress.step_error(PipelineStep::Finish, &format!("{e}"));
+            return PipelineOutcome::Success {
+                message: format!("Import failed: {e}"),
                 cards: final_cards,
+                note_ids: Vec::new(),
+                failed: true,
+            };
+        }
+    };
+    let note_ids = result.note_ids.clone();
+
+    if result.failures > 0 {
+        progress.step_done(
+            PipelineStep::Finish,
+            Some(format!(
+                "{} added, {} failed",
+                result.successes, result.failures
+            )),
+        );
+        PipelineOutcome::Success {
+            message: format!(
+                "Import completed with errors: {} added, {} failed.",
+                result.successes, result.failures
+            ),
+            cards: final_cards,
+            note_ids,
+            failed: false,
+        }
+    } else {
+        progress.step_done(
+            PipelineStep::Finish,
+            Some(format!("{} card(s) added", result.successes)),
+        );
+        PipelineOutcome::Success {
+            message: format!(
+                "Successfully added {} new note(s) to \"{}\"",
+                result.successes, frontmatter.deck
+            ),
+            cards: final_cards,
+            note_ids,
+            failed: false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::template::frontmatter::{TtsSource, TtsSpec};
+    use crate::tts::cache::TtsCache;
+    use crate::tts::error::TtsError;
+    use crate::tts::media::AnkiMediaStore;
+    use crate::tts::provider::{AudioFormat, SynthesisRequest, TextFormat, TtsProvider};
+    use crate::tts::service::{TtsService, TtsServiceConfig};
+    use crate::tts::template::TemplateSource;
+    use indexmap::IndexMap;
+    use std::sync::{Arc, Mutex};
+
+    struct FailingProvider {
+        calls: Mutex<usize>,
+    }
+
+    impl TtsProvider for FailingProvider {
+        fn id(&self) -> &'static str {
+            "failing-mock"
+        }
+        fn text_format(&self) -> TextFormat {
+            TextFormat::PlainText
+        }
+        fn synthesize(&self, _req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {
+            *self.calls.lock().unwrap() += 1;
+            Err(TtsError::Transient("simulated synth failure".into()))
+        }
+    }
+
+    struct NoopProgress;
+    impl PipelineProgress for NoopProgress {
+        fn log(&self, _: &str) {}
+        fn step_start(&self, _: PipelineStep, _: Option<&str>) {}
+        fn step_done(&self, _: PipelineStep, _: Option<String>) {}
+        fn step_skip(&self, _: PipelineStep) {}
+        fn step_error(&self, _: PipelineStep, _: &str) {}
+        fn cost_update(&self, _: u64, _: u64, _: f64) {}
+    }
+
+    fn mk_frontmatter() -> Frontmatter {
+        let mut field_map = IndexMap::new();
+        field_map.insert("front".to_string(), "Front".to_string());
+        field_map.insert("back".to_string(), "Back".to_string());
+        Frontmatter {
+            title: None,
+            description: None,
+            deck: "Test".into(),
+            note_type: "Basic".into(),
+            field_map,
+            processing: None,
+            tts: Some(TtsSpec {
+                target: "Audio".into(),
+                source: TtsSource {
+                    field: Some("front".into()),
+                    template: None,
+                },
+                voice: "alloy".into(),
+                provider: None,
+                region: None,
+                model: None,
+                format: None,
+                speed: None,
+            }),
+        }
+    }
+
+    fn mk_card(front: &str) -> ValidatedCard {
+        use std::collections::HashMap;
+        let mut fields: HashMap<String, String> = HashMap::new();
+        fields.insert("front".into(), front.to_string());
+        let mut anki_fields: IndexMap<String, String> = IndexMap::new();
+        anki_fields.insert("Front".into(), front.to_string());
+        anki_fields.insert("Back".into(), "gloss".into());
+        anki_fields.insert("Audio".into(), String::new());
+        let raw_anki_fields = anki_fields.clone();
+        ValidatedCard {
+            card_id: crate::generate::cards::next_card_id(),
+            fields,
+            anki_fields,
+            raw_anki_fields,
+            is_duplicate: false,
+            duplicate_note_id: None,
+            duplicate_fields: None,
+            flags: Vec::new(),
+            model: "test".into(),
+        }
+    }
+
+    /// When TTS finalization fails during import, the pipeline must
+    /// preserve the curated cards via `PipelineOutcome::Success {
+    /// failed: true, cards, .. }` rather than propagating the error.
+    /// Otherwise the TUI's `RunError` path tears down the selection
+    /// state and the user loses all of their manual curation.
+    #[test]
+    fn import_step_preserves_cards_when_finalize_tts_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let failing = Arc::new(FailingProvider {
+            calls: Mutex::new(0),
+        });
+        let provider: Arc<dyn TtsProvider> = failing.clone();
+        let service = TtsService::new(TtsServiceConfig {
+            provider,
+            cache,
+            source: Arc::new(TemplateSource::field("front".into())),
+            target_field: "Audio".into(),
+            voice: "alloy".into(),
+            model: None,
+            format: AudioFormat::Mp3,
+            speed: None,
+            endpoint: None,
+        });
+        let media = AnkiMediaStore::new(AnkiClient::new());
+        let finalizer = TtsFinalize {
+            service: &service,
+            media: &media,
+        };
+
+        let frontmatter = mk_frontmatter();
+        let anki = AnkiClient::new();
+        let cards = vec![mk_card("alpha"), mk_card("beta"), mk_card("gamma")];
+        let progress = NoopProgress;
+
+        let outcome = run_import_step(
+            cards,
+            &frontmatter,
+            &anki,
+            Some(finalizer),
+            &progress,
+            &|_| {},
+        );
+
+        assert!(
+            *failing.calls.lock().unwrap() >= 1,
+            "provider should have been called at least once before failing"
+        );
+        match outcome {
+            PipelineOutcome::Success {
+                failed: true,
+                cards,
                 note_ids,
-            })
-        } else {
-            progress.step_done(
-                PipelineStep::Finish,
-                Some(format!("{} card(s) added", result.successes)),
-            );
-            Ok(PipelineOutcome::Success {
-                message: format!(
-                    "Successfully added {} new note(s) to \"{}\"",
-                    result.successes, config.frontmatter.deck
-                ),
-                cards: final_cards,
-                note_ids,
-            })
+                message,
+            } => {
+                assert_eq!(cards.len(), 3, "curated cards must survive the failure");
+                assert!(note_ids.is_empty(), "nothing should be imported");
+                assert!(
+                    message.starts_with("Import failed:"),
+                    "message should surface the error, got: {message}"
+                );
+            }
+            other => {
+                let _ = other;
+                panic!("expected Success with failed=true, got other outcome");
+            }
         }
     }
 }

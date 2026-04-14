@@ -62,6 +62,11 @@ enum AppMode {
         message: String,
         cards: Vec<ValidatedCard>,
         note_ids: Vec<i64>,
+        /// When true, the run finished with a non-fatal failure and the
+        /// summary header should render in an error style. Cards are
+        /// still shown so the user can copy out work they had curated
+        /// before the failure.
+        failed: bool,
     },
     Error(String),
 }
@@ -446,11 +451,13 @@ impl App {
                 message,
                 cards,
                 note_ids,
+                failed,
             } => {
                 self.mode = AppMode::Done {
                     message,
                     cards,
                     note_ids,
+                    failed,
                 };
                 self.current_step_idx = None;
             }
@@ -1334,7 +1341,12 @@ fn draw(frame: &mut Frame, app: &App) {
         AppMode::Running => draw_running(frame, app, main_area),
         AppMode::Selecting(state) => draw_selecting(frame, state, &app.glyphs, app.tick, main_area),
         AppMode::Reviewing(state) => draw_reviewing(frame, state, main_area),
-        AppMode::Done { message, cards, .. } => {
+        AppMode::Done {
+            message,
+            cards,
+            failed,
+            ..
+        } => {
             if let Some(step_idx) = app.browse_step {
                 let record = &app.steps[step_idx];
                 draw_step_logs(
@@ -1345,7 +1357,7 @@ fn draw(frame: &mut Frame, app: &App) {
                     main_area,
                 );
             } else {
-                draw_done(frame, app, message, cards, main_area);
+                draw_done(frame, app, message, cards, *failed, main_area);
             }
         }
         AppMode::Error(msg) => {
@@ -1942,16 +1954,28 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
     draw_log_panel(frame, &app.logs, app.log_scroll, area);
 }
 
-fn draw_done(frame: &mut Frame, app: &App, msg: &str, cards: &[ValidatedCard], area: Rect) {
+fn draw_done(
+    frame: &mut Frame,
+    app: &App,
+    msg: &str,
+    cards: &[ValidatedCard],
+    failed: bool,
+    area: Rect,
+) {
+    let (header_text, header_color, body_color) = if failed {
+        ("✗ Failed", THEME.danger, THEME.danger)
+    } else {
+        ("✓ Done", THEME.success, THEME.text)
+    };
     let mut summary_lines = vec![
         Line::from(Span::styled(
-            "✓ Done",
+            header_text,
             Style::default()
-                .fg(THEME.success)
+                .fg(header_color)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
-        Line::from(msg),
+        Line::from(Span::styled(msg, Style::default().fg(body_color))),
     ];
 
     if app.run_cost > 0.0 {

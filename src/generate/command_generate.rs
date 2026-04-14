@@ -370,11 +370,13 @@ pub fn run_pipeline(
                         message,
                         cards,
                         note_ids,
+                        failed,
                     }) => {
                         tx.send(BackendEvent::RunDone {
                             message,
                             cards,
                             note_ids,
+                            failed,
                         })
                         .ok();
                     }
@@ -384,6 +386,7 @@ pub fn run_pipeline(
                             message: String::new(),
                             cards: Vec::new(),
                             note_ids: Vec::new(),
+                            failed: false,
                         })
                         .ok();
                     }
@@ -581,7 +584,13 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         &term,
         &[],
     )? {
-        PipelineOutcome::Success { message, .. } => {
+        PipelineOutcome::Success {
+            message, failed, ..
+        } => {
+            if failed && !message.is_empty() {
+                eprintln!("\n  {}", s.error_text(&message));
+                return Ok(());
+            }
             if !message.is_empty() {
                 eprintln!("\n  {}", s.green(&message));
             }
