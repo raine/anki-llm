@@ -761,7 +761,7 @@ fn run_copy_mode(
             .as_ref()
             .map(|b| crate::generate::anki_import::TtsFinalize {
                 service: &b.service,
-                media: &b.media,
+                media: b.media.as_ref(),
             });
         let result = import_cards_to_anki(&mut selected, frontmatter, &anki, tts_finalize, on_log)?;
         report_import_result(&result, &frontmatter.deck);

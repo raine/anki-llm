@@ -949,7 +949,7 @@ pub fn run_pipeline_for_term(
         };
         let tts_finalize = bundle.map(|b| TtsFinalize {
             service: &b.service,
-            media: &b.media,
+            media: b.media.as_ref(),
         });
         Ok(run_import_step(
             final_cards,

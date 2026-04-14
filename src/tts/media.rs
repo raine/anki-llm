@@ -4,6 +4,14 @@ use std::sync::{Condvar, Mutex};
 use crate::anki::client::AnkiClient;
 use crate::tts::error::TtsError;
 
+/// Minimal interface `finalize_tts` needs from the media store. Exists
+/// so tests can inject a recording mock without spinning up an Anki
+/// server — the real `AnkiMediaStore::ensure_uploaded` performs an
+/// HTTP call into AnkiConnect.
+pub trait MediaUploader: Send + Sync {
+    fn ensure_uploaded(&self, filename: &str, bytes: &[u8]) -> Result<String, TtsError>;
+}
+
 /// State of a cached-filename upload slot.
 #[derive(Clone)]
 enum UploadState {
@@ -77,6 +85,12 @@ impl AnkiMediaStore {
                 Err(e)
             }
         }
+    }
+}
+
+impl MediaUploader for AnkiMediaStore {
+    fn ensure_uploaded(&self, filename: &str, bytes: &[u8]) -> Result<String, TtsError> {
+        AnkiMediaStore::ensure_uploaded(self, filename, bytes)
     }
 }
 

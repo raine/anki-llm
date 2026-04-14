@@ -4,7 +4,7 @@ use crate::anki::client::AnkiClient;
 use crate::anki::schema::AddNoteParams;
 use crate::style::style;
 use crate::template::frontmatter::Frontmatter;
-use crate::tts::media::{AnkiMediaStore, format_sound_tag};
+use crate::tts::media::{MediaUploader, format_sound_tag};
 use crate::tts::service::TtsService;
 
 use super::cards::ValidatedCard;
@@ -23,7 +23,7 @@ pub struct ImportResult {
 /// cancelled selection never leaks orphan uploads.
 pub struct TtsFinalize<'a> {
     pub service: &'a TtsService,
-    pub media: &'a AnkiMediaStore,
+    pub media: &'a dyn MediaUploader,
 }
 
 /// Add cards to Anki as new notes. If `tts` is `Some`, run the TTS
@@ -137,8 +137,8 @@ pub fn finalize_tts(
             .ensure_cached(&prepared)
             .map_err(|e| anyhow::anyhow!("card #{}: TTS synthesis failed: {}", i + 1, e))?;
 
-        let stored = service
-            .ensure_uploaded(&prepared, &bytes, media)
+        let stored = media
+            .ensure_uploaded(&prepared.filename, &bytes)
             .map_err(|e| anyhow::anyhow!("card #{}: TTS upload failed: {}", i + 1, e))?;
 
         let tag = format_sound_tag(&stored);
@@ -176,7 +176,6 @@ pub fn report_import_result(result: &ImportResult, deck_name: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::anki::client::AnkiClient;
     use crate::generate::cards::ValidatedCard;
     use crate::template::frontmatter::{TtsSource, TtsSpec};
     use crate::tts::cache::TtsCache;
@@ -282,22 +281,60 @@ mod tests {
         }
     }
 
-    struct NoopMedia;
+    /// Recording `MediaUploader` for `finalize_tts` tests. Avoids the
+    /// real `AnkiMediaStore` (which would hit AnkiConnect over HTTP) and
+    /// lets each test inspect the exact sequence of upload calls and
+    /// inject a failure after the Nth one.
+    struct MockUploader {
+        calls: Mutex<Vec<(String, usize)>>,
+        fail_after: Option<usize>,
+    }
 
-    // Minimal fake of `AnkiMediaStore` for finalize_tts tests. The real
-    // store's `ensure_uploaded` hits AnkiConnect; we mask that by
-    // short-circuiting through a local subclass that returns the
-    // requested filename verbatim without touching the network.
-    //
-    // We reach this by constructing an `AnkiMediaStore` wrapping a
-    // `AnkiClient` whose HTTP calls we stub out via env guard — simpler
-    // to bypass the store entirely and test `finalize_tts` against a
-    // small in-crate shim. But `finalize_tts` takes `&AnkiMediaStore`
-    // concretely, so instead we add an integration-ish test that
-    // exercises `prepare + ensure_cached` directly and stops short of
-    // the upload step.
-    #[allow(dead_code)]
-    fn _noop(_: NoopMedia) {}
+    impl MockUploader {
+        fn new() -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+                fail_after: None,
+            }
+        }
+
+        fn failing_after(n: usize) -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+                fail_after: Some(n),
+            }
+        }
+
+        fn call_count(&self) -> usize {
+            self.calls.lock().unwrap().len()
+        }
+
+        fn filenames(&self) -> Vec<String> {
+            self.calls
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect()
+        }
+    }
+
+    impl MediaUploader for MockUploader {
+        fn ensure_uploaded(&self, filename: &str, bytes: &[u8]) -> Result<String, TtsError> {
+            let mut calls = self.calls.lock().unwrap();
+            calls.push((filename.to_string(), bytes.len()));
+            let n = calls.len();
+            drop(calls);
+            if let Some(limit) = self.fail_after
+                && n > limit
+            {
+                return Err(TtsError::Transient(format!(
+                    "mock upload failure on call {n}"
+                )));
+            }
+            Ok(filename.to_string())
+        }
+    }
 
     #[test]
     fn finalize_cache_hit_when_already_previewed() {
@@ -353,14 +390,12 @@ mod tests {
         card.raw_anki_fields
             .insert("Audio".into(), preexisting.clone());
 
-        // We never expect `ensure_uploaded` to be called — the skip guard
-        // must short-circuit before touching the media store — so it's
-        // safe to hand finalize_tts a store wrapping a default client
-        // that would normally hit AnkiConnect.
-        let media = AnkiMediaStore::new(AnkiClient::new());
+        // The skip guard must short-circuit before touching the media
+        // store, so the recording mock should see zero calls.
+        let uploader = MockUploader::new();
         let finalizer = TtsFinalize {
             service: &service,
-            media: &media,
+            media: &uploader,
         };
 
         let mut cards = vec![card];
@@ -372,6 +407,11 @@ mod tests {
             "populated target field must not trigger synthesis"
         );
         assert_eq!(
+            uploader.call_count(),
+            0,
+            "populated target field must not trigger upload"
+        );
+        assert_eq!(
             cards[0].anki_fields.get("Audio").map(String::as_str),
             Some(preexisting.as_str()),
             "pre-existing Audio field must survive finalization untouched"
@@ -380,6 +420,164 @@ mod tests {
             cards[0].raw_anki_fields.get("Audio").map(String::as_str),
             Some(preexisting.as_str()),
             "raw Audio field must also survive untouched"
+        );
+    }
+
+    #[test]
+    fn finalize_happy_path_uploads_all_cards_and_rewrites_target_fields() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let mock = Arc::new(MockProvider::new());
+        let provider: Arc<dyn TtsProvider> = mock.clone();
+        let service = mk_service(provider, cache, "Audio");
+
+        let frontmatter = mk_frontmatter();
+        let mut cards = vec![mk_card("alpha"), mk_card("beta"), mk_card("gamma")];
+
+        let uploader = MockUploader::new();
+        let finalizer = TtsFinalize {
+            service: &service,
+            media: &uploader,
+        };
+
+        finalize_tts(&mut cards, &frontmatter, finalizer, &|_| {}).unwrap();
+
+        assert_eq!(
+            uploader.call_count(),
+            3,
+            "each card should trigger one upload"
+        );
+        let filenames = uploader.filenames();
+        assert_eq!(
+            filenames
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            3,
+            "distinct card content should produce distinct filenames"
+        );
+        for card in &cards {
+            let tag = card
+                .anki_fields
+                .get("Audio")
+                .expect("target field must be present");
+            assert!(
+                tag.starts_with("[sound:") && tag.ends_with(']'),
+                "target field should be rewritten to a [sound:...] tag: {tag}"
+            );
+            assert_eq!(
+                card.raw_anki_fields.get("Audio"),
+                card.anki_fields.get("Audio"),
+                "raw_anki_fields must mirror the rewritten target field"
+            );
+        }
+    }
+
+    #[test]
+    fn finalize_aborts_on_mid_run_upload_failure_with_partial_state() {
+        // Pins current behavior: a failed upload mid-run returns Err
+        // from `finalize_tts`. Cards already processed keep their
+        // rewritten field; later cards keep whatever they had. Rollback
+        // is explicitly out of scope (see the followups doc).
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let mock = Arc::new(MockProvider::new());
+        let provider: Arc<dyn TtsProvider> = mock.clone();
+        let service = mk_service(provider, cache, "Audio");
+
+        let frontmatter = mk_frontmatter();
+        let mut cards = vec![mk_card("alpha"), mk_card("beta"), mk_card("gamma")];
+
+        let uploader = MockUploader::failing_after(1);
+        let finalizer = TtsFinalize {
+            service: &service,
+            media: &uploader,
+        };
+
+        let result = finalize_tts(&mut cards, &frontmatter, finalizer, &|_| {});
+        let err = result.expect_err("upload failure must propagate");
+        assert!(
+            err.to_string().contains("card #2"),
+            "error should identify the offending card (got: {err})"
+        );
+        assert_eq!(
+            uploader.call_count(),
+            2,
+            "should attempt exactly two uploads before aborting"
+        );
+        assert!(
+            cards[0]
+                .anki_fields
+                .get("Audio")
+                .map(|s| s.starts_with("[sound:"))
+                .unwrap_or(false),
+            "first card should have been rewritten before the abort"
+        );
+        // The failing card (card 1 / logged as `card #2`) must not have
+        // been mutated: a buggy implementation that inserted the tag
+        // before calling `ensure_uploaded` would otherwise pass the
+        // card-0 and card-2 assertions.
+        assert_eq!(
+            cards[1].anki_fields.get("Audio").map(String::as_str),
+            Some(""),
+            "failing card must not have its target field mutated"
+        );
+        assert_eq!(
+            cards[1].raw_anki_fields.get("Audio").map(String::as_str),
+            Some(""),
+            "failing card must not have its raw target field mutated"
+        );
+        assert_eq!(
+            cards[2].anki_fields.get("Audio").map(String::as_str),
+            Some(""),
+            "third card should still have its original empty target field"
+        );
+        assert_eq!(
+            cards[2].raw_anki_fields.get("Audio").map(String::as_str),
+            Some(""),
+            "third card raw field should also be unchanged"
+        );
+    }
+
+    #[test]
+    fn finalize_deduplicates_uploads_for_identical_cards() {
+        // Two cards with identical source text hit the same
+        // content-addressed filename and the upload-dedup path inside
+        // the store. The mock's per-call recording pins the expected
+        // call count: the store layer is what deduplicates, but
+        // `finalize_tts` must feed it the same filename both times for
+        // dedup to kick in.
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let mock = Arc::new(MockProvider::new());
+        let provider: Arc<dyn TtsProvider> = mock.clone();
+        let service = mk_service(provider, cache, "Audio");
+
+        let frontmatter = mk_frontmatter();
+        let mut cards = vec![mk_card("同じ"), mk_card("同じ")];
+
+        let uploader = MockUploader::new();
+        let finalizer = TtsFinalize {
+            service: &service,
+            media: &uploader,
+        };
+
+        finalize_tts(&mut cards, &frontmatter, finalizer, &|_| {}).unwrap();
+
+        let filenames = uploader.filenames();
+        assert_eq!(
+            filenames.len(),
+            2,
+            "finalize must call the uploader once per card (dedup happens inside the store)"
+        );
+        assert_eq!(
+            filenames[0], filenames[1],
+            "identical card content must produce identical filenames"
+        );
+        assert_eq!(
+            cards[0].anki_fields.get("Audio"),
+            cards[1].anki_fields.get("Audio"),
+            "both cards must end up with the same sound tag"
         );
     }
 
