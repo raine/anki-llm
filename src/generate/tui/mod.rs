@@ -1096,7 +1096,29 @@ impl App {
                         // round-trips. This is what blocks the
                         // press-p-then-Enter race on the same card.
                         state.tts_states.insert(card_id, TtsUiState::Synthesizing);
-                        self.worker_tx.send(WorkerCommand::PreviewTts { card }).ok();
+                        // `try_send` instead of blocking `send`: the
+                        // command channel is a bounded `sync_channel`
+                        // and a full queue would otherwise block the
+                        // render thread. On `Full`, roll the optimistic
+                        // `Synthesizing` state back — otherwise the card
+                        // would stay stuck forever (no worker reply will
+                        // ever arrive) and `any_card_synthesizing` would
+                        // permanently block Enter/Esc.
+                        match self.worker_tx.try_send(WorkerCommand::PreviewTts { card }) {
+                            Ok(()) => {}
+                            Err(mpsc::TrySendError::Full(_)) => {
+                                state.tts_states.remove(&card_id);
+                                self.toast = Some(Toast {
+                                    message: "Preview queue full — try again".into(),
+                                    tick: self.tick,
+                                });
+                            }
+                            Err(mpsc::TrySendError::Disconnected(_)) => {
+                                state.tts_states.remove(&card_id);
+                                self.mode =
+                                    AppMode::Error("Worker thread exited unexpectedly".into());
+                            }
+                        }
                     }
                 }
             }
