@@ -909,7 +909,7 @@ pub fn run_pipeline_for_term(
         progress.log(&format!("Total cost: {}", pricing::format_cost(total_cost)));
     }
 
-    progress.step_done(PipelineStep::QualityCheck, Some("done".to_string()));
+    progress.step_done(PipelineStep::QualityCheck, None);
 
     // Export or import
     progress.step_start(PipelineStep::Finish, None);
