@@ -1516,7 +1516,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
                 .unwrap_or(false)
                 && app.player.is_some()
             {
-                v.push(("p", "Preview audio"));
+                v.push(("p", "Play audio"));
             }
             v.extend([
                 ("Ctrl+O", "Model"),
@@ -1838,7 +1838,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                 .unwrap_or(false)
                 && app.player.is_some()
             {
-                s.extend(footer_cmd("p", "Preview"));
+                s.extend(footer_cmd("p", "Play"));
                 s.push(footer_pipe());
             }
             if state.refresh_in_flight || state.regen_in_flight.is_some() {
