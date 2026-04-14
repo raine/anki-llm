@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -35,11 +35,21 @@ pub enum PlayerCommand {
     Shutdown,
 }
 
+/// Events the playback thread sends back to the TUI. Used to surface
+/// spawn / reaper failures that would otherwise be silent — the user
+/// sees `Ready` but nothing plays. Lets the TUI pop a toast instead.
+#[derive(Debug, Clone)]
+pub enum PlayerEvent {
+    /// The player process failed to spawn or died unexpectedly.
+    Failed { card_id: u64, message: String },
+}
+
 /// Handle to a running playback thread. Cloning the `tx` is fine —
 /// multiple senders are supported. Dropping the handle signals
 /// `Shutdown` and joins the thread.
 pub struct PlayerHandle {
     tx: Sender<PlayerCommand>,
+    events: Receiver<PlayerEvent>,
     join: Option<JoinHandle<()>>,
 }
 
@@ -57,6 +67,13 @@ impl PlayerHandle {
     /// Non-blocking: send a `Stop` request.
     pub fn stop(&self) -> Result<(), mpsc::SendError<PlayerCommand>> {
         self.tx.send(PlayerCommand::Stop)
+    }
+
+    /// Drain all pending player events (spawn failures, etc.) without
+    /// blocking. The TUI polls this every frame the same way it polls
+    /// `backend_rx`.
+    pub fn try_recv_event(&self) -> Result<PlayerEvent, mpsc::TryRecvError> {
+        self.events.try_recv()
     }
 }
 
@@ -128,14 +145,20 @@ pub fn detect_player_binary() -> Option<PlayerBinary> {
 ///   reaper thread.
 pub fn spawn_player(binary: PlayerBinary) -> PlayerHandle {
     let (tx, rx) = mpsc::channel::<PlayerCommand>();
-    let join = thread::spawn(move || run_player_loop(binary, rx));
+    let (event_tx, event_rx) = mpsc::channel::<PlayerEvent>();
+    let join = thread::spawn(move || run_player_loop(binary, rx, event_tx));
     PlayerHandle {
         tx,
+        events: event_rx,
         join: Some(join),
     }
 }
 
-fn run_player_loop(binary: PlayerBinary, rx: mpsc::Receiver<PlayerCommand>) {
+fn run_player_loop(
+    binary: PlayerBinary,
+    rx: mpsc::Receiver<PlayerCommand>,
+    events: mpsc::Sender<PlayerEvent>,
+) {
     struct Active {
         child: Child,
         card_id: u64,
@@ -159,12 +182,16 @@ fn run_player_loop(binary: PlayerBinary, rx: mpsc::Receiver<PlayerCommand>) {
                 }
                 match binary.spawn(&path) {
                     Ok(child) => active = Some(Active { child, card_id }),
-                    Err(_) => {
-                        // Spawn failed — leave `active` None so the next
-                        // `Play` can try again. A smarter version would
-                        // surface this via a PlayerEvent channel; v1
-                        // just swallows and the caller's state stays
-                        // "Ready", which they can retry.
+                    Err(e) => {
+                        // Spawn failed (FD limits, missing binary,
+                        // permission denied, corrupt cache file, ...).
+                        // Surface it so the TUI can toast the user
+                        // instead of leaving them staring at a silent
+                        // "♪ Audio ready" with nothing playing.
+                        let _ = events.send(PlayerEvent::Failed {
+                            card_id,
+                            message: format!("audio player failed: {e}"),
+                        });
                     }
                 }
             }
@@ -191,15 +218,20 @@ fn run_player_loop(binary: PlayerBinary, rx: mpsc::Receiver<PlayerCommand>) {
                             // Still running; put it back.
                             active = Some(a);
                         }
-                        Err(_) => {
+                        Err(e) => {
                             // `try_wait` hit an OS error. Dropping the
                             // `Child` alone does NOT kill the process —
                             // `Child`'s `Drop` is a no-op by design — so
                             // we must kill + wait ourselves or the
                             // `afplay` / `mpv` subprocess leaks and keeps
                             // playing past the TUI session.
+                            let card_id = a.card_id;
                             let _ = a.child.kill();
                             let _ = a.child.wait();
+                            let _ = events.send(PlayerEvent::Failed {
+                                card_id,
+                                message: format!("audio player polling failed: {e}"),
+                            });
                         }
                     }
                 }
@@ -337,5 +369,37 @@ mod tests {
     fn binary_exists_handles_missing_path_var() {
         // Sanity: a nonexistent binary reports false without panicking.
         assert!(!binary_exists("definitely-not-a-real-binary-xyz-12345"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn spawn_failure_surfaces_player_event() {
+        // Point the player at a binary that cannot exist. The spawn
+        // must fail immediately and the player thread must emit a
+        // `PlayerEvent::Failed` so the TUI can surface it instead of
+        // silently pretending the audio is playing.
+        let bogus = PlayerBinary {
+            command: "/nonexistent/path/anki-llm-bogus-player-xyz".into(),
+            args: Vec::new(),
+        };
+        let handle = spawn_player(bogus);
+        handle.play(7, PathBuf::from("/tmp/whatever.mp3")).unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut got = None;
+        while Instant::now() < deadline {
+            if let Ok(ev) = handle.try_recv_event() {
+                got = Some(ev);
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let ev = got.expect("player should have surfaced a Failed event");
+        match ev {
+            PlayerEvent::Failed { card_id, message } => {
+                assert_eq!(card_id, 7);
+                assert!(!message.is_empty());
+            }
+        }
     }
 }

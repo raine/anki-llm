@@ -514,6 +514,23 @@ impl App {
         }
     }
 
+    fn handle_player_event(&mut self, ev: crate::audio::PlayerEvent) {
+        match ev {
+            crate::audio::PlayerEvent::Failed { card_id, message } => {
+                // Clear the card's cached `Ready` state so the user's
+                // next `p` press routes a fresh `PreviewTts` through the
+                // worker instead of replaying the same failing path.
+                if let AppMode::Selecting(ref mut sel) = self.mode {
+                    sel.tts_states.remove(&card_id);
+                }
+                self.toast = Some(Toast {
+                    message,
+                    tick: self.tick,
+                });
+            }
+        }
+    }
+
     fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
         // Model picker overlay intercepts all keys when visible
         if let Some(ref mut picker) = self.model_picker {
@@ -2119,6 +2136,17 @@ fn run_app(
                     }
                     break;
                 }
+            }
+        }
+
+        // Drain pending player events (spawn failures etc.) and surface
+        // them as toasts. Otherwise a failed `binary.spawn` leaves the
+        // user staring at "♪ Audio ready" with nothing playing.
+        loop {
+            let Some(player) = &app.player else { break };
+            match player.try_recv_event() {
+                Ok(ev) => app.handle_player_event(ev),
+                Err(_) => break,
             }
         }
 
