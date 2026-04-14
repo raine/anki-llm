@@ -89,6 +89,18 @@ impl TtsService {
         &self.target_field
     }
 
+    pub fn provider_id(&self) -> &'static str {
+        self.provider.id()
+    }
+
+    pub fn voice(&self) -> &str {
+        &self.voice
+    }
+
+    pub fn model(&self) -> Option<&str> {
+        self.model.as_deref()
+    }
+
     /// Build a `PreparedSynthesis` from an LLM-keyed eval row. This is the
     /// core preparation path — template expansion, normalization, IR
     /// parsing, provider-specific rendering, and cache-identity derivation.

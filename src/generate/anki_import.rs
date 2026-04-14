@@ -85,10 +85,20 @@ pub fn finalize_tts(
     let TtsFinalize { service, media } = finalizer;
 
     let tts_target = service.target_field().to_string();
-    on_log(&format!(
-        "Finalizing TTS audio for {} card(s)...",
-        cards.len()
-    ));
+    let provider = service.provider_id();
+    let voice = service.voice();
+    let mut header = format!(
+        "Synthesizing audio for {} card(s) via {} (voice: {}",
+        cards.len(),
+        provider,
+        voice,
+    );
+    if let Some(model) = service.model() {
+        use std::fmt::Write;
+        let _ = write!(header, ", model: {model}");
+    }
+    header.push_str(")...");
+    on_log(&header);
 
     for (i, card) in cards.iter_mut().enumerate() {
         // Respect any existing target-field content: the user may have
