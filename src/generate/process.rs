@@ -175,12 +175,14 @@ pub fn run_processors(
         let mut next_cards = Vec::with_capacity(total_cards);
         let mut cards_iter: Vec<Option<CardCandidate>> =
             current_cards.into_iter().map(Some).collect();
+        let mut step_cost = 0.0;
 
         for (idx, result) in results {
             let card = cards_iter[idx].take().unwrap();
             match result {
                 Ok((outcome, in_tok, out_tok, cost)) => {
                     total_cost += cost;
+                    step_cost += cost;
                     total_input_tokens += in_tok;
                     total_output_tokens += out_tok;
 
@@ -246,14 +248,16 @@ pub fn run_processors(
             }
         }
 
-        current_cards = next_cards;
-    }
+        if step_cost > 0.0 {
+            on_progress(&format!(
+                "  Step {}/{} cost: {}",
+                step_idx + 1,
+                steps.len(),
+                pricing::format_cost(step_cost)
+            ));
+        }
 
-    if total_cost > 0.0 {
-        on_progress(&format!(
-            "  Processing cost: {}",
-            pricing::format_cost(total_cost)
-        ));
+        current_cards = next_cards;
     }
 
     Ok(ProcessResult {
