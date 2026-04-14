@@ -123,18 +123,15 @@ fn prepare_session(
     let client = LlmClient::from_config(&runtime);
 
     let tts = if let Some(ref spec) = loaded.frontmatter.tts {
-        // TTS credentials are resolved from env/config (`AZURE_TTS_KEY`,
-        // `OPENAI_API_KEY`, `~/.config/anki-llm/config.toml`'s `tts_*` fields),
-        // not from `--api-key`/`--api-base-url` which are LLM-only transport
-        // flags and may legitimately point at OpenRouter, Ollama, etc.
+        // TTS credentials resolve from env/config (`AZURE_TTS_KEY`,
+        // `OPENAI_API_KEY`, `~/.config/anki-llm/config.toml`'s `tts_*` fields).
+        // `TtsBundleOptions` intentionally does not accept `api_key` /
+        // `api_base_url` — those are LLM-only flags and may point at
+        // OpenRouter/Ollama/etc.
         let bundle = crate::tts::service::build_bundle(
             spec,
             AnkiClient::new(),
-            crate::tts::service::TtsBundleOptions {
-                api_key: None,
-                api_base_url: None,
-                azure_region: None,
-            },
+            crate::tts::service::TtsBundleOptions { azure_region: None },
         )
         .inspect_err(|e| {
             progress.step_error(PipelineStep::ValidateAnki, &e.to_string());
@@ -740,11 +737,7 @@ fn run_copy_mode(
             Some(crate::tts::service::build_bundle(
                 spec,
                 AnkiClient::new(),
-                crate::tts::service::TtsBundleOptions {
-                    api_key: None,
-                    api_base_url: None,
-                    azure_region: None,
-                },
+                crate::tts::service::TtsBundleOptions { azure_region: None },
             )?)
         } else {
             None

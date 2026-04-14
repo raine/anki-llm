@@ -188,13 +188,15 @@ pub struct TtsBundle {
     pub media: Arc<AnkiMediaStore>,
 }
 
-/// Inputs needed to build a `TtsBundle` from a `TtsSpec`. Mirrors the
-/// subset of `CliOverrides` that generate-side callers actually have —
-/// generate only carries `api_key` / `api_base_url`; Azure region falls
-/// back to env/config via `spec::resolve`.
+/// Inputs needed to build a `TtsBundle` from a `TtsSpec`. Only the
+/// Azure region is accepted here — `api_key` / `api_base_url` are
+/// intentionally *not* plumbed through, because the one generate-side
+/// caller that used to forward them was routing LLM transport flags
+/// (\`--api-key\`, \`--api-base-url\`) into TTS, breaking setups that
+/// pointed generate at OpenRouter / Ollama / local proxies. TTS
+/// credentials now resolve exclusively through env vars and
+/// `~/.config/anki-llm/config.toml`'s `tts_*` fields via `spec::resolve`.
 pub struct TtsBundleOptions<'a> {
-    pub api_key: Option<&'a str>,
-    pub api_base_url: Option<&'a str>,
     pub azure_region: Option<&'a str>,
 }
 
@@ -212,8 +214,8 @@ pub fn build_bundle(
     // no --retries, no --force, no --dry-run here — those belong to the
     // standalone `tts` command, not to generate).
     let overrides = CliOverrides {
-        api_key: opts.api_key,
-        api_base_url: opts.api_base_url,
+        api_key: None,
+        api_base_url: None,
         azure_region: opts.azure_region,
         // Generate-side callers never forward AWS creds yet; they flow
         // through env/config via `spec::resolve` the same way Azure
