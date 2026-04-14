@@ -938,7 +938,9 @@ that emits the format, or paste them from any other tool.
 **Quick start:**
 
 ```bash
-# Speak the "Front" field, store audio reference in the "Audio" field
+# For every note in the "Japanese" deck with an empty "Audio" field, synthesize
+# audio from "Front" and write the [sound:...] reference into "Audio".
+# (Notes that already have audio are skipped unless you pass --force.)
 anki-llm tts Japanese \
   --field Audio \
   --text-field Front \
@@ -971,8 +973,6 @@ Templates use the same `{field}` placeholder syntax as `process-deck`.
    YAML frontmatter alongside its LLM prompt. Best for decks you maintain in
    version control, where the voice and source-text strategy are inherent to the
    deck's design.
-
-Pick whichever fits the task — neither is deprecated.
 
 **Using a prompt YAML**
 
