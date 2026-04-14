@@ -103,6 +103,25 @@ pub fn finalize_tts(
     ));
 
     for (i, card) in cards.iter_mut().enumerate() {
+        // Respect any existing target-field content: the user may have
+        // typed a manual `[sound:...]` reference in `$EDITOR` or the LLM
+        // may have populated the field itself. Synthesizing over it would
+        // silently destroy their work. The standalone `anki-llm tts`
+        // command applies the same guard via `field_has_sound_tag` by
+        // default; there's no `--tts-force` flag on generate yet.
+        let existing = card
+            .anki_fields
+            .get(&tts_target)
+            .map(String::as_str)
+            .unwrap_or("");
+        if !existing.trim().is_empty() {
+            on_log(&format!(
+                "card #{}: skipping TTS (target field already populated)",
+                i + 1
+            ));
+            continue;
+        }
+
         let prepared = service
             .prepare_from_anki_fields(&card.raw_anki_fields, &frontmatter.field_map)
             .with_context(|| format!("card #{}: TTS preparation failed", i + 1))?;
@@ -150,6 +169,7 @@ pub fn report_import_result(result: &ImportResult, deck_name: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::anki::client::AnkiClient;
     use crate::generate::cards::ValidatedCard;
     use crate::template::frontmatter::{TtsSource, TtsSpec};
     use crate::tts::cache::TtsCache;
@@ -306,6 +326,53 @@ mod tests {
             mock.calls.lock().unwrap().len(),
             1,
             "finalization after preview must hit the cache, not the provider"
+        );
+    }
+
+    #[test]
+    fn finalize_skips_when_target_field_already_populated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let mock = Arc::new(MockProvider::new());
+        let provider: Arc<dyn TtsProvider> = mock.clone();
+        let service = mk_service(provider, cache, "Audio");
+
+        let frontmatter = mk_frontmatter();
+        let mut card = mk_card("日本語[にほんご]を");
+        // Simulate a user-authored or LLM-authored sound tag sitting in
+        // the target field before finalize runs.
+        let preexisting = "[sound:user-recorded.mp3]".to_string();
+        card.anki_fields.insert("Audio".into(), preexisting.clone());
+        card.raw_anki_fields
+            .insert("Audio".into(), preexisting.clone());
+
+        // We never expect `ensure_uploaded` to be called — the skip guard
+        // must short-circuit before touching the media store — so it's
+        // safe to hand finalize_tts a store wrapping a default client
+        // that would normally hit AnkiConnect.
+        let media = AnkiMediaStore::new(AnkiClient::new());
+        let finalizer = TtsFinalize {
+            service: &service,
+            media: &media,
+        };
+
+        let mut cards = vec![card];
+        finalize_tts(&mut cards, &frontmatter, finalizer, &|_| {}).unwrap();
+
+        assert_eq!(
+            mock.calls.lock().unwrap().len(),
+            0,
+            "populated target field must not trigger synthesis"
+        );
+        assert_eq!(
+            cards[0].anki_fields.get("Audio").map(String::as_str),
+            Some(preexisting.as_str()),
+            "pre-existing Audio field must survive finalization untouched"
+        );
+        assert_eq!(
+            cards[0].raw_anki_fields.get("Audio").map(String::as_str),
+            Some(preexisting.as_str()),
+            "raw Audio field must also survive untouched"
         );
     }
 
