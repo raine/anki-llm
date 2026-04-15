@@ -2,7 +2,7 @@
 //!
 //! Layout: left pane is a filtered voice list with a visible facet chip
 //! row and text search; right pane shows the highlighted voice's details
-//! and the YAML scaffold that will be emitted on Enter.
+//! and the YAML scaffold that is copied to the clipboard on Enter.
 
 use std::process::Child;
 use std::sync::Arc;
@@ -34,9 +34,9 @@ pub struct InitialFilters {
     pub query: Option<String>,
 }
 
-pub struct AppOutcome {
-    pub yaml: String,
-    pub voice_id: String,
+struct Toast {
+    message: String,
+    tick: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -141,7 +141,8 @@ pub struct App {
     queued: Option<usize>,
     active_player: Option<Child>,
     status_line: String,
-    outcome: Option<AppOutcome>,
+    toast: Option<Toast>,
+    tick: u64,
     should_quit: bool,
 }
 
@@ -176,9 +177,10 @@ impl App {
             queued: None,
             active_player: None,
             status_line:
-                "Type to search names · Ctrl+P/L/G/O/T filters · Space=preview · Enter=copy+emit"
+                "Type to search names · Ctrl+P/L/G/O/T filters · Space=preview · Enter=copy yaml"
                     .into(),
-            outcome: None,
+            toast: None,
+            tick: 0,
             should_quit: false,
         };
         app.refilter();
@@ -345,11 +347,17 @@ impl App {
         };
         let region_override = self.region_for(&entry);
         let yaml = emit_scaffold(&entry, region_override.as_deref());
-        self.outcome = Some(AppOutcome {
-            yaml,
-            voice_id: entry.voice_id,
+        let message = if let Ok(mut cb) = arboard::Clipboard::new()
+            && cb.set_text(yaml).is_ok()
+        {
+            format!("Copied yaml for {}", entry.voice_id)
+        } else {
+            "Clipboard unavailable".to_string()
+        };
+        self.toast = Some(Toast {
+            message,
+            tick: self.tick,
         });
-        self.should_quit = true;
     }
 
     fn region_for(&self, entry: &VoiceEntry) -> Option<String> {
@@ -701,11 +709,7 @@ impl App {
     }
 }
 
-pub fn run(
-    mut terminal: DefaultTerminal,
-    filters: InitialFilters,
-    cache: Arc<TtsCache>,
-) -> Option<AppOutcome> {
+pub fn run(mut terminal: DefaultTerminal, filters: InitialFilters, cache: Arc<TtsCache>) {
     let mut app = App::new(filters, cache);
 
     while !app.should_quit {
@@ -725,11 +729,12 @@ pub fn run(
                 _ => {}
             }
         }
+
+        app.tick = app.tick.wrapping_add(1);
     }
 
     app.stop_player();
     app.worker.shutdown();
-    app.outcome
 }
 
 fn is_press_or_repeat(key: &KeyEvent) -> bool {
@@ -756,6 +761,28 @@ fn draw(frame: &mut Frame, app: &mut App) {
     draw_detail_pane(frame, cols[1], app);
     draw_status(frame, rows[1], app);
     draw_footer(frame, rows[2]);
+
+    if let Some(ref toast) = app.toast
+        && app.tick.wrapping_sub(toast.tick) < 40
+    {
+        let text = &toast.message;
+        let width = (text.chars().count() as u16) + 2;
+        let area = frame.area();
+        let toast_area = Rect {
+            x: area.x + 1,
+            y: area.y + area.height.saturating_sub(3),
+            width: width.min(area.width),
+            height: 1,
+        };
+        let para = Paragraph::new(Span::styled(
+            format!(" {text} "),
+            Style::default()
+                .fg(THEME.success)
+                .add_modifier(Modifier::BOLD),
+        ));
+        frame.render_widget(Clear, toast_area);
+        frame.render_widget(para, toast_area);
+    }
 
     if app.show_help {
         draw_help_overlay(frame);
@@ -1023,7 +1050,7 @@ fn draw_footer(frame: &mut Frame, area: Rect) {
         ("type", "text"),
         ("Ctrl+P/L/G/O/T", "filter"),
         ("Space", "preview"),
-        ("Enter", "copy+emit"),
+        ("Enter", "copy yaml"),
         ("Esc", "cancel"),
     ]
     .iter()

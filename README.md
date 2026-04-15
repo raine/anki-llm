@@ -1247,11 +1247,12 @@ to `--voice`, without clicking through four different provider doc sites.
   played through your system's audio player. Subsequent previews of the same
   voice are instant because the cache already
   has the mp3.
-- `Enter` — copy the voice id to the clipboard and print a complete pasteable
-  `tts:` YAML scaffold to stdout, then exit. The scaffold includes `provider`,
-  `voice`, `region` for Azure/Polly, and `model` for Polly voices that require a
-  non-default engine. You still need to fill in `target` and `source.field`.
-- `Esc` / `Ctrl-C` — cancel with no output.
+- `Enter` — copy the complete `tts:` YAML scaffold for the highlighted voice to
+  the clipboard and flash a confirmation toast; the browser stays open so you
+  can keep exploring. The scaffold includes `provider`, `voice`, `region` for
+  Azure/Polly, and `model` for Polly voices that require a non-default engine.
+  You still need to fill in `target` and `source.field`.
+- `Esc` / `Ctrl-C` — exit the browser.
 
 **Pre-filters (CLI flags):**
 
@@ -1278,9 +1279,6 @@ anki-llm tts-voices --lang ja -q "female neural"
 
 # Only Amazon Polly
 anki-llm tts-voices --provider amazon -q neural
-
-# Pipe the emitted YAML straight into a prompt template
-anki-llm tts-voices --lang ja -q Nanami >> prompts/japanese.yaml
 ```
 
 ---

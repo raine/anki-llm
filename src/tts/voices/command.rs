@@ -29,14 +29,8 @@ pub fn run(args: VoicesArgs) -> Result<()> {
     let cache = Arc::new(TtsCache::new(cache_dir).context("failed to initialize TTS cache")?);
 
     let terminal = terminal::init();
-    let outcome = app::run(terminal, filters, cache);
+    app::run(terminal, filters, cache);
     terminal::restore();
 
-    if let Some(out) = outcome {
-        if let Ok(mut cb) = arboard::Clipboard::new() {
-            let _ = cb.set_text(out.voice_id.clone());
-        }
-        print!("{}", out.yaml);
-    }
     Ok(())
 }

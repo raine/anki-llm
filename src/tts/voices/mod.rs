@@ -2,7 +2,7 @@
 //!
 //! Lets users fuzzy-search the full catalog of OpenAI / Azure / Google /
 //! Polly voices, audition the highlighted voice with a short pangram
-//! sample, and emit a pasteable `tts:` YAML block on Enter.
+//! sample, and copy a pasteable `tts:` YAML block to the clipboard on Enter.
 //!
 //! Design notes live in `history/2026-04-13-plan-tts-voices-tui.md`.
 
