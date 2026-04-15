@@ -270,7 +270,7 @@ impl SessionTts {
 /// (\`--api-key\`, \`--api-base-url\`) into TTS, breaking setups that
 /// pointed generate at OpenRouter / Ollama / local proxies. TTS
 /// credentials now resolve exclusively through env vars and
-/// `~/.config/anki-llm/config.toml`'s `tts_*` fields via `spec::resolve`.
+/// `~/.config/anki-llm/config.json`'s `tts_*` fields via `spec::resolve`.
 pub struct TtsBundleOptions<'a> {
     pub azure_region: Option<&'a str>,
 }

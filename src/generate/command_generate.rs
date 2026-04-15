@@ -132,7 +132,7 @@ fn prepare_session(
     // triggers preview or import — don't pay the credential-resolution
     // cost. Credentials flow through env/config
     // (`AZURE_TTS_KEY`, `OPENAI_API_KEY`,
-    // `~/.config/anki-llm/config.toml`'s `tts_*` fields); generate's
+    // `~/.config/anki-llm/config.json`'s `tts_*` fields); generate's
     // `--api-key` / `--api-base-url` are LLM-only and never forwarded.
     let tts = loaded.frontmatter.tts.clone().map(SessionTts::new);
 

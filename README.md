@@ -96,9 +96,10 @@ cargo install anki-llm
 
 ## Requirements
 
-- Anki Desktop must be running.
-- The [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on must be
-  installed in Anki. ([Why?](#why-ankiconnect))
+- Anki Desktop with the
+  [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on installed
+  ([Why?](#why-ankiconnect)). Must be running for any command that talks to
+  your collection; `process-file` works while Anki is closed.
 
 ## LLM Configuration
 
@@ -382,10 +383,10 @@ output is piped.
   on a small sample before processing large datasets).
 - `--require-result-tag`: Only extracts content from within `<result></result>`
   tags in the AI response.
-- `--log`: Generate a log file with detailed debug information.
-- `--very-verbose`: Log full LLM responses to the log file (automatically
-  enables `--log`). Useful for debugging prompts and understanding model
-  outputs.
+- `--log <PATH>`: Append raw LLM prompts and responses to a log file at
+  `<PATH>` for debugging.
+- `--very-verbose`: Also print raw LLM prompts and responses to stderr. Useful
+  for debugging prompts and understanding model outputs.
 
 <a id="prompt-template"></a>
 
@@ -431,7 +432,7 @@ anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.tx
 # Process with JSON mode (update multiple fields)
 anki-llm process-file notes.yaml -o output.yaml --json -p prompt.txt -m gpt-4o-mini
 
-# Test on 10 notes first (dry run)
+# Preview the first 10 notes without calling the API
 anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --limit 10 --dry-run -m gpt-4o-mini
 
 # Resume processing after interruption (automatic - just re-run the same command)
@@ -480,10 +481,10 @@ One of `<deck>` or `--query` is required (mutually exclusive).
   a small sample before processing entire deck).
 - `--require-result-tag`: Only extracts content from within `<result></result>`
   tags in the AI response.
-- `--log`: Generate a log file with detailed debug information.
-- `--very-verbose`: Log full LLM responses to the log file (automatically
-  enables `--log`). Useful for debugging prompts and understanding model
-  outputs.
+- `--log <PATH>`: Append raw LLM prompts and responses to a log file at
+  `<PATH>` for debugging.
+- `--very-verbose`: Also print raw LLM prompts and responses to stderr. Useful
+  for debugging prompts and understanding model outputs.
 
 **Prompt template:**
 
@@ -506,7 +507,7 @@ anki-llm process-deck "Japanese Core 1k" --field Translation -p prompt.txt
 # Direct mode with JSON (update multiple fields)
 anki-llm process-deck "Vocabulary" --json -p prompt.txt
 
-# Test on 10 notes first (recommended before processing entire deck)
+# Preview the first 10 notes without calling the API
 anki-llm process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run
 
 # Rewrite explanations only for cards you keep failing
@@ -678,7 +679,8 @@ in a single session.
 - `--max-tokens`: Set a maximum number of tokens for the LLM response.
 - `-o, --output`: Export cards to a file instead of importing to Anki (e.g.,
   `cards.yaml`, `cards.csv`).
-- `--log`: Enable logging of LLM responses to a file (useful for debugging).
+- `--log <PATH>`: Append raw LLM prompts and responses to a log file at
+  `<PATH>` for debugging.
 - `--copy`: Copy the LLM prompt to clipboard and wait for manual response
   pasting. Useful when you don't have API access and want to use a browser LLM
   interface like ChatGPT.
@@ -896,7 +898,7 @@ anki-llm generate "今日" -p japanese-vocab-prompt.md -o cards.yaml
 anki-llm import cards.yaml --deck "Japanese::Vocabulary"
 
 # Enable logging for debugging
-anki-llm generate "新しい" -p prompt.md --log
+anki-llm generate "新しい" -p prompt.md --log run.log
 
 # Use manual copy-paste mode (no API key required)
 anki-llm generate "今日" -p japanese-vocab-prompt.md --copy
@@ -983,7 +985,7 @@ top-level `tts:` block. **Both** `anki-llm tts --prompt` (for bulk-filling
 existing notes) and `anki-llm generate` (for new cards) read the same block —
 generate synthesizes + uploads audio for the cards you confirm at import time,
 and offers an in-TUI `p` preview hotkey while you're reviewing them. TTS
-credentials are read from environment variables and `~/.config/anki-llm/config.toml`
+credentials are read from environment variables and `~/.config/anki-llm/config.json`
 (see Provider configuration below) — `anki-llm generate`'s `--api-key` /
 `--api-base-url` flags are LLM-only and are never forwarded to the TTS provider,
 so you can point generate at OpenRouter / Ollama / a local proxy while still
@@ -1478,7 +1480,7 @@ File-Based Processing
 Input file:        notes.yaml
 Output file:       notes-translated.yaml
 Field to process:  Translation
-Model:             gpt-4o-mini
+Model:             gemini-2.5-flash
 Batch size:        10
 ...
 ============================================================
@@ -1501,7 +1503,7 @@ Summary
 - Failures:          0
 - Total Processed:   1000
 - Total Time:        85.32s
-- Model:             gpt-4o-mini
+- Model:             gemini-2.5-flash
 - Dry Run:           false
 ---
 - Total Tokens:      152,340
@@ -1523,9 +1525,9 @@ anki-llm import notes-translated.yaml --deck "Japanese Core 1k"
 - `notes-translated.yaml`: The file with our improved translations.
 - `--deck "Japanese Core 1k"`: The destination deck.
 
-The model type will be automatically inferred from the existing notes in the
-deck. You can also explicitly specify it with `--model "Japanese Model"` if
-needed.
+The note type will be automatically inferred from the existing notes in the
+deck. You can also explicitly specify it with `--note-type "Japanese Model"`
+if needed.
 
 ```
 ============================================================
