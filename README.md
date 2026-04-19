@@ -6,7 +6,8 @@
 </p>
 
 <p align="center">
-  A CLI/TUI toolkit for bulk-processing and generating Anki flashcards with LLMs.
+  A CLI/TUI toolkit for bulk-processing and generating Anki flashcards with LLMs,
+  with built-in TTS audio support.
 </p>
 
 <p align="center">
@@ -31,6 +32,8 @@
 - **Generate new cards** – Interactively create multiple contextual flashcards
   for a vocabulary word or concept from a single command.
   [Read more](#example-use-case-generating-new-vocabulary-cards)
+- **Add TTS audio** – Bulk-fill audio fields for existing notes or synthesize
+  audio for newly generated cards. [Read more](#anki-llm-tts)
 - **Scriptable collection access** – Query AnkiConnect directly from the CLI or
   AI agents. [Command reference](#anki-llm-query-action-params)
 
