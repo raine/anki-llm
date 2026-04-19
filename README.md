@@ -696,8 +696,9 @@ card with feedback, edit any card in your `$EDITOR`, switch models
 mid-session, or queue multiple terms for batch processing.
 
 If the prompt declares a `tts:` block and a system audio player is available,
-press `p` to preview the focused card's audio; audio for selected cards is
-finalized automatically at import time.
+press `p` to preview the focused card's audio in selection and replay imported
+audio from the summary; audio for selected cards is finalized automatically at
+import time.
 
 Press `?` at any time to see keyboard shortcuts for the current mode. Token
 usage and estimated cost are tracked in the sidebar across the session.
@@ -1717,6 +1718,7 @@ shows a full preview of the currently focused card.
 - <kbd>R</kbd> — regenerate a card with feedback
 - <kbd>d</kbd> — remove a card from the list
 - <kbd>c</kbd> — copy card to clipboard
+- <kbd>p</kbd> — preview the focused card's audio when TTS is enabled
 
 Duplicate cards are flagged with `[dup]` and shown as a diff against the
 existing Anki card. Press <kbd>f</kbd> to force-select a duplicate if needed.
@@ -1725,9 +1727,10 @@ Press <kbd>Enter</kbd> to confirm your selection and import the cards into Anki.
 
 ### Step 5: Continue or quit
 
-After import, you can press <kbd>n</kbd> to start a new term, <kbd>r</kbd> to
-retry, or <kbd>q</kbd> to quit. Session cost is tracked in the sidebar
-throughout.
+After import, you can press <kbd>p</kbd> to replay audio from the summary when a
+card includes a generated sound tag, <kbd>n</kbd> to start a new term,
+<kbd>r</kbd> to retry, or <kbd>q</kbd> to quit. Session cost is tracked in the
+sidebar throughout.
 
 ## Why AnkiConnect?
 

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -731,6 +732,33 @@ impl App {
                         let cards = cards.clone();
                         self.copy_cards(&cards);
                     }
+                }
+                KeyCode::Char('p') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    let enabled = self
+                        .session_info
+                        .as_ref()
+                        .map(|info| info.tts_configured)
+                        .unwrap_or(false);
+                    if !enabled {
+                        return;
+                    }
+                    let Some(player) = &self.player else {
+                        return;
+                    };
+                    let Some(card) = (match &self.mode {
+                        AppMode::Done { cards, .. } => cards.first(),
+                        _ => None,
+                    }) else {
+                        return;
+                    };
+                    let Some(path) = done_audio_cache_path(card) else {
+                        self.toast = Some(Toast {
+                            message: "No cached audio to play".into(),
+                            tick: self.tick,
+                        });
+                        return;
+                    };
+                    let _ = player.play(card.card_id, path);
                 }
                 KeyCode::Char('d') => {
                     if let AppMode::Done {
@@ -1554,7 +1582,9 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("u", "Back"),
             ("q", "Quit"),
         ],
-        AppMode::Done { note_ids, .. } => {
+        AppMode::Done {
+            note_ids, cards, ..
+        } => {
             let mut v = vec![
                 ("j / k", "Browse steps"),
                 ("PgUp/PgDn", "Scroll logs"),
@@ -1563,6 +1593,16 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
                 ("r", "Retry"),
                 ("Ctrl+O", "Model"),
             ];
+            if app
+                .session_info
+                .as_ref()
+                .map(|info| info.tts_configured)
+                .unwrap_or(false)
+                && app.player.is_some()
+                && cards.first().and_then(done_audio_cache_path).is_some()
+            {
+                v.push(("p", "Play audio"));
+            }
             if !note_ids.is_empty() {
                 v.push(("d", "Delete from Anki"));
             }
@@ -1933,6 +1973,17 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
                     s.push(footer_pipe());
                     s.extend(footer_cmd("c", "Copy"));
                 }
+                if app
+                    .session_info
+                    .as_ref()
+                    .map(|info| info.tts_configured)
+                    .unwrap_or(false)
+                    && app.player.is_some()
+                    && cards.first().and_then(done_audio_cache_path).is_some()
+                {
+                    s.push(footer_pipe());
+                    s.extend(footer_cmd("p", "Play"));
+                }
                 if !note_ids.is_empty() {
                     s.push(footer_pipe());
                     s.extend(footer_cmd("d", "Delete"));
@@ -2080,6 +2131,21 @@ fn draw_done(
                 pricing::format_cost(app.session_cost + app.run_cost)
             )));
         }
+    }
+
+    if app
+        .session_info
+        .as_ref()
+        .map(|info| info.tts_configured)
+        .unwrap_or(false)
+        && app.player.is_some()
+        && cards.first().and_then(done_audio_cache_path).is_some()
+    {
+        summary_lines.push(Line::from(""));
+        summary_lines.push(Line::from(Span::styled(
+            "♪ Audio ready (press p to replay)",
+            Style::default().fg(THEME.success),
+        )));
     }
 
     if cards.is_empty() {
@@ -2337,6 +2403,20 @@ fn any_card_synthesizing(state: &SelectionState) -> bool {
         .tts_states
         .values()
         .any(|s| matches!(s, TtsUiState::Synthesizing))
+}
+
+fn done_audio_cache_path(card: &ValidatedCard) -> Option<PathBuf> {
+    let sound_tag = card
+        .raw_anki_fields
+        .values()
+        .find(|value| value.starts_with("[sound:") && value.ends_with(']'))?;
+    let filename = sound_tag.strip_prefix("[sound:")?.strip_suffix(']')?.trim();
+    if filename.is_empty() {
+        return None;
+    }
+    let cache_dir = crate::tts::cache::TtsCache::default_dir()?;
+    let path = cache_dir.join(filename);
+    path.is_file().then_some(path)
 }
 
 #[cfg(test)]
