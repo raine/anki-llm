@@ -47,21 +47,25 @@ pub enum ParseError {
     NonKanaReading { reading: String, ch: char },
 }
 
-/// True for CJK characters that can appear inside a Japanese "kanji
-/// cluster": the main CJK Unified Ideographs block, Extension A,
-/// Compatibility Ideographs (so Japanese name kanji like `﨑` survive), and
-/// the iteration / abbreviation marks `々 〆 〇 ヶ ヵ` that routinely appear
-/// inside clusters in real text.
+/// True for characters that can appear as the surface form before a
+/// `[reading]` annotation: the main CJK Unified Ideographs block,
+/// Extension A, Compatibility Ideographs, iteration/abbreviation marks
+/// (`々 〆 〇 ヶ ヵ`), and the full Katakana block.
+///
+/// Katakana is included because loanwords written in katakana (e.g.
+/// `スパイク`) sometimes carry reading annotations in learner decks, and
+/// rejecting them breaks TTS preparation for otherwise valid cards.
 ///
 /// Note: Katakana `ケ` and `カ` (`ヶ`'s ancestors) are NOT treated as cluster
 /// chars — only the small-form `ヶ` and `ヵ`, which function as counters
 /// bound to numerals.
-fn is_han_cluster_char(c: char) -> bool {
+fn is_surface_char(c: char) -> bool {
     matches!(c,
         '\u{3400}'..='\u{4DBF}'   // CJK Unified Ideographs Extension A
         | '\u{4E00}'..='\u{9FFF}' // CJK Unified Ideographs
         | '\u{F900}'..='\u{FAFF}' // CJK Compatibility Ideographs
         | '々' | '〆' | '〇' | 'ヶ' | 'ヵ'
+        | '\u{30A0}'..='\u{30FF}' // Katakana
     )
 }
 
@@ -155,7 +159,7 @@ fn take_trailing_cluster(buf: &mut String) -> String {
     let split_at = {
         let mut split = buf.len();
         for (idx, ch) in buf.char_indices().rev() {
-            if is_han_cluster_char(ch) {
+            if is_surface_char(ch) {
                 split = idx;
             } else {
                 break;
@@ -325,6 +329,15 @@ mod tests {
     fn katakana_reading() {
         let u = parse_furigana("明太子[メンタイコ]").unwrap();
         assert_eq!(u.spans, vec![pron("明太子", "メンタイコ")]);
+    }
+
+    #[test]
+    fn katakana_surface_with_reading() {
+        // Loanwords in katakana sometimes carry hiragana readings in
+        // learner decks. The parser must not reject them as orphan
+        // annotations.
+        let u = parse_furigana("スパイク[すぱいく]が").unwrap();
+        assert_eq!(u.spans, vec![pron("スパイク", "すぱいく"), text("が")]);
     }
 
     #[test]
