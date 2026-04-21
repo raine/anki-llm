@@ -1,3 +1,13 @@
+# Changelog
+
+## v2.0.9 (2026-04-21)
+
+- `tts-voices` browser now copies voice YAML to clipboard on Enter and stays
+  open so you can keep exploring voices, instead of exiting immediately
+- `generate` summary screen now lets you replay imported audio with `p`
+- Furigana parser now accepts katakana loanwords with reading annotations (e.g.
+  `スパイク[すぱいく]`), fixing TTS preparation for those cards
+
 ## v2.0.8 (2026-04-14)
 
 ### TTS (text-to-speech)
