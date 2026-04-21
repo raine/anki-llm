@@ -31,6 +31,9 @@ pub(in crate::generate::tui) struct SelectionState {
     pub(in crate::generate::tui) regen_in_flight: Option<u64>,
     /// Per-card TTS preview state, keyed by stable `ValidatedCard.card_id`.
     pub(in crate::generate::tui) tts_states: HashMap<u64, TtsUiState>,
+    /// When true, the pipeline skips post-select processing for this
+    /// selection and proceeds directly to import/export.
+    pub(in crate::generate::tui) skip_post_select: bool,
 }
 
 impl SelectionState {
@@ -48,6 +51,7 @@ impl SelectionState {
             feedback_input: None,
             regen_in_flight: None,
             tts_states: HashMap::new(),
+            skip_post_select: false,
         }
     }
 
@@ -116,6 +120,10 @@ impl SelectionState {
 
     pub(in crate::generate::tui) fn select_none(&mut self) {
         self.selected.clear();
+    }
+
+    pub(in crate::generate::tui) fn toggle_skip_post_select(&mut self) {
+        self.skip_post_select = !self.skip_post_select;
     }
 
     /// Remove the card at the current cursor position from the list.
@@ -261,11 +269,19 @@ pub(in crate::generate::tui) fn draw_selecting(
         .collect();
 
     let mut list_state = state.list_state;
-    let title = format!(
-        " Cards ({}/{} selected) ",
-        state.selected.len(),
-        state.cards.len()
-    );
+    let title = if state.skip_post_select {
+        format!(
+            " Cards ({}/{} selected) [skip post-select] ",
+            state.selected.len(),
+            state.cards.len()
+        )
+    } else {
+        format!(
+            " Cards ({}/{} selected) ",
+            state.selected.len(),
+            state.cards.len()
+        )
+    };
     let list = List::new(list_items).block(
         Block::default()
             .borders(Borders::BOTTOM)

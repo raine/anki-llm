@@ -21,6 +21,10 @@ pub struct SessionInfo {
     /// flag with its own audio-backend detection result to decide
     /// whether to show the preview keybind.
     pub tts_configured: bool,
+    /// Whether the prompt has any `post_select` processors. Used by
+    /// the TUI to decide whether to show the skip-post-select toggle
+    /// keybind and header indicator.
+    pub post_select_configured: bool,
 }
 
 /// Per-card TTS preview state, routed by stable `card_id`. The TUI owns
@@ -109,7 +113,12 @@ pub enum WorkerCommand {
     /// User confirmed selection. Carries the actual cards in visible
     /// order (with edits, removes, and force-toggled duplicates
     /// applied), not indices into a worker-side mirror.
-    Selection(Vec<ValidatedCard>),
+    /// `skip_post_select` bypasses the post-select processing step
+    /// when the user has toggled it off in the TUI.
+    Selection {
+        cards: Vec<ValidatedCard>,
+        skip_post_select: bool,
+    },
     Review(Vec<bool>), // true = keep, false = discard
     SetModel(String),  // change model between runs
     Cancel,            // abandon current run, go back to input

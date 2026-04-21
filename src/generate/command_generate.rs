@@ -246,7 +246,13 @@ impl PipelineInteraction for TuiInteraction<'_> {
                 SelectionAction::RegenerateCard { card, feedback }
             }
             Ok(WorkerCommand::PreviewTts { card }) => SelectionAction::PreviewTts { card },
-            Ok(WorkerCommand::Selection(cards)) => SelectionAction::Selected(cards),
+            Ok(WorkerCommand::Selection {
+                cards,
+                skip_post_select,
+            }) => SelectionAction::Selected {
+                cards,
+                skip_post_select,
+            },
             Ok(WorkerCommand::Cancel) => SelectionAction::Cancel,
             Ok(WorkerCommand::Quit) | Err(_) => SelectionAction::Quit,
             _ => SelectionAction::Cancel,
@@ -307,6 +313,11 @@ pub fn run_pipeline(
     // spec's presence, not from a materialized bundle — the bundle is
     // lazily built on first use (preview or import).
     let tts_configured = session.tts.is_some();
+    let post_select_configured = session
+        .frontmatter
+        .processing
+        .as_ref()
+        .is_some_and(|p| !p.post_select.is_empty());
 
     tx.send(BackendEvent::SessionReady(SessionInfo {
         deck: session.frontmatter.deck.clone(),
@@ -316,6 +327,7 @@ pub fn run_pipeline(
         field_map: session.frontmatter.field_map.clone(),
         first_field_name: session.validation.note_type_fields[0].clone(),
         tts_configured,
+        post_select_configured,
     }))
     .ok();
 
@@ -416,6 +428,7 @@ pub fn run_pipeline(
                             field_map: session.frontmatter.field_map.clone(),
                             first_field_name: session.validation.note_type_fields[0].clone(),
                             tts_configured,
+                            post_select_configured,
                         }))
                         .ok();
                     }
@@ -483,7 +496,10 @@ impl PipelineInteraction for LegacyInteraction {
                     .into_iter()
                     .filter_map(|i| cards.get(i).cloned())
                     .collect();
-                SelectionAction::Selected(selected)
+                SelectionAction::Selected {
+                    cards: selected,
+                    skip_post_select: false,
+                }
             }
             Err(_) => SelectionAction::Cancel,
         }

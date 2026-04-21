@@ -69,7 +69,10 @@ pub trait PipelineProgress: Send + Sync {
 }
 
 pub enum SelectionAction {
-    Selected(Vec<ValidatedCard>),
+    Selected {
+        cards: Vec<ValidatedCard>,
+        skip_post_select: bool,
+    },
     Refresh,
     RefreshWithTerm(String),
     RegenerateCard {
@@ -445,7 +448,10 @@ pub fn run_pipeline_for_term(
                             current_term = t;
                             continue;
                         }
-                        SelectionAction::Selected(cards) => break cards,
+                        SelectionAction::Selected {
+                            cards,
+                            skip_post_select,
+                        } => break (cards, skip_post_select),
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
                         SelectionAction::RegenerateCard { .. }
@@ -562,7 +568,10 @@ pub fn run_pipeline_for_term(
                             current_term = t;
                             continue;
                         }
-                        SelectionAction::Selected(cards) => break cards,
+                        SelectionAction::Selected {
+                            cards,
+                            skip_post_select,
+                        } => break (cards, skip_post_select),
                         SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
                         SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
                         SelectionAction::RegenerateCard { .. }
@@ -669,7 +678,10 @@ pub fn run_pipeline_for_term(
                 current_term = t;
                 continue;
             }
-            SelectionAction::Selected(cards) => break cards,
+            SelectionAction::Selected {
+                cards,
+                skip_post_select,
+            } => break (cards, skip_post_select),
             SelectionAction::Cancel => return Ok(PipelineOutcome::Cancelled),
             SelectionAction::Quit => return Ok(PipelineOutcome::Quit),
             SelectionAction::RegenerateCard { .. } | SelectionAction::PreviewTts { .. } => {
@@ -677,6 +689,8 @@ pub fn run_pipeline_for_term(
             }
         }
     };
+
+    let (selected_cards, skip_post_select) = selected_cards;
 
     if selected_cards.is_empty() {
         return Ok(PipelineOutcome::Success {
@@ -723,7 +737,7 @@ pub fn run_pipeline_for_term(
     let mut post_errors: Vec<String> = Vec::new();
     let mut final_cards: Vec<ValidatedCard> = selected;
 
-    if !post_select_steps.is_empty() {
+    if !post_select_steps.is_empty() && !skip_post_select {
         progress.step_start(PipelineStep::QualityCheck, None);
 
         let candidates: Vec<CardCandidate> = final_cards
@@ -881,6 +895,9 @@ pub fn run_pipeline_for_term(
                 post_rejected_count
             ));
         }
+    } else if skip_post_select && !post_select_steps.is_empty() {
+        progress.log("Skipping post-select processing (user toggled off)");
+        progress.step_skip(PipelineStep::QualityCheck);
     } else {
         progress.step_skip(PipelineStep::QualityCheck);
     }
@@ -901,7 +918,9 @@ pub fn run_pipeline_for_term(
         });
     }
 
-    progress.step_done(PipelineStep::QualityCheck, None);
+    if !skip_post_select || post_select_steps.is_empty() {
+        progress.step_done(PipelineStep::QualityCheck, None);
+    }
 
     // Export or import
     if let Some(output_path) = config.output {

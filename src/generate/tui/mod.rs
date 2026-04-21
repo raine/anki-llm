@@ -1089,10 +1089,26 @@ impl App {
                     return;
                 };
                 let cards = state.selected_cards_in_order();
-                self.worker_tx.send(WorkerCommand::Selection(cards)).ok();
+                let skip_post_select = state.skip_post_select;
+                self.worker_tx
+                    .send(WorkerCommand::Selection {
+                        cards,
+                        skip_post_select,
+                    })
+                    .ok();
             }
             KeyCode::Char('f') => {
                 state.force_toggle_duplicate();
+            }
+            KeyCode::Char('z') => {
+                let has_post_select = self
+                    .session_info
+                    .as_ref()
+                    .map(|info| info.post_select_configured)
+                    .unwrap_or(false);
+                if has_post_select {
+                    state.toggle_skip_post_select();
+                }
             }
             KeyCode::Char('d') => {
                 state.remove_current();
@@ -1552,10 +1568,20 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
                 ("c", "Copy"),
                 ("d", "Remove"),
                 ("e", "Edit in $EDITOR"),
+            ];
+            if app
+                .session_info
+                .as_ref()
+                .map(|info| info.post_select_configured)
+                .unwrap_or(false)
+            {
+                v.push(("z", "Skip post-select"));
+            }
+            v.extend(vec![
                 ("r", "More"),
                 ("t", "More (new term)"),
                 ("R", "Regenerate card"),
-            ];
+            ]);
             if app
                 .session_info
                 .as_ref()
@@ -1890,6 +1916,15 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             s.push(footer_pipe());
             s.extend(footer_cmd("e", "Edit"));
             s.push(footer_pipe());
+            let has_post_select = app
+                .session_info
+                .as_ref()
+                .map(|info| info.post_select_configured)
+                .unwrap_or(false);
+            if has_post_select {
+                s.extend(footer_cmd("z", "Skip post"));
+                s.push(footer_pipe());
+            }
             if app
                 .session_info
                 .as_ref()

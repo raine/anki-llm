@@ -1722,6 +1722,7 @@ shows a full preview of the currently focused card.
 - <kbd>d</kbd> — remove a card from the list
 - <kbd>c</kbd> — copy card to clipboard
 - <kbd>p</kbd> — preview the focused card's audio when TTS is enabled
+- <kbd>z</kbd> — toggle skipping post-select processing
 
 Duplicate cards are flagged with `[dup]` and shown as a diff against the
 existing Anki card. Press <kbd>f</kbd> to force-select a duplicate if needed.
