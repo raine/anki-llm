@@ -6,3 +6,4 @@ graphify-out/
 .graphify_*.json
 .graphify_*.txt
 typescript/
+out/

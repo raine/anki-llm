@@ -14,6 +14,7 @@ pub fn anki_quote(s: &str) -> String {
     format!("\"{escaped}\"")
 }
 const API_VERSION: u8 = 6;
+const MAX_RESPONSE_BODY: u64 = u64::MAX;
 
 pub struct AnkiClient {
     url: String,
@@ -61,6 +62,8 @@ impl AnkiClient {
 
         let response: AnkiResponse<R> = http_response
             .body_mut()
+            .with_config()
+            .limit(MAX_RESPONSE_BODY)
             .read_json()
             .map_err(AnkiConnectError::Decode)?;
 
@@ -108,6 +111,8 @@ impl AnkiClient {
             })?;
         let response: ErrorOnly = http_response
             .body_mut()
+            .with_config()
+            .limit(MAX_RESPONSE_BODY)
             .read_json()
             .map_err(AnkiConnectError::Decode)?;
         if let Some(err) = response.error {
