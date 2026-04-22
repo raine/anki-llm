@@ -12,4 +12,5 @@ pub mod style;
 pub mod template;
 pub mod tts;
 pub mod tui;
+pub mod update;
 pub mod workspace;

@@ -51,6 +51,8 @@ pub enum Commands {
     /// Browse and audition TTS voices across OpenAI / Azure / Google / Polly
     #[command(name = "tts-voices")]
     TtsVoices(VoicesArgs),
+    /// Update anki-llm to the latest version
+    Update,
 }
 
 #[derive(clap::Args)]
