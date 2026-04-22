@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.10 (2026-04-22)
+
+- Add `z` key in the generate TUI to skip post-select processing — useful when
+  you want to bypass quality checks or other post-processing steps configured in
+  a prompt
+- Fix large deck exports failing due to HTTP response buffer limit
+  ([#3](https://github.com/raine/anki-llm/pull/3))
+
 ## v2.0.9 (2026-04-21)
 
 - `tts-voices` browser now copies voice YAML to clipboard on Enter and stays
