@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v2.0.12 (2026-04-23)
 
 - **Breaking:** `process-deck` and `process-file` prompts now require a YAML
   frontmatter block declaring the target field. The `--field`, `--json`, and
@@ -17,6 +17,10 @@
 
 - **Breaking:** JSON-merge output (`--json`) is no longer supported for
   `process-*`. Prompts now always write a single field.
+
+- Add `--preview` flag to `process-deck` and `process-file` — process a small
+  sample of cards with the LLM and show a diff-like summary of what would
+  change, then prompt for confirmation before running the full batch.
 
 ## v2.0.11 (2026-04-23)
 
