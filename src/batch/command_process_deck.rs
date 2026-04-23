@@ -21,6 +21,7 @@ use super::controller::{ControllerRuntime, run_batch_controller};
 use super::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
 use super::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
 use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, OutputMode, RowDescriptor};
+use super::preview;
 use super::process_row::{ProcessRowConfig, build_process_fn};
 use super::report::RowOutcome;
 use super::session::{BatchSession, SharedSession};
@@ -380,8 +381,23 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         temperature: runtime.temperature,
         max_tokens: runtime.max_tokens,
         require_result_tag: args.require_result_tag,
-        logger: Some(logger),
+        logger: Some(Arc::clone(&logger)),
     });
+
+    // Preview mode: process a sample and ask for confirmation
+    if args.preview {
+        let proceed = preview::run_preview(
+            &rows,
+            args.preview_count as usize,
+            &process_fn,
+            &source_label,
+            &deck_row_id,
+        )?;
+        if !proceed {
+            eprintln!("Preview cancelled — no changes made.");
+            return Ok(());
+        }
+    }
 
     let source_name = args
         .deck

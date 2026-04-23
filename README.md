@@ -381,6 +381,10 @@ output is piped.
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
 - `-d, --dry-run`: Preview the operation without making API calls (recommended
   for testing).
+- `-P, --preview`: Process a small sample of cards with the LLM and show a
+  diff-like summary of what would change. Prompts for confirmation before
+  proceeding with the full run.
+- `--preview-count`: Number of cards to process in preview mode (default: `3`).
 - `-f, --force`: Re-process all rows, ignoring existing output.
 - `--limit`: Limit the number of new rows to process (useful for testing prompts
   on a small sample before processing large datasets).
@@ -438,6 +442,12 @@ anki-llm process-file notes.yaml -o output.yaml --json -p prompt.txt -m gpt-4o-m
 # Preview the first 10 notes without calling the API
 anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --limit 10 --dry-run -m gpt-4o-mini
 
+# Preview 3 cards with the LLM, then proceed if satisfied
+anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --preview -m gpt-4o-mini
+
+# Preview 5 cards before processing the full file
+anki-llm process-file notes.yaml -o output.yaml --json -p prompt.txt --preview --preview-count 5
+
 # Resume processing after interruption (automatic - just re-run the same command)
 anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini
 
@@ -480,6 +490,10 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
 - `-d, --dry-run`: Preview the operation without making API calls (recommended
   for testing).
+- `-P, --preview`: Process a small sample of cards with the LLM and show a
+  diff-like summary of what would change. Prompts for confirmation before
+  proceeding with the full run.
+- `--preview-count`: Number of cards to process in preview mode (default: `3`).
 - `--limit`: Limit the number of notes to process (useful for testing prompts on
   a small sample before processing entire deck).
 - `--require-result-tag`: Only extracts content from within `<result></result>`
@@ -512,6 +526,12 @@ anki-llm process-deck "Vocabulary" --json -p prompt.txt
 
 # Preview the first 10 notes without calling the API
 anki-llm process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run
+
+# Preview 3 cards with the LLM, then proceed if satisfied
+anki-llm process-deck "My Deck" --field Notes -p prompt.txt --preview
+
+# Preview 5 cards before processing the full deck
+anki-llm process-deck "My Deck" --json -p prompt.txt --preview --preview-count 5
 
 # Rewrite explanations only for cards you keep failing
 anki-llm process-deck --query "deck:Japanese prop:lapses>5" --field Explanation -p prompt.txt

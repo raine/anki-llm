@@ -270,6 +270,14 @@ pub struct ProcessFileArgs {
     #[arg(long, short = 'd')]
     pub dry_run: bool,
 
+    /// Process a sample of cards with the LLM and show what would change
+    #[arg(long, short = 'P')]
+    pub preview: bool,
+
+    /// Number of cards to process in preview mode (default: 3)
+    #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(1..))]
+    pub preview_count: u32,
+
     /// Limit the number of rows to process
     #[arg(long)]
     pub limit: Option<usize>,
@@ -355,6 +363,14 @@ pub struct ProcessDeckArgs {
     /// Preview without making API calls
     #[arg(long, short = 'd')]
     pub dry_run: bool,
+
+    /// Process a sample of cards with the LLM and show what would change
+    #[arg(long, short = 'P')]
+    pub preview: bool,
+
+    /// Number of cards to process in preview mode (default: 3)
+    #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(1..))]
+    pub preview_count: u32,
 
     /// Limit the number of notes to process
     #[arg(long)]

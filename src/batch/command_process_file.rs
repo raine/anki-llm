@@ -17,6 +17,7 @@ use super::controller::{ControllerRuntime, run_batch_controller};
 use super::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
 use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, OutputMode, RowDescriptor};
 use super::file_mode::FileWriter;
+use super::preview;
 use super::process_row::{ProcessRowConfig, build_process_fn};
 use super::report::{ERROR_FIELD, RowOutcome};
 use super::session::{BatchSession, SharedSession};
@@ -224,6 +225,38 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         return Ok(());
     }
 
+    // Build logger
+    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
+    let logger = Arc::new(logger);
+
+    // Build processing closure
+    let process_fn = build_process_fn(ProcessRowConfig {
+        client: Arc::new(LlmClient::from_config(&runtime)),
+        model: runtime.model.clone(),
+        template: prompt_template.clone(),
+        field: args.field.clone(),
+        temperature: runtime.temperature,
+        max_tokens: runtime.max_tokens,
+        require_result_tag: args.require_result_tag,
+        logger: Some(Arc::clone(&logger)),
+    });
+
+    // Preview mode: process a sample and ask for confirmation
+    if args.preview {
+        let id_extractor = |row: &Row| get_note_id(row).unwrap_or_default();
+        let proceed = preview::run_preview(
+            &rows_to_process,
+            args.preview_count as usize,
+            &process_fn,
+            &args.input.display().to_string(),
+            &id_extractor,
+        )?;
+        if !proceed {
+            eprintln!("Preview cancelled — no changes made.");
+            return Ok(());
+        }
+    }
+
     // Build sample prompt for preflight
     let sample_prompt = rows_to_process
         .first()
@@ -267,22 +300,6 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         show_cost: true,
         preflight_fields,
     };
-
-    // Build logger
-    let logger = LlmLogger::new(args.log.as_deref(), args.very_verbose)?;
-    let logger = Arc::new(logger);
-
-    // Build processing closure
-    let process_fn = build_process_fn(ProcessRowConfig {
-        client: Arc::new(LlmClient::from_config(&runtime)),
-        model: runtime.model.clone(),
-        template: prompt_template.clone(),
-        field: args.field.clone(),
-        temperature: runtime.temperature,
-        max_tokens: runtime.max_tokens,
-        require_result_tag: args.require_result_tag,
-        logger: Some(logger),
-    });
 
     // Set up file writer
     let writer = Arc::new(FileWriter::new(
