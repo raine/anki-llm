@@ -53,6 +53,8 @@ pub enum Commands {
     TtsVoices(VoicesArgs),
     /// Update anki-llm to the latest version
     Update,
+    /// Show bundled documentation
+    Docs,
 }
 
 #[derive(clap::Args)]

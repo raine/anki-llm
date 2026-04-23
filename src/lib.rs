@@ -4,6 +4,7 @@ pub mod batch;
 pub mod cli;
 pub mod config;
 pub mod data;
+pub mod docs;
 pub mod generate;
 pub mod llm;
 pub mod snapshot;

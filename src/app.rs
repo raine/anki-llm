@@ -17,5 +17,6 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::Tts(args) => crate::tts::command::run(args),
         Commands::TtsVoices(args) => crate::tts::voices::command::run(args),
         Commands::Update => crate::update::run(),
+        Commands::Docs => crate::docs::run(),
     }
 }

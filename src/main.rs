@@ -12,6 +12,7 @@ use anki_llm::anki;
 use anki_llm::cli;
 use anki_llm::config;
 use anki_llm::data;
+use anki_llm::docs;
 use anki_llm::generate;
 use anki_llm::llm;
 use anki_llm::snapshot;
