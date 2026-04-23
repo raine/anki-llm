@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- **Breaking:** `process-deck` and `process-file` prompts now require a YAML
+  frontmatter block declaring the target field. The `--field`, `--json`, and
+  `--require-result-tag` CLI flags are removed. Add a frontmatter block to each
+  prompt file:
+
+  ```
+  ---
+  output:
+    field: Translation
+    require_result_tag: true  # optional
+  ---
+  ```
+
+- **Breaking:** JSON-merge output (`--json`) is no longer supported for
+  `process-*`. Prompts now always write a single field.
+
 ## v2.0.11 (2026-04-23)
 
 - Add `update` command — self-update to the latest release from GitHub
