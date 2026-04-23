@@ -140,15 +140,7 @@ fn replace_binary(new_binary: &Path, current_exe: &Path) -> Result<()> {
             .context("Failed to set permissions")?;
     }
 
-    let backup = exe_dir.join(format!(".{BIN_NAME}.old"));
-    std::fs::rename(current_exe, &backup).context("Failed to move current binary aside")?;
-
-    if let Err(e) = std::fs::rename(&staged, current_exe) {
-        let _ = std::fs::rename(&backup, current_exe);
-        bail!("Failed to install new binary (rolled back): {e}");
-    }
-
-    let _ = std::fs::remove_file(&backup);
+    std::fs::rename(&staged, current_exe).context("Failed to install new binary")?;
     Ok(())
 }
 
