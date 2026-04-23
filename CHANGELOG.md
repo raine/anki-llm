@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.0.11 (2026-04-23)
+
+- Add `update` command — self-update to the latest release from GitHub
+- Add `docs` command — show bundled documentation in the terminal
+
 ## v2.0.10 (2026-04-22)
 
 - Add `z` key in the generate TUI to skip post-select processing — useful when

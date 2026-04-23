@@ -1,6 +1,6 @@
 [package]
 name = "anki-llm"
-version = "2.0.10"
+version = "2.0.11"
 edition = "2024"
 authors = ["Raine Virta"]
 description = "A command-line interface for bulk-processing Anki flashcards with LLMs"
