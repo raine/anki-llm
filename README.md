@@ -487,6 +487,9 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 - `--preview-count`: Number of cards to process in preview mode (default: `3`).
 - `--limit`: Limit the number of notes to process (useful for testing prompts on
   a small sample before processing entire deck).
+- `-f, --force`: Re-process notes even if the target field already has content.
+  By default, `process-deck` skips notes where the output field is populated to
+  avoid overwriting existing data.
 - `--log <PATH>`: Append raw LLM prompts and responses to a log file at
   `<PATH>` for debugging.
 - `--very-verbose`: Also print raw LLM prompts and responses to stderr. Useful
@@ -517,6 +520,9 @@ anki-llm process-deck --query "tag:leech" -p prompt.md
 
 # Fix cards you got wrong in the last 7 days
 anki-llm process-deck --query "rated:7:1" -p prompt.md
+
+# Re-process everything, overwriting existing data
+anki-llm process-deck "My Deck" -p prompt.md --force
 ```
 
 **Undoing a run:**

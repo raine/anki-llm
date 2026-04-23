@@ -344,6 +344,10 @@ pub struct ProcessDeckArgs {
     #[arg(long)]
     pub limit: Option<usize>,
 
+    /// Re-process notes even if the target field already has content
+    #[arg(long, short = 'f')]
+    pub force: bool,
+
     /// Append raw LLM prompts and responses to a log file (relative path)
     #[arg(long)]
     pub log: Option<PathBuf>,

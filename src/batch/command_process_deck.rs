@@ -283,7 +283,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     // Convert to Row format. The note ID is stored under ANKI_NOTE_ID_KEY (a
     // private _-prefixed key) so it cannot collide with real Anki field names
     // or be overwritten by a case-insensitive JSON merge.
-    let rows: Vec<Row> = notes_info
+    let mut rows: Vec<Row> = notes_info
         .into_iter()
         .map(|note| {
             let mut row = indexmap::IndexMap::new();
@@ -297,6 +297,38 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
             row
         })
         .collect();
+
+    // Skip notes where the target field already has content unless --force
+    let mut skipped_populated = 0;
+    if !args.force {
+        rows.retain(|row| {
+            let is_empty = row
+                .get(&output_field)
+                .map(|v| match v {
+                    Value::String(s) => s.trim().is_empty(),
+                    Value::Null => true,
+                    _ => false,
+                })
+                .unwrap_or(true); // field missing = empty
+            if !is_empty {
+                skipped_populated += 1;
+            }
+            is_empty
+        });
+        if skipped_populated > 0 {
+            eprintln!(
+                "Skipping {} note(s) where '{}' already has content (use --force to overwrite)",
+                skipped_populated, output_field
+            );
+        }
+        if rows.is_empty() {
+            eprintln!(
+                "All notes already have '{}' populated. Use --force to re-process.",
+                output_field
+            );
+            return Ok(());
+        }
+    }
 
     // Capture before_fields for snapshot (keyed by note_id)
     let before_fields: IndexMap<i64, IndexMap<String, String>> = rows
@@ -354,6 +386,12 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     // Dry run
     if args.dry_run {
         eprintln!("\n--- DRY RUN MODE ---");
+        if skipped_populated > 0 {
+            eprintln!(
+                "Would skip {} note(s) where '{}' already has content (use --force to overwrite)",
+                skipped_populated, output_field
+            );
+        }
         eprintln!("\nPrompt template:");
         eprintln!("{prompt_template}");
         if let Some(first) = rows.first() {
