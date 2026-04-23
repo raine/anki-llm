@@ -10,4 +10,7 @@ pub enum TemplateError {
 
     #[error("invalid frontmatter: {0}")]
     InvalidFrontmatter(String),
+
+    #[error("invalid prompt: {0}")]
+    InvalidPrompt(String),
 }

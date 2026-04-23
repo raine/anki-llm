@@ -629,7 +629,7 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
         run_total: rows_to_process.len(),
         model: None,
         prompt_path: None,
-        output_mode: None,
+        output_field: None,
         batch_size: resolved.batch_size,
         retries: resolved.retries,
         sample_prompt: None,

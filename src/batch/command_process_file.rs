@@ -12,10 +12,11 @@ use crate::llm::logger::LlmLogger;
 use crate::llm::pricing;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use crate::template::fill_template;
+use crate::template::process_prompt;
 
 use super::controller::{ControllerRuntime, run_batch_controller};
 use super::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
-use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, OutputMode, RowDescriptor};
+use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, RowDescriptor};
 use super::file_mode::FileWriter;
 use super::preview;
 use super::process_row::{ProcessRowConfig, build_process_fn};
@@ -146,10 +147,12 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     }
 
     let prompt_path = args.prompt;
-
-    // Read prompt template
-    let prompt_template = fs::read_to_string(&prompt_path)
+    let prompt_raw = fs::read_to_string(&prompt_path)
         .with_context(|| format!("failed to read prompt file: {}", prompt_path.display()))?;
+    let parsed = process_prompt::parse(&prompt_raw)?;
+    let prompt_template = parsed.body;
+    let output_field = parsed.frontmatter.output.field;
+    let require_result_tag = parsed.frontmatter.output.require_result_tag;
 
     // Build runtime config
     let runtime = build_runtime_config(RuntimeConfigArgs {
@@ -174,9 +177,9 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     };
     let resume_skipped = existing.len();
 
-    // Filter rows to process: skip rows already completed successfully.
-    // In --field mode, also re-process rows that are missing the target field.
-    let target_field = args.field.as_deref();
+    // Filter rows to process: skip rows already completed successfully,
+    // and re-process rows that are missing the target field.
+    let target_field = output_field.as_str();
     let rows_to_process: Vec<Row> = rows
         .into_iter()
         .filter(|row| {
@@ -185,7 +188,7 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
             };
             match existing.get(&id) {
                 Some(existing_row) if existing_row.contains_key(ERROR_FIELD) => true,
-                Some(existing_row) => target_field.is_some_and(|f| !existing_row.contains_key(f)),
+                Some(existing_row) => !existing_row.contains_key(target_field),
                 None => true,
             }
         })
@@ -234,10 +237,10 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         client: Arc::new(LlmClient::from_config(&runtime)),
         model: runtime.model.clone(),
         template: prompt_template.clone(),
-        field: args.field.clone(),
+        field: output_field.clone(),
         temperature: runtime.temperature,
         max_tokens: runtime.max_tokens,
-        require_result_tag: args.require_result_tag,
+        require_result_tag,
         logger: Some(Arc::clone(&logger)),
     });
 
@@ -288,11 +291,7 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         run_total: rows_to_process.len(),
         model: Some(runtime.model.clone()),
         prompt_path: Some(prompt_path.display().to_string()),
-        output_mode: Some(if let Some(ref field) = args.field {
-            OutputMode::SingleField(field.clone())
-        } else {
-            OutputMode::JsonMerge
-        }),
+        output_field: Some(output_field.clone()),
         batch_size: runtime.batch_size,
         retries: runtime.retries,
         sample_prompt,

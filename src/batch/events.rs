@@ -41,9 +41,9 @@ pub struct BatchPlan {
     /// Path to the prompt template file, if applicable. TTS sessions that
     /// use a raw source field instead of a template leave this `None`.
     pub prompt_path: Option<String>,
-    /// LLM output mode (single field / JSON merge). TTS sessions leave this
+    /// Anki field that receives the LLM response. TTS sessions leave this
     /// `None` since their output is always a single `[sound:...]` tag.
-    pub output_mode: Option<OutputMode>,
+    pub output_field: Option<String>,
     pub batch_size: u32,
     pub retries: u32,
     pub sample_prompt: Option<String>,
@@ -57,12 +57,6 @@ pub struct BatchPlan {
     /// Caller-supplied label/value pairs shown in the preflight screen
     /// (e.g. "Input", "Output", "Source", "Destination").
     pub preflight_fields: Vec<InfoField>,
-}
-
-#[derive(Clone)]
-pub enum OutputMode {
-    SingleField(String),
-    JsonMerge,
 }
 
 #[derive(Clone)]

@@ -237,9 +237,7 @@ fn empty_summary(plan: &BatchPlan) -> BatchSummary {
 mod tests {
     use super::*;
     use crate::batch::engine::{IdExtractor, OnRowDone, OnRowDoneAction, ProcessFn};
-    use crate::batch::events::{
-        BatchEvent, FailedRowInfo, InfoField, OutputMode, RowDescriptor, RowState,
-    };
+    use crate::batch::events::{BatchEvent, FailedRowInfo, InfoField, RowDescriptor, RowState};
     use crate::batch::report::RowOutcome;
     use crate::batch::session::BatchSession;
     use serde_json::json;
@@ -353,7 +351,7 @@ mod tests {
             run_total: total,
             model: Some("test-model".into()),
             prompt_path: Some("test.txt".into()),
-            output_mode: Some(OutputMode::JsonMerge),
+            output_field: Some("TestField".into()),
             batch_size: 2,
             retries: 0,
             sample_prompt: None,

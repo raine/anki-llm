@@ -208,31 +208,17 @@ pub struct ImportArgs {
 }
 
 #[derive(clap::Args)]
-#[command(group(
-    clap::ArgGroup::new("output_mode")
-        .required(true)
-        .args(["field", "json"])
-        .multiple(false)
-))]
 pub struct ProcessFileArgs {
     /// Input file path (CSV or YAML)
     pub input: PathBuf,
 
-    /// Path to prompt template file
+    /// Path to prompt template file (YAML frontmatter declares output.field)
     #[arg(long, short = 'p')]
     pub prompt: PathBuf,
 
     /// Output file path (CSV or YAML)
     #[arg(long, short = 'o')]
     pub output: PathBuf,
-
-    /// Field name to update with LLM response (mutually exclusive with --json)
-    #[arg(long)]
-    pub field: Option<String>,
-
-    /// Expect JSON response and merge fields case-insensitively (mutually exclusive with --field)
-    #[arg(long)]
-    pub json: bool,
 
     /// Model name
     #[arg(long, short = 'm')]
@@ -282,10 +268,6 @@ pub struct ProcessFileArgs {
     #[arg(long)]
     pub limit: Option<usize>,
 
-    /// Require <result></result> tags in LLM responses
-    #[arg(long)]
-    pub require_result_tag: bool,
-
     /// Append raw LLM prompts and responses to a log file (relative path)
     #[arg(long)]
     pub log: Option<PathBuf>,
@@ -296,12 +278,6 @@ pub struct ProcessFileArgs {
 }
 
 #[derive(clap::Args)]
-#[command(group(
-    clap::ArgGroup::new("output_mode")
-        .required(true)
-        .args(["field", "json"])
-        .multiple(false)
-))]
 #[command(group(
     clap::ArgGroup::new("source")
         .required(true)
@@ -316,17 +292,9 @@ pub struct ProcessDeckArgs {
     #[arg(long, short = 'q')]
     pub query: Option<String>,
 
-    /// Path to prompt template file
+    /// Path to prompt template file (YAML frontmatter declares output.field)
     #[arg(long, short = 'p')]
     pub prompt: PathBuf,
-
-    /// Field name to update with LLM response (mutually exclusive with --json)
-    #[arg(long)]
-    pub field: Option<String>,
-
-    /// Expect JSON response and merge fields case-insensitively (mutually exclusive with --field)
-    #[arg(long)]
-    pub json: bool,
 
     /// Filter by note type (required if deck contains multiple note types)
     #[arg(long, short = 'n')]
@@ -375,10 +343,6 @@ pub struct ProcessDeckArgs {
     /// Limit the number of notes to process
     #[arg(long)]
     pub limit: Option<usize>,
-
-    /// Require <result></result> tags in LLM responses
-    #[arg(long)]
-    pub require_result_tag: bool,
 
     /// Append raw LLM prompts and responses to a log file (relative path)
     #[arg(long)]

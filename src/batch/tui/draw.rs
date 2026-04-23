@@ -10,7 +10,7 @@ use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap};
 use crate::llm::pricing;
 use crate::tui::theme::{SPINNER_FRAMES, THEME, footer_cmd, footer_pipe};
 
-use super::super::events::{BatchPlan, BatchSummary, InfoField, OutputMode, RowState};
+use super::super::events::{BatchPlan, BatchSummary, InfoField, RowState};
 use super::state::{AppMode, DoneState, RunState};
 
 pub fn draw(mode: &AppMode, plan: &BatchPlan, frame: &mut Frame) {
@@ -45,14 +45,8 @@ fn draw_preflight(plan: &BatchPlan, frame: &mut Frame) {
     if let Some(ref model) = plan.model {
         fixed_fields.push(("Model", model.clone()));
     }
-    if let Some(ref output_mode) = plan.output_mode {
-        fixed_fields.push((
-            "Mode",
-            match output_mode {
-                OutputMode::SingleField(f) => format!("single field ({f})"),
-                OutputMode::JsonMerge => "JSON merge".to_string(),
-            },
-        ));
+    if let Some(ref f) = plan.output_field {
+        fixed_fields.push(("Field", f.clone()));
     }
     fixed_fields.push(("Batch size", plan.batch_size.to_string()));
     fixed_fields.push(("Retries", plan.retries.to_string()));

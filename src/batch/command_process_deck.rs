@@ -16,11 +16,12 @@ use crate::llm::pricing;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use crate::snapshot::store::{self, Snapshot};
 use crate::template::fill_template;
+use crate::template::process_prompt;
 
 use super::controller::{ControllerRuntime, run_batch_controller};
 use super::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
 use super::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
-use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, OutputMode, RowDescriptor};
+use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, RowDescriptor};
 use super::preview;
 use super::process_row::{ProcessRowConfig, build_process_fn};
 use super::report::RowOutcome;
@@ -198,6 +199,16 @@ impl BatchSession for DeckSession {
 pub fn run(args: ProcessDeckArgs) -> Result<()> {
     let anki = AnkiClient::new();
 
+    // Load and parse the prompt up front so note_type validation and
+    // error handling don't depend on Anki state.
+    let prompt_path = args.prompt.clone();
+    let prompt_raw = fs::read_to_string(&prompt_path)
+        .with_context(|| format!("failed to read prompt file: {}", prompt_path.display()))?;
+    let parsed = process_prompt::parse(&prompt_raw)?;
+    let prompt_template = parsed.body;
+    let output_field = parsed.frontmatter.output.field;
+    let require_result_tag = parsed.frontmatter.output.require_result_tag;
+
     // Build query from either deck name or raw query
     eprintln!("Fetching notes...");
     let mut query = if let Some(ref q) = args.query {
@@ -328,12 +339,6 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         }
     }
 
-    let prompt_path = args.prompt;
-
-    // Read prompt template
-    let prompt_template = fs::read_to_string(&prompt_path)
-        .with_context(|| format!("failed to read prompt file: {}", prompt_path.display()))?;
-
     // Build runtime config
     let runtime = build_runtime_config(RuntimeConfigArgs {
         model: args.model.as_deref(),
@@ -377,10 +382,10 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         client: Arc::new(LlmClient::from_config(&runtime)),
         model: runtime.model.clone(),
         template: prompt_template.clone(),
-        field: args.field.clone(),
+        field: output_field.clone(),
         temperature: runtime.temperature,
         max_tokens: runtime.max_tokens,
-        require_result_tag: args.require_result_tag,
+        require_result_tag,
         logger: Some(Arc::clone(&logger)),
     });
 
@@ -426,11 +431,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         run_total: rows.len(),
         model: Some(runtime.model.clone()),
         prompt_path: Some(prompt_path.display().to_string()),
-        output_mode: Some(if let Some(ref field) = args.field {
-            OutputMode::SingleField(field.clone())
-        } else {
-            OutputMode::JsonMerge
-        }),
+        output_field: Some(output_field.clone()),
         batch_size: runtime.batch_size,
         retries: runtime.retries,
         sample_prompt,

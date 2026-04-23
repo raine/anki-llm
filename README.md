@@ -165,7 +165,7 @@ Any service that exposes the OpenAI `/v1/chat/completions` endpoint works
 (Together, Fireworks, Groq, etc.):
 
 ```bash
-anki-llm process-file input.yaml -o output.yaml --field Translation \
+anki-llm process-file input.yaml -o output.yaml -p prompt.md \
   --api-base-url https://api.together.xyz/v1 \
   --api-key your-key \
   --model meta-llama/Llama-3-70b-chat-hf
@@ -366,16 +366,12 @@ output is piped.
 **Required options:**
 
 - `-o, --output`: Output file path (CSV or YAML).
-- **Either** `--field` **or** `--json` (mutually exclusive):
-  - `--field <name>`: Update a single field with the AI response.
-  - `--json`: Expect JSON response and merge all fields into the note.
-  - See
-    [Understanding `--field` vs `--json` modes](#understanding---field-vs---json-modes)
-    for more details.
+- `-p, --prompt`: Path to the prompt file. The prompt file **must** begin
+  with a YAML frontmatter block that declares the output field — see
+  [Prompt file format](#prompt-file-format).
 
 **Common options:**
 
-- `-p, --prompt`: Path to the prompt template text file (required).
 - `-m, --model`: AI model to use (required unless set via `config set model`).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
@@ -388,26 +384,25 @@ output is piped.
 - `-f, --force`: Re-process all rows, ignoring existing output.
 - `--limit`: Limit the number of new rows to process (useful for testing prompts
   on a small sample before processing large datasets).
-- `--require-result-tag`: Only extracts content from within `<result></result>`
-  tags in the AI response.
 - `--log <PATH>`: Append raw LLM prompts and responses to a log file at
   `<PATH>` for debugging.
 - `--very-verbose`: Also print raw LLM prompts and responses to stderr. Useful
   for debugging prompts and understanding model outputs.
 
-<a id="prompt-template"></a>
+<a id="prompt-file-format"></a>
 
-**Prompt template:**
+**Prompt file format:**
 
-The prompt file is a plain text file containing the instructions sent to the LLM
-for each note. Use `{field_name}` placeholders to inject values from the input
-file — for every row, each placeholder is replaced with that note's field value
-before the prompt is sent. Field names are case-insensitive, and unknown
-placeholders cause an error.
-
-For example, given an input row with `Japanese` and `English` fields:
+`process-file` and `process-deck` share a single prompt file format. Each
+prompt is a text file that begins with a YAML frontmatter block:
 
 ```
+---
+output:
+  field: Translation       # required: Anki field to write
+  require_result_tag: true # optional, default false
+---
+
 You are an expert Japanese-to-English translator.
 
 Translate this sentence: {Japanese}
@@ -417,42 +412,42 @@ Existing translation for reference: {English}
 Wrap your final answer in <result></result> tags.
 ```
 
-Combined with `--require-result-tag`, only the content inside `<result>` tags is
-saved, letting the model "think out loud" before committing to an answer. See
-the
+- `output.field` — the Anki field name that receives the LLM's response.
+- `output.require_result_tag` — when `true`, only the content inside the last
+  `<result>...</result>` pair in the response is written; without tags, the
+  row fails. Lets the model "think out loud" before committing to an answer.
+
+The body uses `{field_name}` placeholders referring to raw Anki field names
+(case-insensitive). Unknown placeholders cause a per-row error.
+
+See [`examples/`](examples/) for complete prompts and the
 [translation walkthrough](#example-use-case-fixing-1000-japanese-translations)
-and [`examples/`](examples/) for complete prompts.
+for an end-to-end tutorial.
 
 **Workflow:**
 
 1. Export deck to file: `anki-llm export "My Deck" -o notes.yaml`
 2. Process file:
-   `anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini`
+   `anki-llm process-file notes.yaml -o output.yaml -p prompt.md -m gpt-4o-mini`
 3. Import results: `anki-llm import output.yaml -d "My Deck"`
 
 **Examples:**
 
 ```bash
-# Process a file and update a single field
-anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini
-
-# Process with JSON mode (update multiple fields)
-anki-llm process-file notes.yaml -o output.yaml --json -p prompt.txt -m gpt-4o-mini
+# Process a file
+anki-llm process-file notes.yaml -o output.yaml -p prompt.md -m gpt-4o-mini
 
 # Preview the first 10 notes without calling the API
-anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --limit 10 --dry-run -m gpt-4o-mini
+anki-llm process-file notes.yaml -o output.yaml -p prompt.md --limit 10 --dry-run -m gpt-4o-mini
 
 # Preview 3 cards with the LLM, then proceed if satisfied
-anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --preview -m gpt-4o-mini
-
-# Preview 5 cards before processing the full file
-anki-llm process-file notes.yaml -o output.yaml --json -p prompt.txt --preview --preview-count 5
+anki-llm process-file notes.yaml -o output.yaml -p prompt.md --preview -m gpt-4o-mini
 
 # Resume processing after interruption (automatic - just re-run the same command)
-anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt -m gpt-4o-mini
+anki-llm process-file notes.yaml -o output.yaml -p prompt.md -m gpt-4o-mini
 
 # Force re-process all notes (ignore existing output)
-anki-llm process-file notes.yaml -o output.yaml --field Translation -p prompt.txt --force -m gpt-4o-mini
+anki-llm process-file notes.yaml -o output.yaml -p prompt.md --force -m gpt-4o-mini
 ```
 
 Use `process-file` when you want a reviewable staging file, resume support
@@ -475,16 +470,12 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 
 **Required options:**
 
-- **Either** `--field` **or** `--json` (mutually exclusive):
-  - `--field <name>`: Update a single field with the AI response.
-  - `--json`: Expect JSON response and merge all fields into the note.
-  - See
-    [Understanding `--field` vs `--json` modes](#understanding---field-vs---json-modes)
-    for more details.
+- `-p, --prompt`: Path to the prompt file. Must begin with a YAML frontmatter
+  block declaring the output field — see
+  [Prompt file format](#prompt-file-format).
 
 **Common options:**
 
-- `-p, --prompt`: Path to the prompt template text file (required).
 - `-m, --model`: AI model to use (required unless set via `config set model`).
 - `-b, --batch-size`: Number of concurrent API requests (default: `5`).
 - `-r, --retries`: Number of retries for failed requests (default: `3`).
@@ -496,19 +487,10 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 - `--preview-count`: Number of cards to process in preview mode (default: `3`).
 - `--limit`: Limit the number of notes to process (useful for testing prompts on
   a small sample before processing entire deck).
-- `--require-result-tag`: Only extracts content from within `<result></result>`
-  tags in the AI response.
 - `--log <PATH>`: Append raw LLM prompts and responses to a log file at
   `<PATH>` for debugging.
 - `--very-verbose`: Also print raw LLM prompts and responses to stderr. Useful
   for debugging prompts and understanding model outputs.
-
-**Prompt template:**
-
-A plain text file with `{field_name}` placeholders that are replaced with each
-note's field values before being sent to the LLM. See
-[Prompt template](#prompt-template) under `process-file` for the full
-explanation and an example.
 
 **Prerequisites:**
 
@@ -518,29 +500,23 @@ explanation and an example.
 **Examples:**
 
 ```bash
-# Process a deck directly and update a single field
-anki-llm process-deck "Japanese Core 1k" --field Translation -p prompt.txt
-
-# Direct mode with JSON (update multiple fields)
-anki-llm process-deck "Vocabulary" --json -p prompt.txt
+# Process a deck directly
+anki-llm process-deck "Japanese Core 1k" -p prompt.md
 
 # Preview the first 10 notes without calling the API
-anki-llm process-deck "My Deck" --field Notes -p prompt.txt --limit 10 --dry-run
+anki-llm process-deck "My Deck" -p prompt.md --limit 10 --dry-run
 
 # Preview 3 cards with the LLM, then proceed if satisfied
-anki-llm process-deck "My Deck" --field Notes -p prompt.txt --preview
-
-# Preview 5 cards before processing the full deck
-anki-llm process-deck "My Deck" --json -p prompt.txt --preview --preview-count 5
+anki-llm process-deck "My Deck" -p prompt.md --preview
 
 # Rewrite explanations only for cards you keep failing
-anki-llm process-deck --query "deck:Japanese prop:lapses>5" --field Explanation -p prompt.txt
+anki-llm process-deck --query "deck:Japanese prop:lapses>5" -p prompt.md
 
 # Add mnemonics to leeches
-anki-llm process-deck --query "tag:leech" --field Mnemonic -p prompt.txt
+anki-llm process-deck --query "tag:leech" -p prompt.md
 
 # Fix cards you got wrong in the last 7 days
-anki-llm process-deck --query "rated:7:1" --field Notes -p prompt.txt
+anki-llm process-deck --query "rated:7:1" -p prompt.md
 ```
 
 **Undoing a run:**
@@ -598,40 +574,6 @@ anki-llm rollback 20260411T153000_123Z --dry-run
 # Force rollback despite conflicts
 anki-llm rollback 20260411T153000_123Z --force
 ```
-
----
-
-#### **Understanding `--field` vs `--json` modes**
-
-Both `process-file` and `process-deck` support two response formats for the LLM:
-
-- **`--field` mode** (single field update): The LLM response is saved to the
-  specified field.
-
-  ```bash
-  anki-llm process-file notes.yaml -o out.yaml -p prompt.txt --field Translation
-  ```
-
-- **`--json` mode** (multi-field merge): The LLM must return valid JSON. All
-  fields in the JSON are merged into your note.
-
-  ```bash
-  anki-llm process-file notes.yaml -o out.yaml -p prompt.txt --json
-  ```
-
-  Example: If your note has `Japanese` and `Grammar` fields, and the LLM
-  returns:
-
-  ```json
-  {
-    "Japanese": "こんにちは",
-    "Grammar": "greeting"
-  }
-  ```
-
-  Both fields will be updated. Only fields present in the JSON are updated
-  (partial updates are allowed). If the response is not valid JSON, the
-  operation will fail and retry.
 
 ---
 
@@ -1433,15 +1375,22 @@ The `notes.yaml` file will look something like this:
 # ... 998 more notes
 ```
 
-### Step 2: Create a prompt template
+### Step 2: Create a prompt file
 
-Next, create a prompt file (`prompt-ja-en.txt`) to instruct the AI. Use
-`{field_name}` syntax for variables that will be replaced with data from each
-note. We want to process the `Japanese` field.
+Next, create a prompt file (`prompt-ja-en.md`) to instruct the AI. The file
+begins with a YAML frontmatter block declaring the target field, followed by
+the prompt body. Use `{field_name}` syntax for variables that will be replaced
+with data from each note — we'll read from the `Japanese` field.
 
-**File: `prompt-ja-en.txt`**
+**File: `prompt-ja-en.md`**
 
 ```
+---
+output:
+  field: Translation
+  require_result_tag: true
+---
+
 You are an expert Japanese-to-English translator.
 
 Translate this Japanese sentence to English: {Japanese}
@@ -1464,13 +1413,13 @@ Format your response like this:
 
 <!-- prettier-ignore -->
 > [!NOTE]
-> The `<result>` tag (used with `--require-result-tag`) is optional. You could instruct the LLM to respond with only the translation directly. However, asking the model to "think out loud" by analyzing the sentence first tends to produce higher-quality translations, as it encourages deeper reasoning before generating the final output.
+> The `<result>` tag (enabled via `require_result_tag: true`) is optional. You could instruct the LLM to respond with only the translation directly. However, asking the model to "think out loud" by analyzing the sentence first tends to produce higher-quality translations, as it encourages deeper reasoning before generating the final output.
 
 ### Step 3: Run the process-file command
 
 Now, run the `process-file` command. We'll tell it to use our `notes.yaml` file
-as input, write to a new `notes-translated.yaml` file, process the `Translation`
-field, and use our prompt template.
+as input and write to a new `notes-translated.yaml` file. The prompt file
+declares the `Translation` target field via its frontmatter.
 
 The tool will read the `Japanese` field from each note to fill the prompt, then
 the AI's response will overwrite the `Translation` field.
@@ -1478,22 +1427,17 @@ the AI's response will overwrite the `Translation` field.
 ```bash
 anki-llm process-file notes.yaml \
   --output notes-translated.yaml \
-  --field Translation \
-  --prompt prompt-ja-en.txt \
+  --prompt prompt-ja-en.md \
   --model gemini-2.5-flash \
-  --batch-size 10 \
-  --require-result-tag
+  --batch-size 10
 ```
 
 - `notes.yaml`: The input file.
 - `--output notes-translated.yaml`: The output file.
-- `--field Translation`: The field we want the AI to generate and place its
-  result into.
-- `--prompt prompt-ja-en.txt`: Our instruction template.
+- `--prompt prompt-ja-en.md`: Our instruction template (declares the target
+  field and `require_result_tag` in its frontmatter).
 - `--model gemini-2.5-flash`: The AI model to use.
 - `--batch-size 10`: Process 10 notes concurrently for speed.
-- `--require-result-tag`: Ensures the tool only saves the content inside the
-  `<result>` tag, ignoring the AI's analysis.
 
 You will see real-time progress as it processes the notes:
 
@@ -1596,9 +1540,15 @@ top 1–3 items, and return clean HTML. This example assumes your notes have
 `Japanese` and `English` fields. You can start from the full prompt example in
 [`examples/key_vocabulary.md`](examples/key_vocabulary.md).
 
-**File: `prompt-key-vocab.txt`**
+**File: `prompt-key-vocab.md`**
 
 ```
+---
+output:
+  field: "Key Vocabulary"
+  require_result_tag: true
+---
+
 You are an expert Japanese vocabulary AI assistant designed for language learners. Your primary role is to analyze Japanese sentences, identify the most significant vocabulary words, and produce clear, concise, and educational explanations formatted in clean, semantic HTML.
 
 The user is an intermediate learner who uses sentence flashcards to practice. Your output will populate a "Key Vocabulary" field on their Anki flashcard. The HTML you generate must be well-structured to allow for easy and flexible styling with CSS.
@@ -1635,15 +1585,12 @@ HTML generated by the prompt:
 ```bash
 anki-llm process-file sentences.yaml \
   --output sentences-key-vocab.yaml \
-  --field "Key Vocabulary" \
-  --prompt prompt-key-vocab.txt \
-  --model gemini-2.5-flash-lite \
-  --require-result-tag
+  --prompt prompt-key-vocab.md \
+  --model gemini-2.5-flash-lite
 ```
 
-- `--field "Key Vocabulary"`: Updates that specific field on each note.
-- `--require-result-tag`: Keeps only the HTML between `<result>` tags and drops
-  the analysis from the prompt.
+The target field (`Key Vocabulary`) and `require_result_tag: true` are
+declared in the prompt file's frontmatter — no extra CLI flags needed.
 
 ### Sample output snippet
 
