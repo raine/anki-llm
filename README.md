@@ -1379,12 +1379,13 @@ etc.) to redesign your card layouts, then push the result back to Anki.
 # One-time: pull an existing note type from Anki into files
 anki-llm note-type pull "Japanese Vocabulary"
 
-# Edit the generated files in your editor:
+# Point a coding agent (Claude Code, Cursor, etc.) at the generated files:
 #   note-types/Japanese_Vocabulary/style.css
 #   note-types/Japanese_Vocabulary/Recognition.front.html
 #   note-types/Japanese_Vocabulary/Recognition.back.html
+# e.g. "redesign the back template with a cleaner reading + meaning layout"
 
-# Push changes back to Anki
+# Push the agent's changes back to Anki
 anki-llm note-type push "Japanese Vocabulary"
 
 # See what's changed locally and in Anki
