@@ -262,6 +262,37 @@ To store prompts elsewhere (e.g. a version-controlled directory):
 anki-llm config set prompts_dir ~/anki-prompts
 ```
 
+### Workspaces (recommended for version control)
+
+A workspace is just a directory that contains a `prompts/` folder (and
+optionally an `anki-llm.yaml` settings file). When you run anki-llm from a
+directory with `prompts/`, that directory is used instead of
+`~/.config/anki-llm/prompts/`.
+
+```bash
+# Create a workspace in the current directory
+anki-llm workspace init
+
+# Or just create the folder yourself
+mkdir prompts
+
+# Check if the current directory is a workspace
+anki-llm workspace info
+```
+
+`anki-llm.yaml` is optional — use it for per-directory settings like a default
+model:
+
+```yaml
+default_model: gemini-2.5-flash
+```
+
+This takes precedence over the config file model but yields to `--model` on the
+CLI.
+
+Workspaces are especially useful if you want to keep prompts in git alongside
+your deck data.
+
 Prompt files can include optional `title` and `description` fields in their
 frontmatter for a better picker experience:
 

@@ -18,5 +18,6 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::TtsVoices(args) => crate::tts::voices::command::run(args),
         Commands::Update => crate::update::run(),
         Commands::Docs => crate::docs::run(),
+        Commands::Workspace(args) => crate::workspace::command::run(args.action),
     }
 }

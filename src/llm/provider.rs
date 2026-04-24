@@ -66,10 +66,22 @@ pub fn available_models(include_all: bool) -> Vec<String> {
 }
 
 /// Resolve which model to use.
-/// Priority: CLI flag → config file → env-var auto-detect.
+/// Priority: CLI flag → ./anki-llm.yaml → config file → env-var auto-detect.
 pub fn resolve_model(user_model: Option<&str>) -> String {
     if let Some(m) = user_model {
         return m.to_string();
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let manifest_path = cwd.join("anki-llm.yaml");
+        if manifest_path.is_file()
+            && let Ok(content) = std::fs::read_to_string(&manifest_path)
+            && let Ok(manifest) =
+                serde_yaml::from_str::<crate::workspace::manifest::WorkspaceManifest>(&content)
+            && let Some(ref m) = manifest.default_model
+            && !m.is_empty()
+        {
+            return m.clone();
+        }
     }
     if let Ok(config) = read_config()
         && let Some(ref m) = config.model

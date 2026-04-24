@@ -19,18 +19,30 @@ fn default_prompts_dir() -> Option<PathBuf> {
     home::home_dir().map(|h| h.join(".config").join("anki-llm").join("prompts"))
 }
 
-/// Resolve the effective prompts directory from config (or default).
-fn effective_prompts_dir() -> Result<PathBuf> {
+fn effective_prompts_dir_from(start: &Path) -> Result<PathBuf> {
+    // 1. Check current directory for a local prompts/ dir
+    let local_prompts = start.join("prompts");
+    if local_prompts.is_dir() {
+        return Ok(local_prompts);
+    }
+
+    // 2. Fall back to config
     let config = read_config().context("failed to read config")?;
     let dir = config.prompts_dir.or_else(default_prompts_dir);
     let Some(dir) = dir else {
         bail!(
             "No prompt specified and could not determine prompts directory.\n\
-             Either pass --prompt <path> or set a prompts directory:\n  \
+             Either pass --prompt <path>, run from a directory with a prompts/ folder, \
+             or set a prompts directory:\n  \
              anki-llm config set prompts_dir ~/anki-prompts"
         );
     };
     Ok(dir)
+}
+
+fn effective_prompts_dir() -> Result<PathBuf> {
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    effective_prompts_dir_from(&cwd)
 }
 
 /// Resolve which prompt file to use.

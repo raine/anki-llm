@@ -21,6 +21,7 @@ use anki_llm::template;
 use anki_llm::tts;
 use anki_llm::tui;
 use anki_llm::update;
+use anki_llm::workspace;
 
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();

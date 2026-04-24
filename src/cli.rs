@@ -55,6 +55,8 @@ pub enum Commands {
     Update,
     /// Show bundled documentation
     Docs,
+    /// Manage anki-llm workspaces
+    Workspace(WorkspaceArgs),
 }
 
 #[derive(clap::Args)]
@@ -487,4 +489,21 @@ pub struct RollbackArgs {
     /// Preview without making changes
     #[arg(long, short = 'd')]
     pub dry_run: bool,
+}
+
+#[derive(clap::Args)]
+pub struct WorkspaceArgs {
+    #[command(subcommand)]
+    pub action: WorkspaceAction,
+}
+
+#[derive(clap::Subcommand)]
+pub enum WorkspaceAction {
+    /// Initialize a new workspace in the current or specified directory
+    Init {
+        /// Directory to initialize (defaults to current directory)
+        dir: Option<PathBuf>,
+    },
+    /// Show information about the current workspace
+    Info,
 }
