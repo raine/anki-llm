@@ -34,6 +34,9 @@
   [Read more](#example-use-case-generating-new-vocabulary-cards)
 - **Add TTS audio** – Bulk-fill audio fields for existing notes or synthesize
   audio for newly generated cards. [Read more](#anki-llm-tts)
+- **Edit card templates in your editor** – Pull note type HTML + CSS to local
+  files, edit with syntax highlighting and git, push changes back to Anki.
+  [Read more](#anki-llm-note-type)
 - **Scriptable collection access** – Query AnkiConnect directly from the CLI or
   AI agents. [Command reference](#anki-llm-query-action-params)
 
