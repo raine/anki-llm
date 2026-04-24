@@ -60,37 +60,55 @@ fn init(dir: Option<PathBuf>) -> Result<()> {
 
 fn info() -> Result<()> {
     let cwd = std::env::current_dir().context("failed to get current directory")?;
+    let cwd_workspace = Workspace::in_dir(&cwd);
 
-    if let Some(workspace) = Workspace::in_dir(&cwd) {
+    if let Some(ref workspace) = cwd_workspace {
         println!("\x1b[32m\u{2713}\x1b[0m Workspace found");
-        println!("  Root: {}", workspace.root.display());
-        if let Some(ref model) = workspace.manifest.default_model {
-            println!("  Default model: {}", model);
-        }
-        let prompts = workspace.prompts_dir();
-        println!("  Prompts: {}/", prompts.display());
-        if workspace.note_types_dir().exists() {
-            println!("  Note-types: {}/", workspace.note_types_dir().display());
-        }
-    } else {
-        println!("\x1b[33mNo workspace found\x1b[0m in current directory.");
-        println!();
-        println!(
-            "A workspace is just a directory with a prompts/ folder (and optionally anki-llm.yaml)."
-        );
-        println!();
-        println!("To create one:");
-        println!("  anki-llm workspace init");
+        print_workspace(workspace);
+        return Ok(());
+    }
 
-        // Show fallback config, if any.
-        if let Ok(config) = read_config()
-            && let Some(dir) = config.prompts_dir
-        {
+    println!("\x1b[33mNo workspace found\x1b[0m in current directory.");
+
+    // Fall back to configured default_workspace.
+    if let Ok(config) = read_config()
+        && let Some(dir) = config.default_workspace
+    {
+        if let Some(default) = Workspace::in_dir(&dir) {
             println!();
-            println!("Falling back to config prompts_dir:");
+            println!("\x1b[2mUsing default workspace from config.default_workspace:\x1b[0m");
+            print_workspace(&default);
+            return Ok(());
+        } else {
+            println!();
+            println!(
+                "\x1b[31mconfig.default_workspace\x1b[0m points to a non-workspace directory:"
+            );
             println!("  {}", dir.display());
         }
     }
 
+    println!();
+    println!(
+        "A workspace is just a directory with a prompts/ folder (and optionally anki-llm.yaml)."
+    );
+    println!();
+    println!("To create one:");
+    println!("  anki-llm workspace init");
+    println!();
+    println!("To set a default workspace (used from any directory):");
+    println!("  anki-llm config set default_workspace <path>");
+
     Ok(())
+}
+
+fn print_workspace(workspace: &Workspace) {
+    println!("  Root: {}", workspace.root.display());
+    if let Some(ref model) = workspace.manifest.default_model {
+        println!("  Default model: {}", model);
+    }
+    println!("  Prompts: {}/", workspace.prompts_dir().display());
+    if workspace.note_types_dir().exists() {
+        println!("  Note-types: {}/", workspace.note_types_dir().display());
+    }
 }

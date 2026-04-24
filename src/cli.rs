@@ -401,7 +401,7 @@ pub struct GenerateArgs {
     /// Term to generate cards for (omit to enter interactively in TUI)
     pub term: Option<String>,
 
-    /// Path to prompt template file with frontmatter (auto-resolved from prompts_dir if omitted)
+    /// Path to prompt template file with frontmatter (auto-resolved from the workspace's prompts/ if omitted)
     #[arg(long, short = 'p')]
     pub prompt: Option<PathBuf>,
 

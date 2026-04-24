@@ -260,12 +260,16 @@ If you have **one prompt**, it's used automatically. If you have **multiple
 prompts**, an interactive picker is shown where you can select which one to use.
 The last-used prompt is remembered and pre-selected next time.
 
-To use a workspace's prompts from outside it (so `anki-llm generate` works from
-anywhere), point the global config at it:
+To use a workspace from outside it (so `anki-llm generate`, `note-type`, etc.
+work from any directory), set it as the default workspace:
 
 ```bash
-anki-llm config set prompts_dir ~/anki/prompts
+anki-llm config set default_workspace ~/anki
 ```
+
+This single setting provides the workspace's `prompts/`, `note-types/`, and
+`anki-llm.yaml` (default model) as fallbacks whenever you run anki-llm outside
+a workspace.
 
 ### Workspaces (recommended for version control)
 
@@ -627,7 +631,7 @@ deck's style and formatting. This is the recommended way to get started with
 card generation.
 
 - `[output]`: Optional output file path. If omitted, saves to your workspace's
-  `prompts/<deck>-prompt.md` (or the configured `prompts_dir`).
+  `prompts/<deck>-prompt.md` (or the default workspace's `prompts/`).
 
 **Common options:**
 

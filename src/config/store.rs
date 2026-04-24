@@ -12,8 +12,11 @@ pub struct AppConfig {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nerd_font: Option<bool>,
+    /// Default workspace used when running outside a workspace directory.
+    /// Its `prompts/`, `note-types/`, and `anki-llm.yaml` are used as
+    /// fallbacks for commands that depend on a workspace.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prompts_dir: Option<PathBuf>,
+    pub default_workspace: Option<PathBuf>,
     /// Custom API base URL (e.g. OpenRouter, Ollama, or any OpenAI-compatible endpoint).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_base_url: Option<String>,
@@ -55,7 +58,10 @@ impl AppConfig {
         match key {
             "model" => self.model.clone(),
             "nerd_font" => self.nerd_font.map(|b| b.to_string()),
-            "prompts_dir" => self.prompts_dir.as_ref().map(|p| p.display().to_string()),
+            "default_workspace" => self
+                .default_workspace
+                .as_ref()
+                .map(|p| p.display().to_string()),
             "api_base_url" => self.api_base_url.clone(),
             "tts_provider" => self.tts_provider.clone(),
             "tts_voice" => self.tts_voice.clone(),
@@ -82,8 +88,8 @@ impl AppConfig {
                 self.nerd_font = Some(value != "false" && value != "0");
                 true
             }
-            "prompts_dir" => {
-                self.prompts_dir = Some(PathBuf::from(value));
+            "default_workspace" => {
+                self.default_workspace = Some(PathBuf::from(value));
                 true
             }
             "api_base_url" => {
@@ -143,8 +149,8 @@ impl AppConfig {
         if let Some(v) = self.nerd_font {
             out.push(("nerd_font".into(), v.to_string()));
         }
-        if let Some(ref v) = self.prompts_dir {
-            out.push(("prompts_dir".into(), v.display().to_string()));
+        if let Some(ref v) = self.default_workspace {
+            out.push(("default_workspace".into(), v.display().to_string()));
         }
         if let Some(ref v) = self.api_base_url {
             out.push(("api_base_url".into(), v.clone()));
@@ -292,7 +298,7 @@ mod tests {
         unsafe { std::env::set_var("HOME", tmp.path()) };
         let config = read_config().unwrap();
         assert!(config.model.is_none());
-        assert!(config.prompts_dir.is_none());
+        assert!(config.default_workspace.is_none());
         unsafe { std::env::remove_var("HOME") };
     }
 
@@ -335,8 +341,8 @@ mod tests {
         assert_eq!(config.get("model"), Some("gpt-5".into()));
         assert!(config.set("nerd_font", "false"));
         assert_eq!(config.get("nerd_font"), Some("false".into()));
-        assert!(config.set("prompts_dir", "/tmp/prompts"));
-        assert_eq!(config.get("prompts_dir"), Some("/tmp/prompts".into()));
+        assert!(config.set("default_workspace", "/tmp/ws"));
+        assert_eq!(config.get("default_workspace"), Some("/tmp/ws".into()));
         assert!(!config.set("unknown_key", "value"));
         assert!(config.get("unknown_key").is_none());
     }

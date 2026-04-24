@@ -39,6 +39,25 @@ impl Workspace {
     pub fn note_types_dir(&self) -> PathBuf {
         self.root.join("note-types")
     }
+
+    /// Workspace for the current working directory, if any.
+    pub fn current() -> Option<Self> {
+        let cwd = std::env::current_dir().ok()?;
+        Self::in_dir(&cwd)
+    }
+
+    /// Workspace configured as the global default, if any.
+    pub fn default_configured() -> Option<Self> {
+        let config = crate::config::store::read_config().ok()?;
+        let dir = config.default_workspace?;
+        Self::in_dir(&dir)
+    }
+
+    /// Effective workspace: the one at cwd if present, otherwise the
+    /// configured default, otherwise `None`.
+    pub fn effective() -> Option<Self> {
+        Self::current().or_else(Self::default_configured)
+    }
 }
 
 #[cfg(test)]

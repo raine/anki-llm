@@ -4,14 +4,14 @@ use anyhow::{Context, Result};
 
 use crate::workspace::context::Workspace;
 
-/// Resolve the `note-types/` root: workspace dir first, then `./note-types/`.
+/// Resolve the `note-types/` root: effective workspace (cwd or configured
+/// default), else `./note-types/` under cwd.
 pub fn note_types_root() -> Result<PathBuf> {
-    let cwd = std::env::current_dir().context("failed to get current directory")?;
-    if let Some(ws) = Workspace::in_dir(&cwd) {
-        Ok(ws.note_types_dir())
-    } else {
-        Ok(cwd.join("note-types"))
+    if let Some(ws) = Workspace::effective() {
+        return Ok(ws.note_types_dir());
     }
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    Ok(cwd.join("note-types"))
 }
 
 /// Slugify an Anki name for use as a directory or filename.

@@ -1,9 +1,10 @@
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
-use crate::config::store::{read_config, read_state, write_state};
+use crate::config::store::{read_state, write_state};
+use crate::workspace::context::Workspace;
 use crate::workspace::discovery::{PromptEntry, discover_prompts};
 
 /// Result of prompt resolution.
@@ -14,33 +15,20 @@ pub enum ResolvedPrompt {
     ShowPicker(Vec<PromptEntry>),
 }
 
-fn effective_prompts_dir_from(start: &Path) -> Result<PathBuf> {
-    // 1. Check current directory for a local prompts/ dir (workspace).
-    let local_prompts = start.join("prompts");
-    if local_prompts.is_dir() {
-        return Ok(local_prompts);
-    }
-
-    // 2. Fall back to the configured prompts_dir.
-    let config = read_config().context("failed to read config")?;
-    let Some(dir) = config.prompts_dir else {
+fn effective_prompts_dir() -> Result<PathBuf> {
+    let Some(ws) = Workspace::effective() else {
         bail!(
-            "No prompts directory found.\n\
+            "No workspace found.\n\
              Prompts live in a workspace. Either:\n  \
              - run anki-llm from a workspace directory (has a prompts/ folder)\n  \
              - pass --prompt <path>\n  \
-             - point the global config at a workspace:\n      \
-                 anki-llm config set prompts_dir ~/anki/prompts\n  \
+             - set a default workspace:\n      \
+                 anki-llm config set default_workspace ~/anki\n  \
              - or create a workspace here:\n      \
                  anki-llm workspace init"
         );
     };
-    Ok(dir)
-}
-
-fn effective_prompts_dir() -> Result<PathBuf> {
-    let cwd = std::env::current_dir().context("failed to get current directory")?;
-    effective_prompts_dir_from(&cwd)
+    Ok(ws.prompts_dir())
 }
 
 /// Resolve which prompt file to use.
