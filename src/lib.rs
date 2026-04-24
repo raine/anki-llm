@@ -7,6 +7,7 @@ pub mod data;
 pub mod docs;
 pub mod generate;
 pub mod llm;
+pub mod note_type;
 pub mod snapshot;
 pub mod spinner;
 pub mod style;

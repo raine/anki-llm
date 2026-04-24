@@ -43,3 +43,18 @@ pub struct NoteInfo {
     pub tags: Vec<String>,
     pub model_name: String,
 }
+
+/// A single card template (Front/Back pair) within a note type.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CardTemplate {
+    #[serde(rename = "Front")]
+    pub front: String,
+    #[serde(rename = "Back")]
+    pub back: String,
+}
+
+/// Response from `modelStyling`.
+#[derive(Debug, Deserialize)]
+pub struct ModelStyling {
+    pub css: String,
+}

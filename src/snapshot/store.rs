@@ -8,6 +8,8 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 
+use crate::anki::schema::CardTemplate;
+
 /// A single note's before/after field state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoteRevision {
@@ -186,6 +188,42 @@ pub fn list_snapshots() -> Result<Vec<Snapshot>> {
     }
     snapshots.sort_by(|a, b| b.run_id.cmp(&a.run_id));
     Ok(snapshots)
+}
+
+// ---------------------------------------------------------------------------
+// Note-type snapshots
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteTypeSnapshot {
+    pub run_id: String,
+    pub timestamp: String,
+    pub model_name: String,
+    pub css: String,
+    pub templates: IndexMap<String, CardTemplate>,
+}
+
+fn note_type_snapshots_dir() -> Result<PathBuf> {
+    let home = home::home_dir().context("could not determine home directory")?;
+    Ok(home
+        .join(".local")
+        .join("state")
+        .join("anki-llm")
+        .join("note-type-snapshots"))
+}
+
+/// Save a note-type snapshot to disk atomically. Directory name is slugged from
+/// the model name; the real name lives inside the JSON.
+pub fn save_note_type_snapshot(snapshot: &NoteTypeSnapshot) -> Result<PathBuf> {
+    let slug = crate::note_type::paths::slugify(&snapshot.model_name);
+    let dir = note_type_snapshots_dir()?.join(&slug);
+    fs::create_dir_all(&dir)
+        .with_context(|| format!("failed to create snapshot dir: {}", dir.display()))?;
+    let path = dir.join(format!("{}.json", snapshot.run_id));
+    let json =
+        serde_json::to_string_pretty(snapshot).context("failed to serialize note-type snapshot")?;
+    atomic_write(&path, &json)?;
+    Ok(path)
 }
 
 fn atomic_write(path: &Path, content: &str) -> Result<()> {

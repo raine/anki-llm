@@ -15,6 +15,7 @@ use anki_llm::data;
 use anki_llm::docs;
 use anki_llm::generate;
 use anki_llm::llm;
+use anki_llm::note_type;
 use anki_llm::snapshot;
 use anki_llm::style;
 use anki_llm::template;

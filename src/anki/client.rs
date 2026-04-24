@@ -1,9 +1,12 @@
+use indexmap::IndexMap;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::anki::error::AnkiConnectError;
-use crate::anki::schema::{AddNoteParams, AnkiRequest, AnkiResponse, NoteInfo};
+use crate::anki::schema::{
+    AddNoteParams, AnkiRequest, AnkiResponse, CardTemplate, ModelStyling, NoteInfo,
+};
 
 pub const DEFAULT_URL: &str = "http://127.0.0.1:8765";
 
@@ -241,6 +244,55 @@ impl AnkiClient {
         self.request(
             "storeMediaFile",
             serde_json::json!({ "filename": filename, "data": b64 }),
+        )
+    }
+
+    // ---------------------------------------------------------------------
+    // Note type (model) APIs
+    // ---------------------------------------------------------------------
+
+    pub fn model_styling(&self, model_name: &str) -> Result<String, AnkiConnectError> {
+        let res: ModelStyling = self.request(
+            "modelStyling",
+            serde_json::json!({ "modelName": model_name }),
+        )?;
+        Ok(res.css)
+    }
+
+    pub fn update_model_styling(
+        &self,
+        model_name: &str,
+        css: &str,
+    ) -> Result<(), AnkiConnectError> {
+        self.request_void(
+            "updateModelStyling",
+            serde_json::json!({
+                "model": { "name": model_name, "css": css }
+            }),
+        )
+    }
+
+    /// Returns card templates in Anki's defined order.
+    pub fn model_templates(
+        &self,
+        model_name: &str,
+    ) -> Result<IndexMap<String, CardTemplate>, AnkiConnectError> {
+        self.request(
+            "modelTemplates",
+            serde_json::json!({ "modelName": model_name }),
+        )
+    }
+
+    pub fn update_model_templates(
+        &self,
+        model_name: &str,
+        templates: &IndexMap<String, CardTemplate>,
+    ) -> Result<(), AnkiConnectError> {
+        self.request_void(
+            "updateModelTemplates",
+            serde_json::json!({
+                "model": { "name": model_name, "templates": templates }
+            }),
         )
     }
 }

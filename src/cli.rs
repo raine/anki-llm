@@ -57,6 +57,9 @@ pub enum Commands {
     Docs,
     /// Manage anki-llm workspaces
     Workspace(WorkspaceArgs),
+    /// Manage Anki note type templates and CSS
+    #[command(name = "note-type")]
+    NoteType(NoteTypeArgs),
 }
 
 #[derive(clap::Args)]
@@ -506,4 +509,46 @@ pub enum WorkspaceAction {
     },
     /// Show information about the current workspace
     Info,
+}
+
+#[derive(clap::Args)]
+pub struct NoteTypeArgs {
+    #[command(subcommand)]
+    pub action: NoteTypeAction,
+}
+
+#[derive(clap::Subcommand)]
+pub enum NoteTypeAction {
+    /// Pull note type templates and CSS from Anki into local files
+    Pull {
+        /// Note type name (as shown in Anki)
+        name: String,
+        /// Overwrite existing local files without prompting
+        #[arg(long)]
+        force: bool,
+    },
+    /// Push local templates and CSS to Anki
+    #[command(group(
+        clap::ArgGroup::new("target")
+            .required(true)
+            .args(["name", "all"]),
+    ))]
+    Push {
+        /// Note type name (as shown in Anki)
+        name: Option<String>,
+        /// Push all note types in the workspace
+        #[arg(long)]
+        all: bool,
+        /// Preview changes without modifying Anki
+        #[arg(long, short = 'd')]
+        dry_run: bool,
+        /// Skip snapshot before push
+        #[arg(long)]
+        no_snapshot: bool,
+        /// Push even if Anki has diverged from the last known remote state
+        #[arg(long)]
+        force: bool,
+    },
+    /// Show which note types have un-pushed changes
+    Status,
 }
