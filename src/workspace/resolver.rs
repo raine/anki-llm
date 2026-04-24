@@ -14,27 +14,25 @@ pub enum ResolvedPrompt {
     ShowPicker(Vec<PromptEntry>),
 }
 
-/// Default prompts directory: `~/.config/anki-llm/prompts`.
-fn default_prompts_dir() -> Option<PathBuf> {
-    home::home_dir().map(|h| h.join(".config").join("anki-llm").join("prompts"))
-}
-
 fn effective_prompts_dir_from(start: &Path) -> Result<PathBuf> {
-    // 1. Check current directory for a local prompts/ dir
+    // 1. Check current directory for a local prompts/ dir (workspace).
     let local_prompts = start.join("prompts");
     if local_prompts.is_dir() {
         return Ok(local_prompts);
     }
 
-    // 2. Fall back to config
+    // 2. Fall back to the configured prompts_dir.
     let config = read_config().context("failed to read config")?;
-    let dir = config.prompts_dir.or_else(default_prompts_dir);
-    let Some(dir) = dir else {
+    let Some(dir) = config.prompts_dir else {
         bail!(
-            "No prompt specified and could not determine prompts directory.\n\
-             Either pass --prompt <path>, run from a directory with a prompts/ folder, \
-             or set a prompts directory:\n  \
-             anki-llm config set prompts_dir ~/anki-prompts"
+            "No prompts directory found.\n\
+             Prompts live in a workspace. Either:\n  \
+             - run anki-llm from a workspace directory (has a prompts/ folder)\n  \
+             - pass --prompt <path>\n  \
+             - point the global config at a workspace:\n      \
+                 anki-llm config set prompts_dir ~/anki/prompts\n  \
+             - or create a workspace here:\n      \
+                 anki-llm workspace init"
         );
     };
     Ok(dir)
@@ -48,7 +46,7 @@ fn effective_prompts_dir() -> Result<PathBuf> {
 /// Resolve which prompt file to use.
 ///
 /// - If `explicit` is `Some`, return it directly.
-/// - Otherwise, look up prompts_dir (config override or `~/.config/anki-llm/prompts`).
+/// - Otherwise, look up prompts_dir (workspace `./prompts/` or the configured override).
 /// - In interactive mode with multiple prompts, returns `ShowPicker`.
 /// - In non-interactive mode, falls back to last-used or single-prompt.
 pub fn resolve_prompt(explicit: Option<PathBuf>, force_picker: bool) -> Result<ResolvedPrompt> {

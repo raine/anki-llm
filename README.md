@@ -243,14 +243,14 @@ Config file lives at `~/.config/anki-llm/config.json`.
 
 ### Prompts directory
 
-anki-llm looks for prompt files in `~/.config/anki-llm/prompts/` by default.
-When you run `generate-init`, the created prompt file is saved there
-automatically. This means you can run `anki-llm generate` without the `-p` flag
-— the tool will find your prompts automatically.
+Prompt files live in a **workspace** — any directory with a `prompts/` folder.
+When you run `anki-llm` from a workspace, its prompts are used automatically,
+so commands like `anki-llm generate` work without the `-p` flag.
 
 ```bash
-# Create a prompt — saved to ~/.config/anki-llm/prompts/ by default
-anki-llm generate-init
+# Create a workspace and a starter prompt
+anki-llm workspace init
+anki-llm generate-init    # saves to ./prompts/
 
 # Generate cards — no -p needed
 anki-llm generate "今日"
@@ -260,18 +260,18 @@ If you have **one prompt**, it's used automatically. If you have **multiple
 prompts**, an interactive picker is shown where you can select which one to use.
 The last-used prompt is remembered and pre-selected next time.
 
-To store prompts elsewhere (e.g. a version-controlled directory):
+To use a workspace's prompts from outside it (so `anki-llm generate` works from
+anywhere), point the global config at it:
 
 ```bash
-anki-llm config set prompts_dir ~/anki-prompts
+anki-llm config set prompts_dir ~/anki/prompts
 ```
 
 ### Workspaces (recommended for version control)
 
 A workspace is just a directory that contains a `prompts/` folder (and
 optionally an `anki-llm.yaml` settings file). When you run anki-llm from a
-directory with `prompts/`, that directory is used instead of
-`~/.config/anki-llm/prompts/`.
+workspace, its `prompts/` directory is used automatically.
 
 ```bash
 # Create a workspace in the current directory
@@ -626,8 +626,8 @@ analyze your existing cards and generate a tailored prompt that matches your
 deck's style and formatting. This is the recommended way to get started with
 card generation.
 
-- `[output]`: Optional output file path. If omitted, saves to the prompts
-  directory (`~/.config/anki-llm/prompts/<deck>-prompt.md` by default).
+- `[output]`: Optional output file path. If omitted, saves to your workspace's
+  `prompts/<deck>-prompt.md` (or the configured `prompts_dir`).
 
 **Common options:**
 
@@ -648,8 +648,8 @@ card generation.
 
 1. Run the wizard: `anki-llm generate-init`
 2. Follow the interactive steps to select a deck and note type.
-3. A prompt file is saved to your prompts directory (e.g.,
-   `~/.config/anki-llm/prompts/vocabulary-prompt.md`).
+3. A prompt file is saved to your workspace's prompts directory (e.g.,
+   `./prompts/vocabulary-prompt.md`).
 4. Review and customize the generated prompt file.
 5. Use it with the `generate` command: `anki-llm generate "term"` (the prompt is
    found automatically).

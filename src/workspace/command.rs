@@ -82,21 +82,13 @@ fn info() -> Result<()> {
         println!("To create one:");
         println!("  anki-llm workspace init");
 
-        // Show fallback config
-        if let Ok(config) = read_config() {
-            if let Some(dir) = config.prompts_dir {
-                println!();
-                println!("Falling back to config prompts_dir:");
-                println!("  {}", dir.display());
-            } else {
-                let default =
-                    home::home_dir().map(|h| h.join(".config").join("anki-llm").join("prompts"));
-                if let Some(dir) = default {
-                    println!();
-                    println!("Falling back to default prompts directory:");
-                    println!("  {}", dir.display());
-                }
-            }
+        // Show fallback config, if any.
+        if let Ok(config) = read_config()
+            && let Some(dir) = config.prompts_dir
+        {
+            println!();
+            println!("Falling back to config prompts_dir:");
+            println!("  {}", dir.display());
         }
     }
 
