@@ -34,8 +34,9 @@
   [Read more](#example-use-case-generating-new-vocabulary-cards)
 - **Add TTS audio** – Bulk-fill audio fields for existing notes or synthesize
   audio for newly generated cards. [Read more](#anki-llm-tts)
-- **Edit card templates in your editor** – Pull note type HTML + CSS to local
-  files, edit with syntax highlighting and git, push changes back to Anki.
+- **AI-assisted card template editing** – Pull note type HTML + CSS to local
+  files so coding agents (Claude Code, Cursor, etc.) can redesign card
+  layouts, then push changes back to Anki.
   [Read more](#anki-llm-note-type)
 - **Scriptable collection access** – Query AnkiConnect directly from the CLI or
   AI agents. [Command reference](#anki-llm-query-action-params)
@@ -1369,8 +1370,8 @@ actions and their parameters.
 ### `anki-llm note-type`
 
 Manage Anki note type HTML templates and CSS as local files in
-`note-types/<slug>/`. Edit them in your editor (syntax highlighting, git, LLM
-assistance) and push changes back to Anki.
+`note-types/<slug>/`. Hand the files to a coding agent (Claude Code, Cursor,
+etc.) to redesign your card layouts, then push the result back to Anki.
 
 **Workflow:**
 
