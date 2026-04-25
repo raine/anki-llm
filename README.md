@@ -1373,9 +1373,17 @@ actions and their parameters.
 
 ### `anki-llm note-type`
 
-Manage Anki note type HTML templates and CSS as local files in
-`note-types/<slug>/`. Hand the files to a coding agent (Claude Code, Cursor,
-etc.) to redesign your card layouts, then push the result back to Anki.
+Anki's built-in template editor is a bare text box: no syntax highlighting, no
+autocompletion, no version control, and no way to involve a coding tool. Making
+layout changes means clicking through menus, editing raw HTML/CSS in a cramped
+dialog, and hoping you don't break something, with no diff and no undo history.
+
+`anki-llm note-type` pulls your note type's templates and CSS into plain files
+in `note-types/<slug>/`. From there you can edit them in your normal editor,
+commit them to git alongside your prompts, or hand them to a coding agent
+(Claude Code, Cursor, etc.) with a plain-English instruction like "redesign the
+back template with a cleaner layout". When you're done, a single push writes the
+changes back to Anki.
 
 **Workflow:**
 
