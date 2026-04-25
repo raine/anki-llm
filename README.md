@@ -22,6 +22,18 @@
   <img src="meta/anki-llm-generate.webp" alt="anki-llm generate demo" width="830">
 </p>
 
+## What people say
+
+> What's next get AI to answer your flashcards for you?  
+> — grei_earl (Reddit)
+
+> I love this. The README is extremely detailed and clear, and using
+> AnkiConnect to edit decks in-place avoids the usual apkg headaches.  
+> — rahimnathwani (Hacker News)
+
+> This is cool!  
+> — Hsaeedx (Reddit)
+
 ## Example workflows
 
 - **Bulk-verify translations** – End-to-end pipeline for cleaning large decks.
@@ -43,9 +55,9 @@
 
 ## Why?
 
-Manually editing hundreds or thousands of Anki cards is tedious, error-prone,
-and time-consuming. Whether it's verifying translations, adding grammar notes,
-or generating contextual examples, doing it by hand doesn't scale.
+Hand-editing a large Anki collection is slow and error-prone. Verifying
+translations, adding grammar notes, generating contextual examples: doing it
+card by card is impractical at any real size.
 
 `anki-llm` provides a bridge between your Anki collection and modern AI models.
 
@@ -180,8 +192,8 @@ anki-llm process-file input.yaml -o output.yaml -p prompt.md \
 | Setting      | CLI flag         | Environment variable    | Config key     |
 | ------------ | ---------------- | ----------------------- | -------------- |
 | API base URL | `--api-base-url` | `ANKI_LLM_API_BASE_URL` | `api_base_url` |
-| API key      | `--api-key`      | `ANKI_LLM_API_KEY`      | —              |
-| Model        | `--model` / `-m` | —                       | `model`        |
+| API key      | `--api-key`      | `ANKI_LLM_API_KEY`      | -              |
+| Model        | `--model` / `-m` | -                       | `model`        |
 
 **Precedence:** CLI flag > environment variable > config file > auto-detect.
 
@@ -191,7 +203,7 @@ variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`) are used as a fallback when
 
 ### Known models with pricing
 
-Cost estimates are displayed for known models. Any model name is accepted — cost
+Cost estimates are displayed for known models. Any model name is accepted; cost
 display is simply skipped for models without pricing data.
 
 <details>
@@ -243,7 +255,7 @@ Config file lives at `~/.config/anki-llm/config.json`.
 
 ### Prompts directory
 
-Prompt files live in a **workspace** — any directory with a `prompts/` folder.
+Prompt files live in a **workspace**: any directory with a `prompts/` folder.
 When you run `anki-llm` from a workspace, its prompts are used automatically,
 so commands like `anki-llm generate` work without the `-p` flag.
 
@@ -252,7 +264,7 @@ so commands like `anki-llm generate` work without the `-p` flag.
 anki-llm workspace init
 anki-llm generate-init    # saves to ./prompts/
 
-# Generate cards — no -p needed
+# Generate cards (no -p needed)
 anki-llm generate "今日"
 ```
 
@@ -288,7 +300,7 @@ mkdir prompts
 anki-llm workspace info
 ```
 
-`anki-llm.yaml` is optional — use it for per-directory settings like a default
+`anki-llm.yaml` is optional; use it for per-directory settings like a default
 model:
 
 ```yaml
@@ -345,7 +357,7 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 
 **Options:**
 
-- `-o, --output`: Output file path. When using a deck name, this is optional — a
+- `-o, --output`: Output file path. When using a deck name, this is optional; a
   filename is auto-generated from the deck name (e.g., `"My Deck"` →
   `my-deck.yaml`). When using `--query`, an output path is required.
 - `-n, --note-type`: Filter by note type (required if results contain multiple
@@ -406,7 +418,7 @@ output is piped.
 
 - `-o, --output`: Output file path (CSV or YAML).
 - `-p, --prompt`: Path to the prompt file. The prompt file **must** begin with a
-  YAML frontmatter block that declares the output field — see
+  YAML frontmatter block that declares the output field; see
   [Prompt file format](#prompt-file-format).
 
 **Common options:**
@@ -451,8 +463,8 @@ Existing translation for reference: {English}
 Wrap your final answer in <result></result> tags.
 ```
 
-- `output.field` — the Anki field name that receives the LLM's response.
-- `output.require_result_tag` — when `true`, only the content inside the last
+- `output.field`: the Anki field name that receives the LLM's response.
+- `output.require_result_tag`: when `true`, only the content inside the last
   `<result>...</result>` pair in the response is written; without tags, the row
   fails. Lets the model "think out loud" before committing to an answer.
 
@@ -510,7 +522,7 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 **Required options:**
 
 - `-p, --prompt`: Path to the prompt file. Must begin with a YAML frontmatter
-  block declaring the output field — see
+  block declaring the output field; see
   [Prompt file format](#prompt-file-format).
 
 **Common options:**
@@ -570,7 +582,7 @@ Every `process-deck` run is automatically snapshotted. The run ID is printed at
 the end; pass it to `anki-llm rollback <run-id>` to revert all changes. Use
 [`anki-llm history`](#anki-llm-history) to list past runs.
 
-`process-deck` does not support resume — use `process-file` for large runs where
+`process-deck` does not support resume; use `process-file` for large runs where
 interruptions are likely. Failed notes are logged to `<deck-name>-errors.jsonl`
 in the working directory.
 
@@ -670,7 +682,7 @@ enter it in the TUI directly, which lets you generate cards for multiple terms
 in a single session.
 
 - `<term>`: The word or phrase to generate cards for (must be in quotes if it
-  contains spaces). Optional — can be entered in the TUI.
+  contains spaces). Optional; can be entered in the TUI.
 
 **Common options:**
 
@@ -738,7 +750,7 @@ furigana, and verify quality all at once tends to degrade each individual
 aspect. Processing steps let you split this work into a pipeline where each step
 handles one concern with a focused prompt. The generation prompt can concentrate
 on producing natural, diverse content, while separate steps handle mechanical
-tasks like furigana annotation or quality checks — optionally using cheaper,
+tasks like furigana annotation or quality checks, optionally using cheaper,
 faster models for those steps.
 
 The `processing` config lets you run LLM steps in two phases:
@@ -751,7 +763,7 @@ The `processing` config lets you run LLM steps in two phases:
 Each step is either a **transform** (rewrites card fields) or a **check**
 (evaluates card quality).
 
-**Transform — single field:**
+**Transform: single field:**
 
 Use `target` to rewrite one field:
 
@@ -767,7 +779,7 @@ processing:
         English meaning: {front}
 ```
 
-**Transform — multiple fields:**
+**Transform: multiple fields:**
 
 Use `writes` to update several fields in one LLM call:
 
@@ -781,7 +793,7 @@ processing:
         Provide the reading with furigana and a brief context note.
 ```
 
-**Check — quality verification:**
+**Check: quality verification:**
 
 Check steps evaluate cards and return `pass`, `flag`, or `reject`:
 
@@ -799,7 +811,7 @@ processing:
         Text: {kanji}
 ```
 
-You don't need to specify the response format — the system automatically
+You don't need to specify the response format; the system automatically
 instructs the LLM to return structured JSON with `result` and `reason` fields.
 
 **Key details:**
@@ -936,10 +948,10 @@ intended reading in the source field next to each kanji cluster using the
 convention `漢字[かんじ]`, and `anki-llm tts` routes that reading into the
 provider's native pronunciation mechanism:
 
-Each provider gets the furigana routed into its native pronunciation mechanism —
+Each provider gets the furigana routed into its native pronunciation mechanism:
 SSML `<sub>` tags for Azure, plain-kana substitution for OpenAI, Google, and
 Polly. If you'd rather have the provider read the raw kanji directly, leave the
-`[reading]` annotations out — plain text without annotations passes through
+`[reading]` annotations out; plain text without annotations passes through
 unchanged.
 
 Each `[...]` annotation is bound to the immediately preceding run of CJK
@@ -979,10 +991,10 @@ Templates use the same `{field}` placeholder syntax as `process-deck`.
 
 `anki-llm tts` has two first-class modes:
 
-1. **Flag mode** (shown in the quick start above) — pass voice / target field /
+1. **Flag mode** (shown in the quick start above): pass voice / target field /
    source text / provider on the CLI. Best for one-shot fills, trying TTS for
    the first time, or processing decks you don't maintain.
-2. **Prompt mode** (`--prompt <file>`) — read the deck's TTS settings from a
+2. **Prompt mode** (`--prompt <file>`): read the deck's TTS settings from a
    YAML frontmatter alongside its LLM prompt. Best for decks you maintain in
    version control, where the voice and source-text strategy are inherent to the
    deck's design.
@@ -993,11 +1005,11 @@ The TTS settings for a deck (voice, model, target field, source text) are
 usually fixed and belong with the rest of the deck's design. They can be
 declared in the same YAML frontmatter `anki-llm generate` uses, under a
 top-level `tts:` block. **Both** `anki-llm tts --prompt` (for bulk-filling
-existing notes) and `anki-llm generate` (for new cards) read the same block —
+existing notes) and `anki-llm generate` (for new cards) read the same block;
 generate synthesizes + uploads audio for the cards you confirm at import time,
 and offers an in-TUI `p` preview hotkey while you're reviewing them. TTS
 credentials are read from environment variables and
-`~/.config/anki-llm/config.json` (see Provider configuration below) —
+`~/.config/anki-llm/config.json` (see Provider configuration below);
 `anki-llm generate`'s `--api-key` / `--api-base-url` flags are LLM-only and are
 never forwarded to the TTS provider, so you can point generate at OpenRouter /
 Ollama / a local proxy while still synthesizing audio against OpenAI or Azure.
@@ -1050,7 +1062,7 @@ prompt body...
 ```
 
 When `provider: azure`, `region` is required; `model` and `speed` aren't used.
-Credentials never live in the YAML — set `AZURE_TTS_KEY` in the environment
+Credentials never live in the YAML; set `AZURE_TTS_KEY` in the environment
 instead (see Provider configuration below).
 
 **Google Cloud TTS example (Japanese):**
@@ -1105,7 +1117,7 @@ prompt body...
 When `provider: amazon`, `region` is required (Polly is region-scoped) and
 `tts.model` is overloaded to mean the Polly `Engine`: one of `standard`,
 `neural`, `generative`, or `long-form`. `tts.speed` isn't used. As with the
-other providers, AWS credentials never live in the YAML — set
+other providers, AWS credentials never live in the YAML; set
 `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in the environment (see Provider
 configuration below).
 
@@ -1118,7 +1130,7 @@ anki-llm tts --prompt prompts/japanese.yaml
 The deck and note type are taken from the frontmatter. Pass `--deck` to target a
 different deck (still using the YAML's voice/source/etc.) or `--query` for a
 custom Anki search. CLI flags for voice, model, format, target field, source
-text, provider, speed, and note type are **not allowed** in `--prompt` mode —
+text, provider, speed, and note type are **not allowed** in `--prompt` mode;
 edit the YAML if you need to change them. That's the whole point of prompt mode:
 one place to look.
 
@@ -1128,7 +1140,7 @@ uses).
 
 **Skip-existing behavior**
 
-By default, notes whose target field is non-empty are skipped — `anki-llm tts`
+By default, notes whose target field is non-empty are skipped; `anki-llm tts`
 is a fill-in-the-gaps operation, not a rewrite. Pass `--force` to regenerate
 audio for every matching note.
 
@@ -1212,35 +1224,35 @@ for the full catalog.
 
 **Useful flags:**
 
-- `<deck>` / `--query <q>` — source selection. Takes a deck name positionally,
+- `<deck>` / `--query <q>`: source selection. Takes a deck name positionally,
   or an Anki search query via `--query`. Exactly one is required.
-- `--field <name>` — target field to write `[sound:...]` into (required).
-- `--template <path>` / `--text-field <name>` — source text: either a template
+- `--field <name>`: target field to write `[sound:...]` into (required).
+- `--template <path>` / `--text-field <name>`: source text: either a template
   file using `{field}` placeholders, or a raw source field. Exactly one is
   required.
-- `--note-type <name>` — required when the source spans multiple note types.
-- `--voice <name>` — voice identifier (required unless `tts_voice` is set in the
+- `--note-type <name>`: required when the source spans multiple note types.
+- `--voice <name>`: voice identifier (required unless `tts_voice` is set in the
   config).
-- `--provider <id>` — TTS provider. Accepts `openai`, `azure`, `google`, or
+- `--provider <id>`: TTS provider. Accepts `openai`, `azure`, `google`, or
   `amazon`; defaults to `openai`.
-- `--tts-model <id>` — for OpenAI, the backing model (defaults to
+- `--tts-model <id>`: for OpenAI, the backing model (defaults to
   `gpt-4o-mini-tts`); for Amazon Polly, the `Engine` name (`standard`, `neural`,
   `generative`, `long-form`); ignored by Azure and Google.
-- `--format <ext>` — output audio format (defaults to `mp3`).
-- `--speed <n>` — playback speed. Forwarded as `speakingRate` for Google;
+- `--format <ext>`: output audio format (defaults to `mp3`).
+- `--speed <n>`: playback speed. Forwarded as `speakingRate` for Google;
   ignored by Azure and Amazon.
-- `--api-key <key>` — OpenAI bearer token, Azure subscription key, or Google TTS
+- `--api-key <key>`: OpenAI bearer token, Azure subscription key, or Google TTS
   API key (depending on the active provider).
-- `--azure-region <region>` — Azure region (e.g. `eastus`). Required when
+- `--azure-region <region>`: Azure region (e.g. `eastus`). Required when
   `--provider azure` in flag mode, not allowed otherwise.
-- `--aws-region <region>` — AWS region for Polly (e.g. `us-east-1`).
-- `--aws-access-key-id <id>` / `--aws-secret-access-key <secret>` — Amazon Polly
+- `--aws-region <region>`: AWS region for Polly (e.g. `us-east-1`).
+- `--aws-access-key-id <id>` / `--aws-secret-access-key <secret>`: Amazon Polly
   credentials (flag mode).
-- `--batch-size <n>` — concurrent TTS requests.
-- `--retries <n>` — retries on transient failures (429, 5xx, timeouts).
-- `--force` — regenerate even if target field is already populated.
-- `--dry-run` — preview without calling the TTS API or mutating Anki.
-- `--limit <n>` — process at most N notes.
+- `--batch-size <n>`: concurrent TTS requests.
+- `--retries <n>`: retries on transient failures (429, 5xx, timeouts).
+- `--force`: regenerate even if target field is already populated.
+- `--dry-run`: preview without calling the TTS API or mutating Anki.
+- `--limit <n>`: process at most N notes.
 
 ---
 
@@ -1257,25 +1269,25 @@ to `--voice`, without clicking through four different provider doc sites.
   gender, and tags. Every whitespace-separated token must match (substring,
   case-insensitive). Example: `ja female neural` narrows to Japanese female
   neural voices across every provider.
-- `↑`/`↓`, `PageUp`/`PageDown` — move through the filtered list.
-- `Space` — audition the highlighted voice. A short sample is synthesized and
+- `↑`/`↓`, `PageUp`/`PageDown`: move through the filtered list.
+- `Space`: audition the highlighted voice. A short sample is synthesized and
   played through your system's audio player. Subsequent previews of the same
   voice are instant because the cache already has the mp3.
-- `Enter` — copy the complete `tts:` YAML scaffold for the highlighted voice to
+- `Enter`: copy the complete `tts:` YAML scaffold for the highlighted voice to
   the clipboard and flash a confirmation toast; the browser stays open so you
   can keep exploring. The scaffold includes `provider`, `voice`, `region` for
   Azure/Polly, and `model` for Polly voices that require a non-default engine.
   You still need to fill in `target` and `source.field`.
-- `Esc` / `Ctrl-C` — exit the browser.
+- `Esc` / `Ctrl-C`: exit the browser.
 
 **Pre-filters (CLI flags):**
 
-- `--lang <prefix>` — language code prefix, e.g. `ja`, `en-US`, `cmn`.
+- `--lang <prefix>`: language code prefix, e.g. `ja`, `en-US`, `cmn`.
   Multilingual voices (OpenAI) are always included.
-- `--provider <id>` — narrow to one of `openai`, `azure`, `google`, `amazon`.
-- `-q`, `--query <text>` — seed the omni-search input.
+- `--provider <id>`: narrow to one of `openai`, `azure`, `google`, `amazon`.
+- `-q`, `--query <text>`: seed the omni-search input.
 
-**Credentials.** Browsing works even with no credentials set — only the preview
+**Credentials.** Browsing works even with no credentials set; only the preview
 action (`Space`) needs API access. Providers with missing keys show an
 `Unavailable` status in the detail pane; attempting a preview surfaces the exact
 env var or config key to set. Credentials are resolved from the same env vars
@@ -1406,24 +1418,24 @@ anki-llm note-type status
 
 **Commands:**
 
-- `pull <name> [--force]` — Extract templates and CSS from Anki into
+- `pull <name> [--force]`: Extract templates and CSS from Anki into
   `note-types/<slug>/`. `--force` overwrites existing local files.
-- `push <name> [--dry-run] [--no-snapshot] [--force]` — Push local files to
+- `push <name> [--dry-run] [--no-snapshot] [--force]`: Push local files to
   Anki. Snapshots Anki's state first. Refuses if Anki has changed out-of-band
   since the last sync (`--force` overrides).
-- `push --all` — Push every note type in the workspace; reports per-item
+- `push --all`: Push every note type in the workspace; reports per-item
   failures.
-- `status` — Live-diff against Anki and report each note type as up-to-date,
+- `status`: Live-diff against Anki and report each note type as up-to-date,
   local-only changes, Anki-only changes, or diverged.
 
 **Layout:**
 
-- `note-types/<slug>/note-type.yaml` — manifest: real Anki model name and
+- `note-types/<slug>/note-type.yaml`: manifest: real Anki model name and
   canonical template order (commit this).
-- `note-types/<slug>/style.css` — note type CSS.
-- `note-types/<slug>/<template-slug>.front.html` / `<template-slug>.back.html` —
+- `note-types/<slug>/style.css`: note type CSS.
+- `note-types/<slug>/<template-slug>.front.html` / `<template-slug>.back.html`:
   one pair per card template.
-- `note-types/<slug>/.sync-state.json` — last-synced remote hash;
+- `note-types/<slug>/.sync-state.json`: last-synced remote hash;
   auto-gitignored inside each note-type directory.
 
 **Limitations:**
@@ -1496,7 +1508,7 @@ The `notes.yaml` file will look something like this:
 Next, create a prompt file (`prompt-ja-en.md`) to instruct the AI. The file
 begins with a YAML frontmatter block declaring the target field, followed by the
 prompt body. Use `{field_name}` syntax for variables that will be replaced with
-data from each note — we'll read from the `Japanese` field.
+data from each note; we'll read from the `Japanese` field.
 
 **File: `prompt-ja-en.md`**
 
@@ -1706,7 +1718,7 @@ anki-llm process-file sentences.yaml \
 ```
 
 The target field (`Key Vocabulary`) and `require_result_tag: true` are declared
-in the prompt file's frontmatter — no extra CLI flags needed.
+in the prompt file's frontmatter; no extra CLI flags needed.
 
 ### Sample output snippet
 
@@ -1796,16 +1808,16 @@ After generation, the TUI moves to the selection screen.
 The top panel lists all generated cards with checkboxes, while the bottom panel
 shows a full preview of the currently focused card.
 
-- <kbd>Space</kbd> — toggle card selection
-- <kbd>a</kbd> / <kbd>n</kbd> — select all / none
-- <kbd>e</kbd> — edit card in `$EDITOR`
-- <kbd>r</kbd> — generate more cards for the same term
-- <kbd>t</kbd> — generate more cards for a new term
-- <kbd>R</kbd> — regenerate a card with feedback
-- <kbd>d</kbd> — remove a card from the list
-- <kbd>c</kbd> — copy card to clipboard
-- <kbd>p</kbd> — preview the focused card's audio when TTS is enabled
-- <kbd>z</kbd> — toggle skipping post-select processing
+- <kbd>Space</kbd>: toggle card selection
+- <kbd>a</kbd> / <kbd>n</kbd>: select all / none
+- <kbd>e</kbd>: edit card in `$EDITOR`
+- <kbd>r</kbd>: generate more cards for the same term
+- <kbd>t</kbd>: generate more cards for a new term
+- <kbd>R</kbd>: regenerate a card with feedback
+- <kbd>d</kbd>: remove a card from the list
+- <kbd>c</kbd>: copy card to clipboard
+- <kbd>p</kbd>: preview the focused card's audio when TTS is enabled
+- <kbd>z</kbd>: toggle skipping post-select processing
 
 Duplicate cards are flagged with `[dup]` and shown as a diff against the
 existing Anki card. Press <kbd>f</kbd> to force-select a duplicate if needed.
