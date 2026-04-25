@@ -20,6 +20,7 @@ use super::provider::{
 use super::render::{render_plain_text, render_ssml};
 use super::spec::{CliOverrides, resolve as resolve_tts_spec};
 use super::template::TemplateSource;
+use super::text::strip_annotations;
 
 /// A fully-prepared synthesis job. Holds the provider-ready payload, the
 /// content-addressed cache filename, the sound tag to stamp onto the Anki
@@ -115,7 +116,16 @@ impl TtsService {
             bail!("source text is empty after normalization");
         }
 
-        let utterance = parse_furigana(&stripped).with_context(|| "failed to parse furigana")?;
+        let utterance = match parse_furigana(&stripped) {
+            Ok(u) => u,
+            Err(_) => {
+                // Raw LLM output may contain brackets that are not valid
+                // furigana annotations (e.g. `[N3]`, `英語[English]`). Strip
+                // them and retry so preview still produces audio.
+                let fallback = strip_annotations(&stripped);
+                parse_furigana(&fallback).with_context(|| "failed to parse furigana")?
+            }
+        };
         if utterance.is_empty() {
             bail!("source text has no renderable content");
         }

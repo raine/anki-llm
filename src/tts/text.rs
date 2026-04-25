@@ -5,6 +5,7 @@ use regex::Regex;
 static HTML_TAG: OnceLock<Regex> = OnceLock::new();
 static CLOZE: OnceLock<Regex> = OnceLock::new();
 static SOUND_TAG: OnceLock<Regex> = OnceLock::new();
+static ANNOTATION: OnceLock<Regex> = OnceLock::new();
 static WHITESPACE: OnceLock<Regex> = OnceLock::new();
 
 fn html_tag() -> &'static Regex {
@@ -16,6 +17,9 @@ fn cloze() -> &'static Regex {
 }
 fn sound_tag() -> &'static Regex {
     SOUND_TAG.get_or_init(|| Regex::new(r"\[sound:[^\]]*\]").unwrap())
+}
+fn annotation() -> &'static Regex {
+    ANNOTATION.get_or_init(|| Regex::new(r"\[[^\]]*\]").unwrap())
 }
 fn ws() -> &'static Regex {
     WHITESPACE.get_or_init(|| Regex::new(r"\s+").unwrap())
@@ -33,6 +37,13 @@ pub fn normalize(raw: &str) -> String {
     let t = html_tag().replace_all(&t, " ");
     let t = decode_entities(&t);
     ws().replace_all(t.trim(), " ").into_owned()
+}
+
+/// Strip `[...]` furigana annotations, leaving only the surface text.
+/// Used as a fallback when `parse_furigana` rejects malformed raw LLM output.
+pub fn strip_annotations(s: &str) -> String {
+    ws().replace_all(annotation().replace_all(s, "").trim(), " ")
+        .into_owned()
 }
 
 fn decode_entities(s: &str) -> String {
