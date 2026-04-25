@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.0.13 (2026-04-25)
+
+- Add `note-type` command — pull Anki note type templates and CSS into local
+  files, edit them in any editor, then push changes back to Anki. `note-type
+status` shows a live diff of what has drifted.
+- Add workspace support — a directory with a `prompts/` folder is now a
+  workspace. Run `workspace init` to set one up. Prompts and settings are
+  resolved from the current workspace automatically.
+- Add `workspace init` and `workspace info` subcommands
+- **Breaking:** `prompts_dir` config setting is replaced by `default_workspace`.
+  Set it to your workspace directory and all commands resolve prompts, note
+  types, and default model from there regardless of your working directory.
+- `process-deck` now skips notes that already have content in the target field
+  by default — use `--force` to re-process and overwrite existing values.
+
 ## v2.0.12 (2026-04-23)
 
 - **Breaking:** `process-deck` and `process-file` prompts now require a YAML
