@@ -88,9 +88,15 @@ pub fn resolve_model(user_model: Option<&str>) -> String {
     {
         return m.clone();
     }
-    if env::var("GEMINI_API_KEY").is_ok() {
+    let has_key = |var: &str| {
+        env::var(var)
+            .ok()
+            .filter(|k| !k.trim().is_empty())
+            .is_some()
+    };
+    if has_key("GEMINI_API_KEY") {
         "gemini-2.5-flash".to_string()
-    } else if env::var("DEEPSEEK_API_KEY").is_ok() {
+    } else if has_key("DEEPSEEK_API_KEY") {
         "deepseek-v4-flash".to_string()
     } else {
         "gpt-5".to_string()
