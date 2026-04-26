@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.0.14 (2026-04-26)
+
+- Add `anki_connect_url` config key to customize the AnkiConnect endpoint (defaults to `http://localhost:8765`).
+- `tts`: fall back to annotation-stripped text when furigana parsing fails, so audio still gets generated for notes with malformed ruby markup.
+
 ## v2.0.13 (2026-04-25)
 
 - Add `note-type` command — pull Anki note type templates and CSS into local
