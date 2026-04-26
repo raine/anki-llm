@@ -446,7 +446,16 @@ fn run_single_step(
                     logger.log(user_prompt, &result.content);
                 }
 
-                let outcome = parse_step_result(&result.content, step, field_map_keys)?;
+                let outcome = match parse_step_result(&result.content, step, field_map_keys) {
+                    Ok(o) => o,
+                    Err(e) => {
+                        last_error = e.to_string();
+                        if let Some(logger) = logger {
+                            logger.log_error(user_prompt, &last_error);
+                        }
+                        continue;
+                    }
+                };
 
                 let (in_tok, out_tok, cost) = result
                     .usage
