@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 
-use crate::anki::client::AnkiClient;
+use crate::anki::client::anki_client;
 use crate::cli::QueryArgs;
 
 const ANKI_CONNECT_DOCS: &str = include_str!("../../ANKI_CONNECT.md");
@@ -24,7 +24,7 @@ pub fn run(args: QueryArgs) -> Result<()> {
         None => None,
     };
 
-    let client = AnkiClient::new();
+    let client = anki_client();
     match client.request_raw(&args.action, params) {
         Ok(result) => {
             println!("{}", serde_json::to_string_pretty(&result)?);

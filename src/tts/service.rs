@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
 use serde_json::Value;
 
-use crate::anki::client::AnkiClient;
+use crate::anki::client::{AnkiClient, anki_client};
 use crate::data::Row;
 use crate::template::frontmatter::TtsSpec;
 
@@ -252,7 +252,7 @@ impl SessionTts {
         }
         let built = build_bundle(
             &self.spec,
-            AnkiClient::new(),
+            anki_client(),
             TtsBundleOptions { azure_region: None },
         )?;
         // Single-threaded OnceCell — nothing else can beat us to `set`.
@@ -650,7 +650,7 @@ mod tests {
             TemplateSource::field("front".into()),
             "Audio",
         ));
-        let media = Arc::new(AnkiMediaStore::new(AnkiClient::new()));
+        let media = Arc::new(AnkiMediaStore::new(anki_client()));
         let bundle = TtsBundle {
             service: service.clone(),
             media: media.clone(),

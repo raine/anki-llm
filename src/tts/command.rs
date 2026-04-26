@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
 use serde_json::Value;
 
-use crate::anki::client::{AnkiClient, anki_quote};
+use crate::anki::client::{AnkiClient, anki_client, anki_quote};
 use crate::batch::controller::{ControllerRuntime, run_batch_controller};
 use crate::batch::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
 use crate::batch::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
@@ -261,7 +261,7 @@ fn run_prompt_mode(args: TtsArgs) -> Result<()> {
     let expected_note_type = parsed.frontmatter.note_type.clone();
     run_with_resolved(ResolvedRunInputs {
         args: &args,
-        anki: AnkiClient::new(),
+        anki: anki_client(),
         query,
         source_label,
         source_name,
@@ -354,7 +354,7 @@ fn run_flag_mode(args: TtsArgs) -> Result<()> {
     let note_type = args.note_type.clone();
     run_with_resolved(ResolvedRunInputs {
         args: &args,
-        anki: AnkiClient::new(),
+        anki: anki_client(),
         query,
         source_label,
         source_name,
@@ -595,7 +595,7 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
     let cache_dir = TtsCache::default_dir()
         .context("failed to locate cache directory (home dir unavailable)")?;
     let cache = Arc::new(TtsCache::new(cache_dir).context("failed to initialize TTS cache")?);
-    let media = Arc::new(AnkiMediaStore::new(AnkiClient::new()));
+    let media = Arc::new(AnkiMediaStore::new(anki_client()));
 
     let source = Arc::new(resolved.source.clone());
     let process_fn = build_tts_process_fn(TtsProcessConfig {

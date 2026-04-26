@@ -249,6 +249,9 @@ URL) so you don't have to repeat flags on every command.
 # Set or override defaults
 anki-llm config set model gpt-4o-mini
 anki-llm config set api_base_url https://openrouter.ai/api/v1
+
+# WSL or remote Anki: point at a non-default AnkiConnect host
+anki-llm config set anki_connect_url http://192.168.1.100:8765
 ```
 
 Config file lives at `~/.config/anki-llm/config.json`.

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use indexmap::{IndexMap, IndexSet};
 
-use crate::anki::client::{AnkiClient, anki_quote};
+use crate::anki::client::{anki_client, anki_quote};
 use crate::anki::schema::AddNoteParams;
 use crate::cli::ImportArgs;
 use crate::data::io::parse_data_file;
@@ -14,7 +14,7 @@ pub fn run(args: ImportArgs) -> Result<()> {
         args.deck
     );
 
-    let client = AnkiClient::new();
+    let client = anki_client();
 
     let model_name = match args.note_type {
         Some(ref name) => name.clone(),

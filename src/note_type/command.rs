@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use anyhow::{Result, bail};
 use indexmap::IndexMap;
 
-use crate::anki::client::AnkiClient;
+use crate::anki::client::{AnkiClient, anki_client};
 use crate::anki::schema::CardTemplate;
 use crate::cli::NoteTypeAction;
 use crate::note_type::files::{NoteTypeFiles, NoteTypeManifest, TemplateEntry, TemplatePair};
@@ -35,7 +35,7 @@ pub fn run(action: NoteTypeAction) -> Result<()> {
 }
 
 fn pull(name: &str, force: bool) -> Result<()> {
-    let client = AnkiClient::new();
+    let client = anki_client();
     ensure_model_exists(&client, name)?;
 
     let css = client.model_styling(name)?;
@@ -112,7 +112,7 @@ fn pull(name: &str, force: bool) -> Result<()> {
 }
 
 fn push_one(name: &str, dry_run: bool, no_snapshot: bool, force: bool) -> Result<()> {
-    let client = AnkiClient::new();
+    let client = anki_client();
     ensure_model_exists(&client, name)?;
     push_one_with_client(&client, name, dry_run, no_snapshot, force)
 }
@@ -202,7 +202,7 @@ fn push_all(dry_run: bool, no_snapshot: bool, force: bool) -> Result<()> {
         bail!("No note types found under note-types/");
     }
 
-    let client = AnkiClient::new();
+    let client = anki_client();
     let models = client.model_names()?;
 
     let mut failures: Vec<(String, anyhow::Error)> = Vec::new();
@@ -244,7 +244,7 @@ fn status() -> Result<()> {
         return Ok(());
     }
 
-    let client = AnkiClient::new();
+    let client = anki_client();
     let anki_models = client.model_names()?;
     let mut any_dirty = false;
 

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
-use crate::anki::client::AnkiClient;
+use crate::anki::client::anki_client;
 use crate::cli::RollbackArgs;
 use crate::style::style;
 
@@ -35,7 +35,7 @@ pub fn run(args: RollbackArgs) -> Result<()> {
         snapshot.source_display()
     );
 
-    let anki = AnkiClient::new();
+    let anki = anki_client();
 
     // Fetch current state of all affected notes
     let note_ids: Vec<i64> = snapshot.notes.iter().map(|n| n.note_id).collect();

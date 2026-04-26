@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use inquire::{Confirm, Select};
 
-use crate::anki::client::AnkiClient;
+use crate::anki::client::anki_client;
 use crate::cli::GenerateInitArgs;
 use crate::data::slug::slugify_deck_name;
 use crate::llm::client::LlmClient;
@@ -35,7 +35,7 @@ fn run_wizard(args: GenerateInitArgs) -> Result<()> {
     eprintln!("generate-init: Create a prompt template for your Anki deck");
     eprintln!("This wizard queries your Anki collection to set up a prompt file.\n");
 
-    let anki = AnkiClient::new();
+    let anki = anki_client();
 
     let deck = select_deck(&anki)?;
     let note_type = select_note_type(&anki, &deck)?;

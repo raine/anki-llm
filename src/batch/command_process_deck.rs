@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
 use serde_json::Value;
 
-use crate::anki::client::{AnkiClient, anki_quote};
+use crate::anki::client::{anki_client, anki_quote};
 use crate::cli::ProcessDeckArgs;
 use crate::data::Row;
 use crate::data::slug::slugify_deck_name;
@@ -197,7 +197,7 @@ impl BatchSession for DeckSession {
 }
 
 pub fn run(args: ProcessDeckArgs) -> Result<()> {
-    let anki = AnkiClient::new();
+    let anki = anki_client();
 
     // Load and parse the prompt up front so note_type validation and
     // error handling don't depend on Anki state.

@@ -7,6 +7,15 @@ use crate::anki::error::AnkiConnectError;
 use crate::anki::schema::{
     AddNoteParams, AnkiRequest, AnkiResponse, CardTemplate, ModelStyling, NoteInfo,
 };
+use crate::config::store::read_config;
+
+/// Build an `AnkiClient` using the configured URL when available, falling back to the default.
+pub fn anki_client() -> AnkiClient {
+    match read_config().ok().and_then(|c| c.anki_connect_url) {
+        Some(url) => AnkiClient::with_url(url),
+        None => AnkiClient::new(),
+    }
+}
 
 pub const DEFAULT_URL: &str = "http://127.0.0.1:8765";
 

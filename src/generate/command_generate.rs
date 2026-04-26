@@ -2,7 +2,7 @@ use std::sync::mpsc;
 
 use anyhow::Result;
 
-use crate::anki::client::AnkiClient;
+use crate::anki::client::{AnkiClient, anki_client};
 use crate::cli::GenerateArgs;
 use crate::llm::client::LlmClient;
 use crate::llm::logger::LlmLogger;
@@ -107,7 +107,7 @@ fn prepare_session(
     progress.step_done(PipelineStep::LoadPrompt, None);
 
     progress.step_start(PipelineStep::ValidateAnki, None);
-    let anki = AnkiClient::new();
+    let anki = anki_client();
     let validation = validate_anki_assets(&anki, &loaded.frontmatter).inspect_err(|e| {
         progress.step_error(PipelineStep::ValidateAnki, &e.to_string());
     })?;
@@ -655,7 +655,7 @@ fn run_copy_mode(
         s.cyan(&frontmatter.note_type)
     );
 
-    let anki = AnkiClient::new();
+    let anki = anki_client();
     let validation = validate_anki_assets(&anki, frontmatter)?;
     eprintln!(
         "  {}  {}",
@@ -767,7 +767,7 @@ fn run_copy_mode(
             // `--api-key`/`--api-base-url` which target the LLM endpoint.
             Some(crate::tts::service::build_bundle(
                 spec,
-                AnkiClient::new(),
+                anki_client(),
                 crate::tts::service::TtsBundleOptions { azure_region: None },
             )?)
         } else {

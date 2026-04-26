@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
-use crate::anki::client::{AnkiClient, anki_quote};
+use crate::anki::client::{anki_client, anki_quote};
 use crate::cli::ExportArgs;
 use crate::data::io::{atomic_write_file, serialize_rows};
 use crate::data::rows::Row;
@@ -36,7 +36,7 @@ pub fn run(args: ExportArgs) -> Result<()> {
     eprintln!("Exporting {source_label}");
     eprintln!("{}", "=".repeat(60));
 
-    let client = AnkiClient::new();
+    let client = anki_client();
 
     // Build query from either deck name or raw query
     let mut query = if let Some(ref q) = args.query {

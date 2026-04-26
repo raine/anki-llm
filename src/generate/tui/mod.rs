@@ -24,7 +24,7 @@ use widgets::{ModelPickerState, draw_log_panel, draw_model_picker, draw_step_log
 use crate::tui::line_input::LineInput;
 use crate::tui::theme::{Glyphs, SPINNER_FRAMES, THEME, footer_cmd, footer_pipe};
 
-use crate::anki::client::AnkiClient;
+use crate::anki::client::anki_client;
 use crate::cli::GenerateArgs;
 use crate::llm::pricing;
 
@@ -769,7 +769,7 @@ impl App {
                     } = self.mode
                         && !note_ids.is_empty()
                     {
-                        let anki = AnkiClient::new();
+                        let anki = anki_client();
                         match anki.delete_notes(note_ids) {
                             Ok(()) => {
                                 let count = note_ids.len();
@@ -1388,7 +1388,7 @@ fn edit_card_in_editor(terminal: &mut DefaultTerminal, app: &mut App, card_index
         .cloned()
         .unwrap_or_default();
     let (new_dup_note_id, new_duplicate_fields) = {
-        let anki = AnkiClient::new();
+        let anki = anki_client();
         super::cards::lookup_duplicate_metadata(
             &anki,
             &first_field_value,
