@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
 
 use crate::anki::client::{AnkiClient, anki_client};
@@ -181,7 +181,17 @@ fn push_one_with_client(
 
     let wire = to_wire(&files.templates);
     client.update_model_styling(name, &files.css)?;
-    client.update_model_templates(name, &wire)?;
+    if let Err(e) = client.update_model_templates(name, &wire) {
+        // Templates failed after styling succeeded. Try to restore the
+        // previous styling so Anki isn't left with a half-applied push.
+        // Best-effort: report the original error either way.
+        if let Err(revert_err) = client.update_model_styling(name, &anki_css) {
+            return Err(e).context(format!(
+                "templates update failed and styling could not be reverted: {revert_err}"
+            ));
+        }
+        return Err(e).context("templates update failed; styling reverted to previous state");
+    }
 
     let new_hash = hash_remote(&files.css, &wire);
     state::write(
