@@ -293,10 +293,13 @@ pub fn run(args: ImportArgs) -> Result<()> {
 }
 
 fn value_to_string(v: &serde_json::Value) -> String {
-    match v {
+    let s = match v {
         serde_json::Value::String(s) => s.clone(),
         serde_json::Value::Number(n) => n.to_string(),
         serde_json::Value::Null => String::new(),
         other => other.to_string(),
-    }
+    };
+    // Mirror the export side, which strips \r so round-tripped data
+    // doesn't grow stray carriage returns from Windows-edited files.
+    s.replace('\r', "")
 }
