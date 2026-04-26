@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -10,6 +9,22 @@ use crate::note_type::paths::{note_types_root, slugify};
 
 const MANIFEST_FILE: &str = "note-type.yaml";
 const CSS_FILE: &str = "style.css";
+
+/// Build a sibling path next to `root` whose final component has `.<suffix>`
+/// appended. Used to place the staging and backup directories alongside the
+/// real one so they share a filesystem (required for atomic rename).
+fn sibling_with_suffix(root: &Path, suffix: &str) -> PathBuf {
+    let mut name = root
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_default();
+    name.push(".");
+    name.push(suffix);
+    match root.parent() {
+        Some(parent) => parent.join(name),
+        None => PathBuf::from(name),
+    }
+}
 
 /// On-disk manifest: real Anki names + canonical template order.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,46 +97,80 @@ impl NoteTypeFiles {
         })
     }
 
-    /// Write files to disk, removing any stale `.front.html`/`.back.html` from prior runs.
+    /// Write files to disk atomically. Builds a sibling staging directory,
+    /// then swaps it into place via rename so a crash mid-write can never
+    /// leave the on-disk note type partially updated. Stale templates from
+    /// previous pulls are dropped because the staging directory is built
+    /// from scratch.
     pub fn write(&self) -> Result<()> {
-        fs::create_dir_all(&self.root)?;
+        if let Some(parent) = self.root.parent() {
+            fs::create_dir_all(parent)?;
+        }
 
-        let manifest_path = self.root.join(MANIFEST_FILE);
+        let pid = std::process::id();
+        let staging = sibling_with_suffix(&self.root, &format!("tmp.{pid}"));
+        let backup = sibling_with_suffix(&self.root, &format!("old.{pid}"));
+
+        // Clean up any leftover staging/backup dirs from a previous crash.
+        let _ = fs::remove_dir_all(&staging);
+        let _ = fs::remove_dir_all(&backup);
+
+        fs::create_dir_all(&staging)
+            .with_context(|| format!("failed to create staging dir {}", staging.display()))?;
+
+        if let Err(e) = self.write_into(&staging) {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(e);
+        }
+
+        // Move the existing dir aside so the rename below sees an empty slot
+        // (rename-onto-non-empty-dir is not portable). On any failure we
+        // restore from the backup.
+        let had_old = self.root.exists();
+        if had_old && let Err(e) = fs::rename(&self.root, &backup) {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(anyhow::Error::from(e).context(format!(
+                "failed to move existing {} aside",
+                self.root.display()
+            )));
+        }
+
+        if let Err(e) = fs::rename(&staging, &self.root) {
+            if had_old {
+                let _ = fs::rename(&backup, &self.root);
+            }
+            let _ = fs::remove_dir_all(&staging);
+            return Err(anyhow::Error::from(e).context(format!(
+                "failed to swap staging dir into {}",
+                self.root.display()
+            )));
+        }
+
+        if had_old {
+            let _ = fs::remove_dir_all(&backup);
+        }
+
+        Ok(())
+    }
+
+    /// Populate `dir` with the manifest, CSS, and template files.
+    fn write_into(&self, dir: &Path) -> Result<()> {
         let manifest_yaml = serde_yaml::to_string(&self.manifest)?;
-        fs::write(&manifest_path, manifest_yaml)
-            .with_context(|| format!("failed to write {}", manifest_path.display()))?;
+        fs::write(dir.join(MANIFEST_FILE), manifest_yaml)
+            .with_context(|| format!("failed to write {}", dir.join(MANIFEST_FILE).display()))?;
 
-        let css_path = self.root.join(CSS_FILE);
-        fs::write(&css_path, &self.css)
-            .with_context(|| format!("failed to write {}", css_path.display()))?;
+        fs::write(dir.join(CSS_FILE), &self.css)
+            .with_context(|| format!("failed to write {}", dir.join(CSS_FILE).display()))?;
 
-        let mut keep: HashSet<String> =
-            HashSet::from([MANIFEST_FILE.to_string(), CSS_FILE.to_string()]);
         for entry in &self.manifest.templates {
-            let front_name = format!("{}.front.html", entry.slug);
-            let back_name = format!("{}.back.html", entry.slug);
             let pair = self.templates.get(&entry.name).with_context(|| {
                 format!(
                     "internal error: manifest template '{}' missing from templates map",
                     entry.name
                 )
             })?;
-            fs::write(self.root.join(&front_name), &pair.front)?;
-            fs::write(self.root.join(&back_name), &pair.back)?;
-            keep.insert(front_name);
-            keep.insert(back_name);
-        }
-
-        // Remove stale template files from previous pulls.
-        for dirent in fs::read_dir(&self.root)? {
-            let dirent = dirent?;
-            let Some(name) = dirent.file_name().to_str().map(String::from) else {
-                continue;
-            };
-            let is_template_file = name.ends_with(".front.html") || name.ends_with(".back.html");
-            if is_template_file && !keep.contains(&name) {
-                fs::remove_file(dirent.path())?;
-            }
+            fs::write(dir.join(format!("{}.front.html", entry.slug)), &pair.front)?;
+            fs::write(dir.join(format!("{}.back.html", entry.slug)), &pair.back)?;
         }
 
         Ok(())
