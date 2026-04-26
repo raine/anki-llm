@@ -236,11 +236,16 @@ pub fn read_config() -> Result<AppConfig, ConfigError> {
 }
 
 /// Writes the config to disk, creating the parent directory if needed.
+///
+/// Writes atomically: serializes into a sibling temp file, fsyncs, then
+/// renames over the live config so a crash mid-write can't truncate the
+/// existing file. On Unix the file is created with mode `0600` because the
+/// config holds API keys (Azure / Google / AWS / etc.).
 pub fn write_config(config: &AppConfig) -> Result<(), ConfigError> {
     let path = config_path()?;
     ensure_parent_dir(&path)?;
     let json = serde_json::to_string_pretty(config).expect("config serialization should not fail");
-    fs::write(&path, json).map_err(|e| ConfigError::Write { path, source: e })
+    write_atomic_secure(&path, json.as_bytes()).map_err(|e| ConfigError::Write { path, source: e })
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +297,38 @@ fn ensure_parent_dir(path: &Path) -> Result<(), ConfigError> {
             path: parent.to_path_buf(),
             source: e,
         })?;
+    }
+    Ok(())
+}
+
+/// Write `bytes` to `path` atomically and (on Unix) with mode 0600.
+fn write_atomic_secure(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("config.json");
+    let tmp = parent.join(format!(".{file_name}.tmp.{}", std::process::id()));
+
+    // Open with restrictive perms on Unix; fall back to default on other OSes.
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut file = opts.open(&tmp)?;
+    if let Err(e) = file.write_all(bytes).and_then(|_| file.sync_all()) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    drop(file);
+
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
     }
     Ok(())
 }
