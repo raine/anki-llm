@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.15 (2026-04-26)
+
+- Add `doctor` command to diagnose configuration, API keys, AnkiConnect connectivity, and workspace setup.
+- Add support for DeepSeek V4 models.
+- Treat empty `DEEPSEEK_API_KEY` and `GEMINI_API_KEY` environment variables as unset, so they fall back to other configured providers.
+
 ## v2.0.14 (2026-04-26)
 
 - Add `anki_connect_url` config key to customize the AnkiConnect endpoint (defaults to `http://localhost:8765`).
