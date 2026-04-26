@@ -172,7 +172,7 @@ impl AnkiClient {
         &self,
         deck_name: &str,
     ) -> Result<Option<String>, AnkiConnectError> {
-        let note_ids = self.find_notes(&format!("deck:\"{deck_name}\""))?;
+        let note_ids = self.find_notes(&format!("deck:{}", anki_quote(deck_name)))?;
         if note_ids.is_empty() {
             return Ok(None);
         }
@@ -185,7 +185,7 @@ impl AnkiClient {
         &self,
         deck_name: &str,
     ) -> Result<Vec<String>, AnkiConnectError> {
-        let note_ids = self.find_notes(&format!("deck:\"{deck_name}\""))?;
+        let note_ids = self.find_notes(&format!("deck:{}", anki_quote(deck_name)))?;
         if note_ids.is_empty() {
             return Ok(Vec::new());
         }

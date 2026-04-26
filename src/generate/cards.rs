@@ -66,16 +66,31 @@ pub fn escape_anki_query(value: &str) -> String {
         .replace('_', "\\_")
 }
 
+/// Build a duplicate-detection query: notes of the given type in the given
+/// deck whose `field_name` equals `value`. All four arguments are escaped so
+/// quotes/backslashes/wildcards in note type or deck names cannot break or
+/// reshape the query. The value is anchored to the named field rather than
+/// being searched anywhere on the note.
+pub fn build_duplicate_query(note_type: &str, deck: &str, field_name: &str, value: &str) -> String {
+    format!(
+        "\"note:{}\" \"deck:{}\" \"{}:{}\"",
+        escape_anki_query(note_type),
+        escape_anki_query(deck),
+        escape_anki_query(field_name),
+        escape_anki_query(value),
+    )
+}
+
 /// Check if a note with this first field value already exists.
 /// Returns the note ID of the first match, or None if no duplicate found.
 fn check_duplicate(
     anki: &AnkiClient,
     first_field_value: &str,
+    first_field_name: &str,
     note_type: &str,
     deck: &str,
 ) -> Result<Option<i64>, anyhow::Error> {
-    let escaped = escape_anki_query(first_field_value);
-    let query = format!("\"note:{note_type}\" \"deck:{deck}\" \"{escaped}\"");
+    let query = build_duplicate_query(note_type, deck, first_field_name, first_field_value);
     let ids = anki.find_notes(&query)?;
     Ok(ids.into_iter().next())
 }
@@ -108,13 +123,14 @@ pub(super) type DuplicateMetadata = (Option<i64>, Option<IndexMap<String, String
 pub(super) fn lookup_duplicate_metadata(
     anki: &AnkiClient,
     first_field_value: &str,
+    first_field_name: &str,
     note_type: &str,
     deck: &str,
 ) -> Result<DuplicateMetadata, anyhow::Error> {
     if first_field_value.is_empty() {
         return Ok((None, None));
     }
-    let dup_note_id = check_duplicate(anki, first_field_value, note_type, deck)?;
+    let dup_note_id = check_duplicate(anki, first_field_value, first_field_name, note_type, deck)?;
     let duplicate_fields = dup_note_id.and_then(|id| fetch_note_fields(anki, id).ok());
     Ok((dup_note_id, duplicate_fields))
 }
@@ -145,6 +161,7 @@ pub(super) fn build_validated_card(
     let (dup_note_id, duplicate_fields) = lookup_duplicate_metadata(
         anki,
         first_field_value,
+        first_field_name,
         &frontmatter.note_type,
         &frontmatter.deck,
     )?;

@@ -1392,6 +1392,7 @@ fn edit_card_in_editor(terminal: &mut DefaultTerminal, app: &mut App, card_index
         super::cards::lookup_duplicate_metadata(
             &anki,
             &first_field_value,
+            &info.first_field_name,
             &info.note_type,
             &info.deck,
         )

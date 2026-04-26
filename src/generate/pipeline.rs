@@ -830,14 +830,11 @@ pub fn run_pipeline_for_term(
                     .get(first_field_name)
                     .filter(|v| !v.is_empty())
                 {
-                    let escaped = val
-                        .replace('\\', "\\\\")
-                        .replace('"', "\\\"")
-                        .replace('*', "\\*")
-                        .replace('_', "\\_");
-                    let query = format!(
-                        "\"note:{}\" \"deck:{}\" \"{escaped}\"",
-                        config.frontmatter.note_type, config.frontmatter.deck
+                    let query = super::cards::build_duplicate_query(
+                        &config.frontmatter.note_type,
+                        &config.frontmatter.deck,
+                        first_field_name,
+                        val,
                     );
                     card.is_duplicate = config
                         .anki
