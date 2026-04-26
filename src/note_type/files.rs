@@ -26,6 +26,69 @@ fn sibling_with_suffix(root: &Path, suffix: &str) -> PathBuf {
     }
 }
 
+/// Iterate sibling directories in `parent` whose name starts with `<base>.<prefix>.`
+/// (e.g. orphaned `foo.tmp.123` or `foo.old.456` left by crashed atomic swaps).
+fn iter_orphan_siblings<'a>(root: &'a Path, prefix: &'a str) -> impl Iterator<Item = PathBuf> + 'a {
+    let parent = root.parent().map(Path::to_path_buf);
+    let base = root
+        .file_name()
+        .map(|s| s.to_os_string())
+        .unwrap_or_default();
+    let needle = {
+        let mut n = base.clone();
+        n.push(".");
+        n.push(prefix);
+        n.push(".");
+        n
+    };
+    parent
+        .into_iter()
+        .flat_map(|p| fs::read_dir(p).into_iter().flatten())
+        .flatten()
+        .map(|e| e.path())
+        .filter(move |p| {
+            p.file_name()
+                .and_then(|n| {
+                    n.to_str()
+                        .zip(needle.to_str())
+                        .map(|(name, prefix)| name.starts_with(prefix))
+                })
+                .unwrap_or(false)
+        })
+}
+
+/// Restore from an orphaned `<base>.old.*` backup if root is missing. The
+/// previous run died between `root → backup` and `staging → root`, leaving
+/// no live root. Pick the first matching backup and rename it back into
+/// place. Any leftover staging is removed by `cleanup_orphan_siblings`.
+fn recover_orphaned_swap(root: &Path) -> Result<()> {
+    if root.exists() {
+        return Ok(());
+    }
+    if let Some(backup) = iter_orphan_siblings(root, "old").next() {
+        fs::rename(&backup, root).with_context(|| {
+            format!(
+                "failed to restore {} from {}",
+                root.display(),
+                backup.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+/// Best-effort removal of orphaned `.tmp.*` / `.old.*` siblings from prior
+/// crashed runs (any PID). Called before starting a fresh swap so leftover
+/// directories don't accumulate.
+fn cleanup_orphan_siblings(root: &Path) {
+    for path in iter_orphan_siblings(root, "tmp").collect::<Vec<_>>() {
+        let _ = fs::remove_dir_all(&path);
+    }
+    for path in iter_orphan_siblings(root, "old").collect::<Vec<_>>() {
+        let _ = fs::remove_dir_all(&path);
+    }
+}
+
 /// On-disk manifest: real Anki names + canonical template order.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoteTypeManifest {
@@ -107,11 +170,19 @@ impl NoteTypeFiles {
             fs::create_dir_all(parent)?;
         }
 
+        // Recover from a prior crash that died between `root → backup` and
+        // `staging → root`: root is missing but a sibling `<base>.old.<pid>`
+        // exists. Restore it before doing anything else so we don't lose data
+        // when the parent layer counts the root as absent.
+        recover_orphaned_swap(&self.root)?;
+
         let pid = std::process::id();
         let staging = sibling_with_suffix(&self.root, &format!("tmp.{pid}"));
         let backup = sibling_with_suffix(&self.root, &format!("old.{pid}"));
 
-        // Clean up any leftover staging/backup dirs from a previous crash.
+        // Clean up any leftover staging/backup dirs from previous crashes,
+        // including ones from other PIDs.
+        cleanup_orphan_siblings(&self.root);
         let _ = fs::remove_dir_all(&staging);
         let _ = fs::remove_dir_all(&backup);
 
