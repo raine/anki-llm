@@ -177,8 +177,8 @@ fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> Option<Row
         }
 
         if attempt > 0 {
-            let backoff =
-                Duration::from_millis(1000 * 2u64.pow(attempt - 1)).min(Duration::from_secs(30));
+            let backoff = Duration::from_millis(1000 * 2u64.pow((attempt - 1).min(5)))
+                .min(Duration::from_secs(30));
 
             ctx.event_tx
                 .send(BatchEvent::RowStateChanged(RowUpdate {

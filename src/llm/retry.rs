@@ -19,8 +19,8 @@ where
 
     for attempt in 0..=max_retries {
         if attempt > 0 {
-            let delay =
-                Duration::from_millis(1000 * 2u64.pow(attempt - 1)).min(Duration::from_secs(30));
+            let delay = Duration::from_millis(1000 * 2u64.pow((attempt - 1).min(5)))
+                .min(Duration::from_secs(30));
             eprintln!(
                 "  Retry {attempt}/{max_retries}: {}",
                 last_err.as_ref().unwrap()
