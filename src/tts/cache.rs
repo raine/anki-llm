@@ -98,7 +98,10 @@ impl TtsCache {
         // Rename is atomic on the same filesystem. If two workers race,
         // whichever rename happens second just replaces the first file's
         // contents — both copies are bit-identical for the same request.
-        fs::rename(&tmp, &path)?;
+        if let Err(e) = fs::rename(&tmp, &path) {
+            let _ = fs::remove_file(&tmp);
+            return Err(e);
+        }
         Ok(path)
     }
 }
