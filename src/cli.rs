@@ -267,7 +267,7 @@ pub struct ProcessFileArgs {
     pub force: bool,
 
     /// Preview without making API calls
-    #[arg(long, short = 'd')]
+    #[arg(long, short = 'd', conflicts_with = "preview")]
     pub dry_run: bool,
 
     /// Process a sample of cards with the LLM and show what would change
@@ -343,7 +343,7 @@ pub struct ProcessDeckArgs {
     pub retries: u32,
 
     /// Preview without making API calls
-    #[arg(long, short = 'd')]
+    #[arg(long, short = 'd', conflicts_with = "preview")]
     pub dry_run: bool,
 
     /// Process a sample of cards with the LLM and show what would change
