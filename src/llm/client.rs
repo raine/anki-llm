@@ -82,7 +82,9 @@ impl LlmClient {
         let base_url = config
             .api_base_url
             .clone()
-            .unwrap_or_else(|| DEFAULT_OPENAI_BASE.to_string());
+            .unwrap_or_else(|| DEFAULT_OPENAI_BASE.to_string())
+            .trim_end_matches('/')
+            .to_string();
 
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(Some(std::time::Duration::from_secs(TIMEOUT_SECS)))
@@ -103,7 +105,9 @@ impl LlmClient {
         let api_key = provider::api_key_for_model(model);
         let base_url = config
             .base_url
-            .unwrap_or_else(|| DEFAULT_OPENAI_BASE.to_string());
+            .unwrap_or_else(|| DEFAULT_OPENAI_BASE.to_string())
+            .trim_end_matches('/')
+            .to_string();
 
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(Some(std::time::Duration::from_secs(TIMEOUT_SECS)))
