@@ -6,8 +6,11 @@ use regex::Regex;
 use super::error::TemplateError;
 use crate::data::Row;
 
+// Field names can be Unicode (Anki allows e.g. Japanese names). Match any
+// non-empty run of characters that aren't `{` `}` or whitespace, which
+// covers ASCII identifiers as well as `日本語`-style names.
 pub(crate) static PLACEHOLDER_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{([a-zA-Z0-9_-]+)\}").unwrap());
+    LazyLock::new(|| Regex::new(r"\{([^\s{}]+)\}").unwrap());
 
 /// Fill a template string by replacing `{key}` placeholders with values from `row`.
 ///
@@ -99,6 +102,13 @@ mod tests {
         let r = row(&[("term", "hello")]);
         let err = fill_template("{term} {missing}", &r).unwrap_err();
         assert!(err.to_string().contains("{missing}"));
+    }
+
+    #[test]
+    fn unicode_field_name() {
+        let mut r = Row::new();
+        r.insert("日本語".into(), Value::String("こんにちは".into()));
+        assert_eq!(fill_template("{日本語}", &r).unwrap(), "こんにちは");
     }
 
     #[test]
