@@ -73,10 +73,21 @@ pub fn load_existing_output(path: &Path) -> anyhow::Result<IndexMap<String, Row>
     };
 
     let mut map = IndexMap::new();
-    for row in rows {
-        if let Ok(id) = require_note_id(&row) {
-            map.insert(id, row);
+    for (i, row) in rows.into_iter().enumerate() {
+        let id = require_note_id(&row).map_err(|e| {
+            anyhow::anyhow!(
+                "row {} in existing output {} has no note id: {e}",
+                i + 1,
+                path.display()
+            )
+        })?;
+        if map.contains_key(&id) {
+            anyhow::bail!(
+                "duplicate note id '{id}' in existing output {} — refusing to silently overwrite prior progress",
+                path.display()
+            );
         }
+        map.insert(id, row);
     }
     Ok(map)
 }
