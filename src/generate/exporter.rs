@@ -1,3 +1,5 @@
+use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 use indexmap::IndexMap;
@@ -7,6 +9,28 @@ use crate::data::csv_io::{parse_csv, serialize_csv};
 use crate::data::rows::Row;
 
 use super::cards::ValidatedCard;
+
+/// Write `bytes` to `path` via a sibling temp file + rename so an
+/// interrupted run never truncates an existing export.
+fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("export");
+    let tmp = parent.join(format!(".{file_name}.tmp.{}", std::process::id()));
+    let mut file = fs::File::create(&tmp)?;
+    if let Err(e) = file.write_all(bytes).and_then(|_| file.sync_all()) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    drop(file);
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    Ok(())
+}
 
 fn card_fields_to_row(fields: &IndexMap<String, String>) -> Row {
     fields
@@ -102,7 +126,7 @@ pub fn export_cards(
         _ => anyhow::bail!("Unsupported format: .{ext}. Use .csv, .yaml, or .yml"),
     };
 
-    std::fs::write(output_path, content)?;
+    write_atomic(output_path, content.as_bytes())?;
 
     on_log(&format!(
         "Successfully {} {}",
