@@ -79,10 +79,13 @@ pub fn resolve_prompt(explicit: Option<PathBuf>, force_picker: bool) -> Result<R
         return Ok(ResolvedPrompt::ShowPicker(prompts));
     }
 
-    // Non-interactive: try last-used, then single prompt, then error
+    // Non-interactive: try last-used (only if it belongs to the current
+    // workspace — otherwise switching workspaces would silently use the
+    // previous workspace's prompt), then single prompt, then error.
     let state = read_state().unwrap_or_default();
     if let Some(ref last) = state.last_prompt
         && last.exists()
+        && prompts.iter().any(|p| p.path == *last)
     {
         return Ok(ResolvedPrompt::Resolved(last.clone()));
     }
@@ -130,10 +133,11 @@ pub fn resolve_prompt_path(explicit: Option<PathBuf>) -> Result<PathBuf> {
         return Ok(prompts.into_iter().next().unwrap().path);
     }
 
-    // Try last-used prompt
+    // Try last-used prompt, but only if it belongs to the current workspace.
     let state = read_state().unwrap_or_default();
     if let Some(ref last) = state.last_prompt
         && last.exists()
+        && prompts.iter().any(|p| p.path == *last)
     {
         return Ok(last.clone());
     }
