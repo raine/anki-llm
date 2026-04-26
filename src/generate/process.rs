@@ -79,6 +79,10 @@ pub fn run_processors(
     for (step_idx, step) in steps.iter().enumerate() {
         let model = step.model.as_deref().unwrap_or(default_model);
         let total_cards = current_cards.len();
+        // Flags accumulated before this step refer to indices in current_cards.
+        // After the step runs and rejects/errors reduce the card count, those
+        // indices become stale unless we remap them via idx_map below.
+        let prior_flags_len = all_flags.len();
 
         // Step model overrides only change the model name sent in the request.
         // The transport (base URL, API key) always comes from the main client,
@@ -175,6 +179,10 @@ pub fn run_processors(
         let mut next_cards = Vec::with_capacity(total_cards);
         let mut cards_iter: Vec<Option<CardCandidate>> =
             current_cards.into_iter().map(Some).collect();
+        // Map each input index to its position in next_cards, or None if dropped.
+        // Used after the step to remap pre-existing flags so their indices stay
+        // valid as later steps reject cards.
+        let mut idx_map: Vec<Option<usize>> = vec![None; total_cards];
         let mut step_cost = 0.0;
 
         for (idx, result) in results {
@@ -215,14 +223,17 @@ pub fn run_processors(
                             for (key, value) in updates {
                                 card.fields.insert(key, Value::String(value));
                             }
+                            idx_map[idx] = Some(next_cards.len());
                             next_cards.push(card);
                         }
                         StepOutcome::Check(CheckVerdict::Pass, _) => {
+                            idx_map[idx] = Some(next_cards.len());
                             next_cards.push(card);
                         }
                         StepOutcome::Check(CheckVerdict::Flag, reason) => {
                             // Card stays in pipeline but gets flagged
                             let flag_idx = next_cards.len();
+                            idx_map[idx] = Some(flag_idx);
                             next_cards.push(card);
                             all_flags.push(CardFlag {
                                 card_index: flag_idx,
@@ -247,6 +258,22 @@ pub fn run_processors(
                 }
             }
         }
+
+        // Remap flags from prior steps via idx_map; drop any whose card was
+        // rejected this step. New flags appended this step (indices >= prior_flags_len)
+        // already use next_cards indices and stay as-is.
+        let mut remapped: Vec<CardFlag> = Vec::with_capacity(all_flags.len());
+        let new_flags = all_flags.split_off(prior_flags_len);
+        for flag in all_flags.drain(..) {
+            if let Some(Some(new_idx)) = idx_map.get(flag.card_index).copied() {
+                remapped.push(CardFlag {
+                    card_index: new_idx,
+                    reason: flag.reason,
+                });
+            }
+        }
+        remapped.extend(new_flags);
+        all_flags = remapped;
 
         if step_cost > 0.0 {
             on_progress(&format!(
