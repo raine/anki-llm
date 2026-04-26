@@ -17,6 +17,11 @@ pub fn provider_config(model: &str) -> ProviderConfig {
             base_url: Some("https://generativelanguage.googleapis.com/v1beta/openai".to_string()),
             api_key_env: "GEMINI_API_KEY",
         }
+    } else if model.starts_with("deepseek-") {
+        ProviderConfig {
+            base_url: Some("https://api.deepseek.com".to_string()),
+            api_key_env: "DEEPSEEK_API_KEY",
+        }
     } else {
         ProviderConfig {
             base_url: None,
@@ -85,6 +90,8 @@ pub fn resolve_model(user_model: Option<&str>) -> String {
     }
     if env::var("GEMINI_API_KEY").is_ok() {
         "gemini-2.5-flash".to_string()
+    } else if env::var("DEEPSEEK_API_KEY").is_ok() {
+        "deepseek-v4-flash".to_string()
     } else {
         "gpt-5".to_string()
     }
@@ -118,6 +125,16 @@ mod tests {
                 .unwrap()
                 .contains("generativelanguage.googleapis.com")
         );
+    }
+
+    #[test]
+    fn deepseek_model_uses_deepseek() {
+        let config = provider_config("deepseek-v4-pro");
+        assert_eq!(config.api_key_env, "DEEPSEEK_API_KEY");
+        assert_eq!(config.base_url.as_deref(), Some("https://api.deepseek.com"));
+
+        let config = provider_config("deepseek-v4-flash");
+        assert_eq!(config.api_key_env, "DEEPSEEK_API_KEY");
     }
 
     #[test]

@@ -50,13 +50,13 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
     {
         (Some(url.clone()), true)
     } else {
-        // Fall back to provider auto-detection (Gemini, OpenAI)
+        // Fall back to provider auto-detection (Gemini, DeepSeek, OpenAI)
         (provider::provider_config(&model).base_url, false)
     };
 
     // Resolve API key: CLI flag > ANKI_LLM_API_KEY env > provider-specific env var.
     // When a custom endpoint is configured, never fall through to provider-specific
-    // env vars (OPENAI_API_KEY, GEMINI_API_KEY) — that would leak credentials to
+    // env vars (OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY) — that would leak credentials to
     // a third-party server.
     let api_key = if args.dry_run {
         None
@@ -74,7 +74,7 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
         api_key_for_model(&model)
     };
 
-    // Only require an API key for auto-detected providers (OpenAI, Gemini).
+    // Only require an API key for auto-detected providers (OpenAI, Gemini, DeepSeek).
     // Custom endpoints (user-configured base URL) are allowed without auth —
     // the server decides whether to reject unauthenticated requests.
     if !args.dry_run && api_key.is_none() && !custom_endpoint {

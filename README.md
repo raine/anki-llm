@@ -126,7 +126,7 @@ cargo install anki-llm
 API. This includes OpenAI, Google Gemini, OpenRouter, Ollama, and many other
 providers.
 
-### Quick start: OpenAI or Gemini
+### Quick start: OpenAI, Gemini, or DeepSeek
 
 Set the appropriate environment variable and you're ready to go:
 
@@ -136,13 +136,17 @@ export OPENAI_API_KEY="your-api-key-here"
 
 # Google Gemini
 export GEMINI_API_KEY="your-api-key-here"
+
+# DeepSeek
+export DEEPSEEK_API_KEY="your-api-key-here"
 ```
 
-Get your API key from [OpenAI](https://platform.openai.com/api-keys) or
-[Google AI Studio](https://aistudio.google.com/api-keys).
+Get your API key from [OpenAI](https://platform.openai.com/api-keys),
+[Google AI Studio](https://aistudio.google.com/api-keys), or
+[DeepSeek](https://platform.deepseek.com/api_keys).
 
-OpenAI and Gemini models are auto-detected from the model name prefix and work
-with zero additional configuration.
+OpenAI, Gemini, and DeepSeek models are auto-detected from the model name
+prefix and work with zero additional configuration.
 
 ### Using OpenRouter
 
@@ -197,9 +201,9 @@ anki-llm process-file input.yaml -o output.yaml -p prompt.md \
 
 **Precedence:** CLI flag > environment variable > config file > auto-detect.
 
-For built-in providers (OpenAI, Gemini), the provider-specific environment
-variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`) are used as a fallback when
-`ANKI_LLM_API_KEY` is not set.
+For built-in providers (OpenAI, Gemini, DeepSeek), the provider-specific
+environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`)
+are used as a fallback when `ANKI_LLM_API_KEY` is not set.
 
 ### Known models with pricing
 
@@ -234,6 +238,9 @@ display is simply skipped for models without pricing data.
 | `gemini-3-flash-preview`        | $0.50/M | $3.00/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3-flash-preview)        |
 | `gemini-3.1-flash-lite-preview` | $0.25/M | $1.50/M  | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-flash-lite-preview) |
 | `gemini-3.1-pro-preview`        | $2.00/M | $12.00/M | [🔗](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-pro-preview)        |
+| **DeepSeek models**             |
+| `deepseek-v4-flash`             | $0.14/M | $0.28/M  | [🔗](https://api-docs.deepseek.com/quick_start/pricing)                          |
+| `deepseek-v4-pro`               | $1.74/M | $3.48/M  | [🔗](https://api-docs.deepseek.com/quick_start/pricing)                          |
 
 Pricing is per million tokens (M). Check the latest prices on the provider's
 website to be sure.
