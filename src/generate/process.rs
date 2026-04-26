@@ -428,8 +428,9 @@ fn run_single_step(
 
     for attempt in 0..=retries {
         if attempt > 0 {
-            let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1));
-            std::thread::sleep(backoff.min(Duration::from_secs(30)));
+            let backoff = Duration::from_millis(1000 * 2u64.pow((attempt - 1).min(5)))
+                .min(Duration::from_secs(30));
+            std::thread::sleep(backoff);
         }
 
         match client.chat_completion_structured(

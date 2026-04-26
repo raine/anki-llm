@@ -72,8 +72,8 @@ pub fn generate_cards(
     let mut last_error = String::new();
     for attempt in 0..=retries {
         if attempt > 0 {
-            let backoff = Duration::from_millis(1000 * 2u64.pow(attempt - 1));
-            let backoff = backoff.min(Duration::from_secs(30));
+            let backoff = Duration::from_millis(1000 * 2u64.pow((attempt - 1).min(5)))
+                .min(Duration::from_secs(30));
             on_log(&format!("  Retry {attempt}/{retries}: {last_error}"));
             std::thread::sleep(backoff);
         }
