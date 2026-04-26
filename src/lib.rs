@@ -5,6 +5,7 @@ pub mod cli;
 pub mod config;
 pub mod data;
 pub mod docs;
+pub mod doctor;
 pub mod generate;
 pub mod llm;
 pub mod note_type;

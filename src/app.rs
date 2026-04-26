@@ -20,5 +20,6 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::Docs => crate::docs::run(),
         Commands::Workspace(args) => crate::workspace::command::run(args.action),
         Commands::NoteType(args) => crate::note_type::command::run(args.action),
+        Commands::Doctor(args) => crate::doctor::command::run(args),
     }
 }

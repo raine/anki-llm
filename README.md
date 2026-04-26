@@ -1463,6 +1463,28 @@ anki-llm note-type status
 - `push` refuses when Anki has diverged from the last sync; run `pull` to
   reconcile or pass `--force` to overwrite.
 
+### `anki-llm doctor`
+
+Inspect what `anki-llm` thinks your environment looks like: which API keys it
+detected, the resolved default model, the active workspace, the AnkiConnect URL,
+and TTS credentials. Helpful for confirming that a fresh shell or new machine is
+configured correctly.
+
+```bash
+anki-llm doctor          # report config and ping AnkiConnect
+anki-llm doctor --check  # additionally verify each LLM provider's API key
+```
+
+`--check` sends a tiny 1-token chat completion against each provider with a
+key set, using the cheapest available model. Effective cost per probe is
+under $0.000001. This verifies authentication, model access, and that the
+account has balance and isn't rate-limited. The command exits non-zero if
+any check fails.
+
+A `⚠` is printed when the resolved default model isn't in the known-models
+list, useful for catching typos in `config set model …` or workspace
+`anki-llm.yaml`.
+
 ## Example use case: Fixing 1000 Japanese translations
 
 Let's say you have an Anki deck named "Japanese Core 1k" with 1000 notes. Each

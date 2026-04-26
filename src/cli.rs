@@ -60,6 +60,15 @@ pub enum Commands {
     /// Manage Anki note type templates and CSS
     #[command(name = "note-type")]
     NoteType(NoteTypeArgs),
+    /// Diagnose configuration and provider connectivity
+    Doctor(DoctorArgs),
+}
+
+#[derive(clap::Args)]
+pub struct DoctorArgs {
+    /// Verify provider authentication and AnkiConnect reachability over the network
+    #[arg(long)]
+    pub check: bool,
 }
 
 #[derive(clap::Args)]
