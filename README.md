@@ -1872,6 +1872,39 @@ collection. AnkiConnect fills that gap by exposing a local REST API that
 `anki-llm` uses to export notes, import changes, and add generated cards.
 Without it, there's no way for `anki-llm` to communicate with Anki.
 
+### How much does it cost to process a deck?
+
+It depends on the model and how much you ask the LLM to generate, but for a
+sense of scale: processing 1000 Glossika ENJP cards to generate a "Grammar
+Point" explanation field (a fairly substantial HTML output per card) cost
+roughly:
+
+| Model                           | ~Cost per 1000 cards |
+| ------------------------------- | -------------------- |
+| `gemini-2.5-flash-lite`         | ~$0.35               |
+| `deepseek-v4-flash`             | ~$0.45               |
+| `gemini-3.1-flash-lite-preview` | ~$1.00               |
+| `gemini-2.5-flash`              | ~$1.50               |
+| `gpt-5-mini`                    | ~$3.00               |
+
+Smaller fields (a single hint, a short translation) cost a fraction of this;
+heavier prompts with multiple sections per card cost more. Use `--limit 20`
+on a sample first. `anki-llm` prints token counts and a cost estimate at the
+end of every run, so you can extrapolate before committing to a full deck.
+
+For `anki-llm generate` (creating new cards from a term), generating 3
+candidate cards per term with a moderately complex prompt costs roughly:
+
+| Model                   | Per generated card |
+| ----------------------- | ------------------ |
+| `gemini-2.5-flash-lite` | ~$0.0002           |
+| `gemini-2.5-flash`      | ~$0.001            |
+| `gpt-5-mini`            | ~$0.0025           |
+
+Any post-select processing steps (extra LLM calls defined in the prompt
+frontmatter, e.g. `transform` or `check`) add additional cost per accepted
+card.
+
 ### How is `anki-llm` different from AnkiMCP?
 
 AnkiMCP is a Model Context Protocol server that lets a
