@@ -13,7 +13,7 @@
 <p align="center">
   <a href="#installation">Install</a> · <a href="#features">Features</a> ·
   <a href="#commands-reference">Commands</a> · <a href="#configuration">Configuration</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="#faq">FAQ</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 ---
@@ -1863,9 +1863,39 @@ card includes a generated sound tag, <kbd>n</kbd> to start a new term,
 <kbd>r</kbd> to retry, or <kbd>q</kbd> to quit. Session cost is tracked in the
 sidebar throughout.
 
-## Why AnkiConnect?
+## FAQ
+
+### Why AnkiConnect?
 
 Anki doesn't provide a built-in API for external tools to read or modify your
 collection. AnkiConnect fills that gap by exposing a local REST API that
 `anki-llm` uses to export notes, import changes, and add generated cards.
 Without it, there's no way for `anki-llm` to communicate with Anki.
+
+### How is `anki-llm` different from AnkiMCP?
+
+AnkiMCP is a Model Context Protocol server that lets a
+chat client (Claude Desktop, ChatGPT, etc.) talk to Anki interactively. You ask
+the assistant in natural language to create a card, look up a note, or quiz
+you, and it makes the AnkiConnect calls under the hood. The interaction model
+is conversational and one card at a time.
+
+`anki-llm` is a CLI/TUI built for **bulk, repeatable, scriptable** work on
+large collections:
+
+- **Batch over thousands of notes** with resume, concurrency, and atomic
+  writes, not card-by-card chat.
+- **File-based pipelines**: export to CSV/YAML, process, import back.
+  Diffable, reviewable, re-runnable.
+- **Bring your own model**: works with any OpenAI-compatible endpoint
+  (OpenAI, Gemini, OpenRouter, local servers like Ollama or llama.cpp), and
+  you pick the model per command. Not tied to whichever model your chat
+  client happens to use.
+- **Generation TUI** for reviewing and accepting multiple candidate cards at
+  once.
+- **TTS audio** generation wired into the same pipeline.
+- **Note type editing** that pulls card template HTML/CSS to local files so a
+  coding agent can redesign layouts, then pushes back.
+- **Agent access to Anki** via `anki-llm query`, which exposes AnkiConnect as a
+  scriptable CLI that coding agents (Claude Code, Cursor, etc.) can call
+  directly.
