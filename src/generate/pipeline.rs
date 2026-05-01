@@ -66,6 +66,9 @@ pub trait PipelineProgress: Send + Sync {
     fn step_skip(&self, step: PipelineStep);
     fn step_error(&self, step: PipelineStep, detail: &str);
     fn cost_update(&self, input_tokens: u64, output_tokens: u64, cost: f64);
+    fn thinking_reset(&self) {}
+    fn thinking_delta(&self, _delta: &str) {}
+    fn thinking_clear(&self) {}
 }
 
 pub enum SelectionAction {
@@ -128,6 +131,7 @@ pub struct PipelineConfig<'a> {
     /// `--output` touch this field, so TTS credential resolution is
     /// deferred (or skipped) for those flows.
     pub tts: Option<&'a crate::tts::service::SessionTts>,
+    pub enable_thinking_stream: bool,
 }
 
 pub enum PipelineOutcome {
@@ -432,6 +436,11 @@ pub fn run_pipeline_for_term(
             config.retries,
             Some(config.logger),
             on_log,
+            if !is_refresh && config.enable_thinking_stream {
+                Some(progress)
+            } else {
+                None
+            },
         );
 
         let gen_result = match gen_result {

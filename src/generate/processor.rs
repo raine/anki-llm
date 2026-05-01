@@ -4,6 +4,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use crate::data::Row;
+use crate::generate::pipeline::PipelineProgress;
 use crate::llm::client::LlmClient;
 use crate::llm::error::LlmError;
 use crate::llm::logger::LlmLogger;
@@ -48,6 +49,7 @@ pub fn generate_cards(
     retries: u32,
     logger: Option<&LlmLogger>,
     on_log: &(dyn Fn(&str) + Send + Sync),
+    thinking_progress: Option<&dyn PipelineProgress>,
 ) -> Result<GenerationResult, anyhow::Error> {
     // Build row for template filling
     let mut row = Row::new();
@@ -87,6 +89,7 @@ pub fn generate_cards(
             max_tokens,
             logger,
             on_log,
+            thinking_progress,
         ) {
             Ok(result) => return Ok(result),
             Err(e) => {
@@ -112,8 +115,22 @@ fn try_generate(
     max_tokens: Option<u64>,
     logger: Option<&LlmLogger>,
     on_log: &(dyn Fn(&str) + Send + Sync),
+    thinking_progress: Option<&dyn PipelineProgress>,
 ) -> Result<GenerationResult, anyhow::Error> {
-    let result = client.chat_completion(model, prompt, temperature, max_tokens)?;
+    let result = if let Some(progress) =
+        thinking_progress.filter(|_| client.supports_thinking_stream(model))
+    {
+        client.chat_completion_with_thinking(
+            model,
+            prompt,
+            temperature,
+            max_tokens,
+            || progress.thinking_reset(),
+            |delta| progress.thinking_delta(delta),
+        )?
+    } else {
+        client.chat_completion(model, prompt, temperature, max_tokens)?
+    };
 
     if let Some(logger) = logger {
         logger.log(prompt, &result.content);

@@ -40,6 +40,9 @@ pub enum TtsUiState {
 pub enum BackendEvent {
     SessionReady(SessionInfo),
     Log(String),
+    ThinkingReset,
+    ThinkingDelta(String),
+    ThinkingClear,
     StepUpdate {
         step: PipelineStep,
         status: StepStatus,

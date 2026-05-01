@@ -33,6 +33,8 @@ use super::cards::ValidatedCard;
 // Re-export PipelineStep from the shared pipeline module
 pub use super::pipeline::PipelineStep;
 
+const MAX_THINKING_CHARS: usize = 12_000;
+
 const ALL_STEPS: &[PipelineStep] = &[
     PipelineStep::LoadPrompt,
     PipelineStep::ValidateAnki,
@@ -96,6 +98,7 @@ struct App {
     session_cost: f64,
     log_scroll: u16,
     log_auto_scroll: bool,
+    thinking: String,
     tick: u64,
     /// Counts how many runs have been cancelled. While > 0, backend events are
     /// discarded. Decremented when RunDone/RunError arrives from a cancelled run.
@@ -178,6 +181,7 @@ impl App {
             session_cost: 0.0,
             log_scroll: 0,
             log_auto_scroll: true,
+            thinking: String::new(),
             tick: 0,
             pending_cancels: 0,
             should_quit: false,
@@ -208,6 +212,7 @@ impl App {
         self.logs.clear();
         self.log_scroll = 0;
         self.log_auto_scroll = true;
+        self.thinking.clear();
         self.session_cost += self.run_cost;
         self.run_cost = 0.0;
         self.run_input_tokens = 0;
@@ -270,6 +275,19 @@ impl App {
             .map(|r| &mut r.status)
     }
 
+    fn append_thinking(&mut self, delta: &str) {
+        self.thinking.push_str(delta);
+        if self.thinking.len() > MAX_THINKING_CHARS {
+            let keep_from = self.thinking.len() - MAX_THINKING_CHARS;
+            let keep_from = self
+                .thinking
+                .char_indices()
+                .find_map(|(idx, _)| (idx >= keep_from).then_some(idx))
+                .unwrap_or(self.thinking.len());
+            self.thinking.drain(..keep_from);
+        }
+    }
+
     fn handle_backend_event(&mut self, event: BackendEvent) {
         // SessionReady is always relevant
         if let BackendEvent::SessionReady(info) = event {
@@ -302,6 +320,17 @@ impl App {
 
         match event {
             BackendEvent::SessionReady(_) => unreachable!(),
+            BackendEvent::ThinkingReset => {
+                self.thinking.clear();
+            }
+            BackendEvent::ThinkingDelta(delta) => {
+                if matches!(self.mode, AppMode::Running) {
+                    self.append_thinking(&delta);
+                }
+            }
+            BackendEvent::ThinkingClear => {
+                self.thinking.clear();
+            }
             BackendEvent::Log(msg) => {
                 if let Some(idx) = self.current_step_idx {
                     self.steps[idx].logs.push(msg.clone());
@@ -314,6 +343,11 @@ impl App {
             BackendEvent::StepUpdate { step, status } => {
                 if matches!(status, StepStatus::Running(_)) {
                     self.current_step_idx = self.step_index(step);
+                    if matches!(step, PipelineStep::Generate) {
+                        self.thinking.clear();
+                    }
+                } else if matches!(step, PipelineStep::Generate) {
+                    self.thinking.clear();
                 }
                 if let Some(st) = self.step_status_mut(step) {
                     *st = status;
@@ -477,6 +511,7 @@ impl App {
                     note_ids,
                     failed,
                 };
+                self.thinking.clear();
                 self.current_step_idx = None;
                 self.browse_step = Some(summary_idx);
                 self.browse_scroll = 0;
@@ -504,12 +539,14 @@ impl App {
                     }
                     self.current_step_idx = None;
                     self.mode = AppMode::Running;
+                    self.thinking.clear();
                     self.worker_tx.send(WorkerCommand::Start(next_term)).ok();
                 } else {
                     self.batch_progress = None;
                     // If we accumulated cards before this error, show selection
                     if !self.batch_cards.is_empty() {
                         let all_cards = std::mem::take(&mut self.batch_cards);
+                        self.thinking.clear();
                         self.mode = AppMode::Selecting(SelectionState::new(all_cards));
                     } else {
                         let summary_idx = summary_step_idx();
@@ -517,6 +554,7 @@ impl App {
                             record.status = StepStatus::Error(msg.clone());
                         }
                         self.mode = AppMode::Error(msg);
+                        self.thinking.clear();
                         self.browse_step = Some(summary_idx);
                         self.browse_scroll = 0;
                     }
@@ -539,6 +577,7 @@ impl App {
                     record.status = StepStatus::Error(msg.clone());
                 }
                 self.mode = AppMode::Error(msg);
+                self.thinking.clear();
                 self.browse_step = Some(summary_idx);
                 self.browse_scroll = 0;
                 self.is_fatal = true;
@@ -2125,8 +2164,47 @@ fn draw_input(
 }
 
 fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
-    // Steps are in the sidebar; main area is just the log
-    draw_log_panel(frame, &app.logs, app.log_scroll, area);
+    if app.thinking.is_empty() || area.height < 6 {
+        draw_log_panel(frame, &app.logs, app.log_scroll, area);
+        return;
+    }
+
+    let thinking_lines = app.thinking.lines().count().max(1) as u16;
+    let thinking_height = (thinking_lines + 2)
+        .min(8)
+        .min(area.height.saturating_sub(3));
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(thinking_height),
+            Constraint::Length(1),
+            Constraint::Min(3),
+        ])
+        .split(area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(Line::from(Span::styled(
+            " Thinking ",
+            Style::default()
+                .fg(THEME.info)
+                .add_modifier(Modifier::ITALIC),
+        )))
+        .border_style(Style::default().fg(THEME.help_border));
+    let visible_height = thinking_height.saturating_sub(2) as usize;
+    let lines: Vec<&str> = app.thinking.lines().collect();
+    let start = lines.len().saturating_sub(visible_height);
+    let text = lines[start..].join("\n");
+    let paragraph = Paragraph::new(text)
+        .block(block)
+        .style(
+            Style::default()
+                .fg(THEME.dimmed)
+                .add_modifier(Modifier::ITALIC),
+        )
+        .wrap(Wrap { trim: false });
+    frame.render_widget(paragraph, chunks[0]);
+    draw_log_panel(frame, &app.logs, app.log_scroll, chunks[2]);
 }
 
 fn draw_done(
@@ -2457,9 +2535,21 @@ fn done_audio_cache_path(card: &ValidatedCard) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SelectionState, TtsUiState, any_card_synthesizing, parse_edited_anki_fields};
+    use super::{
+        App, AppMode, BackendEvent, Glyphs, MAX_THINKING_CHARS, SelectionState, TtsUiState,
+        WorkerCommand, any_card_synthesizing, parse_edited_anki_fields,
+    };
     use crate::generate::cards::{ValidatedCard, next_card_id};
     use indexmap::IndexMap;
+    use std::sync::mpsc;
+
+    fn mk_app() -> App {
+        let (_tx_events, rx_events) = mpsc::channel();
+        let (tx_cmd, _rx_cmd) = mpsc::sync_channel::<WorkerCommand>(10);
+        let mut app = App::new(None, Glyphs::from_config(), rx_events, tx_cmd);
+        app.mode = AppMode::Running;
+        app
+    }
 
     fn mk_card() -> ValidatedCard {
         use std::collections::HashMap;
@@ -2532,6 +2622,50 @@ mod tests {
             },
         );
         assert!(!any_card_synthesizing(&state));
+    }
+
+    #[test]
+    fn thinking_delta_is_ephemeral() {
+        let mut app = mk_app();
+        app.handle_backend_event(BackendEvent::Log("normal".into()));
+        app.handle_backend_event(BackendEvent::ThinkingDelta("raw thought".into()));
+
+        assert_eq!(app.thinking, "raw thought");
+        assert_eq!(app.logs, vec!["normal"]);
+        assert!(app.steps.iter().all(|step| step.logs != ["raw thought"]));
+    }
+
+    #[test]
+    fn thinking_clears_on_reset_done_error_and_cancel_discard() {
+        let mut app = mk_app();
+        app.handle_backend_event(BackendEvent::ThinkingDelta("first".into()));
+        app.handle_backend_event(BackendEvent::ThinkingReset);
+        assert!(app.thinking.is_empty());
+
+        app.handle_backend_event(BackendEvent::ThinkingDelta("second".into()));
+        app.handle_backend_event(BackendEvent::RunError("failed".into()));
+        assert!(app.thinking.is_empty());
+
+        let mut app = mk_app();
+        app.handle_backend_event(BackendEvent::ThinkingDelta("third".into()));
+        app.pending_cancels = 1;
+        app.handle_backend_event(BackendEvent::ThinkingDelta(" stale".into()));
+        app.handle_backend_event(BackendEvent::RunDone {
+            message: String::new(),
+            cards: Vec::new(),
+            note_ids: Vec::new(),
+            failed: false,
+        });
+        assert_eq!(app.thinking, "third");
+    }
+
+    #[test]
+    fn thinking_buffer_is_bounded() {
+        let mut app = mk_app();
+        app.handle_backend_event(BackendEvent::ThinkingDelta(
+            "x".repeat(MAX_THINKING_CHARS + 10),
+        ));
+        assert_eq!(app.thinking.len(), MAX_THINKING_CHARS);
     }
 
     #[test]

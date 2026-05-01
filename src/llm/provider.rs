@@ -110,6 +110,27 @@ pub fn resolve_model(user_model: Option<&str>) -> String {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThinkingFormat {
+    ReasoningContent,
+    GeminiThoughtTags,
+}
+
+pub fn thinking_format_for(model: &str, base_url: &str) -> Option<ThinkingFormat> {
+    let base = base_url.trim_end_matches('/');
+    if model.starts_with("gemini-")
+        && base == "https://generativelanguage.googleapis.com/v1beta/openai"
+    {
+        Some(ThinkingFormat::GeminiThoughtTags)
+    } else if (model.starts_with("deepseek-") && base == "https://api.deepseek.com")
+        || (model.starts_with("grok-") && base == "https://api.x.ai/v1")
+    {
+        Some(ThinkingFormat::ReasoningContent)
+    } else {
+        None
+    }
+}
+
 /// Returns true if the model should omit the temperature parameter.
 /// GPT-5 models don't support it.
 pub fn omit_temperature(model: &str) -> bool {
@@ -161,6 +182,33 @@ mod tests {
     fn unknown_prefix_defaults_to_openai() {
         let config = provider_config("custom-model");
         assert_eq!(config.api_key_env, "OPENAI_API_KEY");
+    }
+
+    #[test]
+    fn thinking_capability_requires_known_provider_url() {
+        assert_eq!(
+            thinking_format_for(
+                "gemini-2.5-flash",
+                "https://generativelanguage.googleapis.com/v1beta/openai"
+            ),
+            Some(ThinkingFormat::GeminiThoughtTags)
+        );
+        assert_eq!(
+            thinking_format_for("deepseek-v4-pro", "https://api.deepseek.com"),
+            Some(ThinkingFormat::ReasoningContent)
+        );
+        assert_eq!(
+            thinking_format_for("grok-4.3", "https://api.x.ai/v1"),
+            Some(ThinkingFormat::ReasoningContent)
+        );
+        assert_eq!(
+            thinking_format_for("deepseek-v4-pro", "http://localhost:11434/v1"),
+            None
+        );
+        assert_eq!(
+            thinking_format_for("custom-model", "https://api.openai.com/v1"),
+            None
+        );
     }
 
     #[test]

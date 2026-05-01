@@ -738,6 +738,11 @@ press `p` to preview the focused card's audio in selection and replay imported
 audio from the summary; audio for selected cards is finalized automatically at
 import time.
 
+When a supported thinking model from Gemini, DeepSeek, or Grok emits raw
+reasoning during the primary generation request, the running view shows it live in
+a temporary Thinking block above the log. This stream is for display only: it is
+cleared when generation finishes and is not written to prompt/response logs.
+
 Press `?` at any time to see keyboard shortcuts for the current mode. Token
 usage and estimated cost are tracked in the sidebar across the session.
 

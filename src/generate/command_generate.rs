@@ -207,6 +207,20 @@ impl PipelineProgress for TuiProgress {
             })
             .ok();
     }
+
+    fn thinking_reset(&self) {
+        self.tx.send(BackendEvent::ThinkingReset).ok();
+    }
+
+    fn thinking_delta(&self, delta: &str) {
+        self.tx
+            .send(BackendEvent::ThinkingDelta(delta.to_string()))
+            .ok();
+    }
+
+    fn thinking_clear(&self) {
+        self.tx.send(BackendEvent::ThinkingClear).ok();
+    }
 }
 
 struct TuiInteraction<'a> {
@@ -366,6 +380,7 @@ pub fn run_pipeline(
                     dry_run: args.dry_run,
                     output: args.output.as_deref(),
                     tts: session.tts.as_ref(),
+                    enable_thinking_stream: true,
                 };
 
                 match super::pipeline::run_pipeline_for_term(
@@ -584,6 +599,7 @@ pub fn run_legacy(args: GenerateArgs) -> Result<()> {
         dry_run: args.dry_run,
         output: args.output.as_deref(),
         tts: session.tts.as_ref(),
+        enable_thinking_stream: false,
     };
 
     let interaction = LegacyInteraction {
