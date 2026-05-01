@@ -3,6 +3,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use pulldown_cmark::{Event as MarkdownEvent, Options, Parser, Tag, TagEnd};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
@@ -698,29 +699,6 @@ impl App {
                     self.worker_tx.send(WorkerCommand::Quit).ok();
                     self.should_quit = true;
                     self.user_quit = true;
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    self.log_scroll = self.log_scroll.saturating_sub(1);
-                    self.log_auto_scroll = false;
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    self.log_scroll =
-                        (self.log_scroll + 1).min(self.logs.len().saturating_sub(1) as u16);
-                    // Re-enable auto-scroll if at the bottom
-                    if self.log_scroll as usize >= self.logs.len().saturating_sub(1) {
-                        self.log_auto_scroll = true;
-                    }
-                }
-                KeyCode::PageUp => {
-                    self.log_scroll = self.log_scroll.saturating_sub(10);
-                    self.log_auto_scroll = false;
-                }
-                KeyCode::PageDown => {
-                    self.log_scroll =
-                        (self.log_scroll + 10).min(self.logs.len().saturating_sub(1) as u16);
-                    if self.log_scroll as usize >= self.logs.len().saturating_sub(1) {
-                        self.log_auto_scroll = true;
-                    }
                 }
                 _ => {}
             },
@@ -1621,12 +1599,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
             ("Esc", "Clear"),
             ("Ctrl+C", "Quit"),
         ],
-        AppMode::Running => vec![
-            ("j / k", "Scroll log"),
-            ("PgUp/PgDn", "Scroll log fast"),
-            ("Esc", "Cancel"),
-            ("q", "Quit"),
-        ],
+        AppMode::Running => vec![("Esc", "Cancel"), ("q", "Quit")],
         AppMode::Selecting(_) => {
             let mut v = vec![
                 ("Space", "Toggle"),
@@ -2206,25 +2179,134 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
 
     draw_log_panel(frame, &app.logs, app.log_scroll, chunks[0]);
 
-    let visible_height = chunks[1].height.saturating_sub(1) as usize;
-    let lines: Vec<&str> = app.thinking.lines().collect();
-    let start = lines.len().saturating_sub(visible_height);
-    let mut rendered = vec![Line::from(Span::styled(
-        "Thinking",
-        Style::default()
-            .fg(THEME.info)
-            .add_modifier(Modifier::ITALIC),
-    ))];
-    rendered.extend(lines[start..].iter().map(|line| {
-        Line::from(Span::styled(
-            (*line).to_string(),
+    let thinking_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .split(chunks[1]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "Thinking",
             Style::default()
-                .fg(THEME.dimmed)
+                .fg(THEME.info)
                 .add_modifier(Modifier::ITALIC),
-        ))
-    }));
-    let paragraph = Paragraph::new(Text::from(rendered)).wrap(Wrap { trim: false });
-    frame.render_widget(paragraph, chunks[1]);
+        ))),
+        thinking_chunks[0],
+    );
+
+    let content_width = thinking_chunks[1].width.max(1);
+    let lines = thinking_markdown_lines(&app.thinking);
+    let visual_lines = lines
+        .iter()
+        .map(|line| visual_line_count(line, content_width))
+        .sum::<u16>();
+    let scroll = visual_lines.saturating_sub(thinking_chunks[1].height);
+    let paragraph = Paragraph::new(Text::from(lines))
+        .wrap(Wrap { trim: false })
+        .scroll((scroll, 0));
+    frame.render_widget(paragraph, thinking_chunks[1]);
+}
+
+fn thinking_markdown_lines(md: &str) -> Vec<Line<'static>> {
+    let parser = Parser::new_ext(md, Options::all());
+    let base_style = Style::default()
+        .fg(THEME.dimmed)
+        .add_modifier(Modifier::ITALIC);
+    let mut style = base_style;
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut list_depth = 0usize;
+
+    for event in parser {
+        match event {
+            MarkdownEvent::Text(text) => spans.push(Span::styled(text.to_string(), style)),
+            MarkdownEvent::Code(code) => spans.push(Span::styled(
+                code.to_string(),
+                Style::default()
+                    .fg(THEME.highlight_fg)
+                    .bg(THEME.highlight_bg),
+            )),
+            MarkdownEvent::Html(html) | MarkdownEvent::InlineHtml(html) => {
+                spans.push(Span::styled(html.to_string(), style));
+            }
+            MarkdownEvent::SoftBreak | MarkdownEvent::HardBreak => {
+                lines.push(Line::from(std::mem::take(&mut spans)));
+            }
+            MarkdownEvent::Start(Tag::Heading { .. }) => {
+                if !spans.is_empty() {
+                    lines.push(Line::from(std::mem::take(&mut spans)));
+                }
+                style = Style::default()
+                    .fg(THEME.info)
+                    .add_modifier(Modifier::BOLD | Modifier::ITALIC);
+            }
+            MarkdownEvent::End(TagEnd::Heading(_)) => {
+                lines.push(Line::from(std::mem::take(&mut spans)));
+                style = base_style;
+            }
+            MarkdownEvent::Start(Tag::Strong) => {
+                style = style.add_modifier(Modifier::BOLD).fg(THEME.text);
+            }
+            MarkdownEvent::End(TagEnd::Strong) => style = base_style,
+            MarkdownEvent::Start(Tag::Emphasis) => {
+                style = style.add_modifier(Modifier::ITALIC);
+            }
+            MarkdownEvent::End(TagEnd::Emphasis) => style = base_style,
+            MarkdownEvent::Start(Tag::List(_)) => list_depth += 1,
+            MarkdownEvent::End(TagEnd::List(_)) => {
+                list_depth = list_depth.saturating_sub(1);
+                if !spans.is_empty() {
+                    lines.push(Line::from(std::mem::take(&mut spans)));
+                }
+            }
+            MarkdownEvent::Start(Tag::Item) => {
+                if !spans.is_empty() {
+                    lines.push(Line::from(std::mem::take(&mut spans)));
+                }
+                spans.push(Span::styled(
+                    format!("{}• ", "  ".repeat(list_depth.saturating_sub(1))),
+                    base_style,
+                ));
+            }
+            MarkdownEvent::End(TagEnd::Item) | MarkdownEvent::End(TagEnd::Paragraph) => {
+                lines.push(Line::from(std::mem::take(&mut spans)));
+            }
+            MarkdownEvent::Start(Tag::CodeBlock(_)) => {
+                if !spans.is_empty() {
+                    lines.push(Line::from(std::mem::take(&mut spans)));
+                }
+                style = Style::default()
+                    .fg(THEME.highlight_fg)
+                    .bg(THEME.highlight_bg);
+            }
+            MarkdownEvent::End(TagEnd::CodeBlock) => {
+                lines.push(Line::from(std::mem::take(&mut spans)));
+                style = base_style;
+            }
+            MarkdownEvent::Rule => lines.push(Line::from(Span::styled(
+                "─".repeat(20),
+                Style::default().fg(THEME.border),
+            ))),
+            _ => {}
+        }
+    }
+
+    if !spans.is_empty() {
+        lines.push(Line::from(spans));
+    }
+    if lines.is_empty() {
+        lines.push(Line::from(""));
+    }
+    lines
+}
+
+fn visual_line_count(line: &Line<'_>, width: u16) -> u16 {
+    let width = width.max(1) as usize;
+    let cells = line
+        .spans
+        .iter()
+        .map(|span| span.content.chars().count())
+        .sum::<usize>();
+    cells.div_ceil(width).max(1) as u16
 }
 
 fn draw_done(
