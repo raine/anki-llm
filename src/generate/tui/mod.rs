@@ -325,9 +325,7 @@ impl App {
 
         match event {
             BackendEvent::SessionReady(_) => unreachable!(),
-            BackendEvent::ThinkingReset => {
-                self.thinking.clear();
-            }
+            BackendEvent::ThinkingReset => {}
             BackendEvent::ThinkingDelta(delta) => {
                 if matches!(self.mode, AppMode::Running) {
                     self.append_thinking(&delta);
@@ -348,11 +346,6 @@ impl App {
             BackendEvent::StepUpdate { step, status } => {
                 if matches!(status, StepStatus::Running(_)) {
                     self.current_step_idx = self.step_index(step);
-                    if matches!(step, PipelineStep::Generate) {
-                        self.thinking.clear();
-                    }
-                } else if matches!(step, PipelineStep::Generate) {
-                    self.thinking.clear();
                 }
                 if let Some(st) = self.step_status_mut(step) {
                     *st = status;
@@ -2199,7 +2192,7 @@ fn draw_input(
 }
 
 fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
-    if app.thinking.is_empty() || area.height < 6 {
+    if app.thinking.is_empty() || area.height < 7 {
         draw_log_panel(frame, &app.logs, app.log_scroll, area);
         return;
     }
@@ -2211,13 +2204,11 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(4),
-            Constraint::Length(1),
             Constraint::Length(thinking_height),
+            Constraint::Length(1),
+            Constraint::Min(4),
         ])
         .split(area);
-
-    draw_log_panel(frame, &app.logs, app.log_scroll, chunks[0]);
 
     let visible_height = thinking_height.saturating_sub(1) as usize;
     let lines: Vec<&str> = app.thinking.lines().collect();
@@ -2237,7 +2228,8 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
         ))
     }));
     let paragraph = Paragraph::new(Text::from(rendered)).wrap(Wrap { trim: false });
-    frame.render_widget(paragraph, chunks[2]);
+    frame.render_widget(paragraph, chunks[0]);
+    draw_log_panel(frame, &app.logs, app.log_scroll, chunks[2]);
 }
 
 fn draw_done(
@@ -2669,10 +2661,13 @@ mod tests {
     }
 
     #[test]
-    fn thinking_clears_on_reset_done_error_and_cancel_discard() {
+    fn thinking_persists_on_reset_but_clears_on_done_error_and_cancel_discard() {
         let mut app = mk_app();
         app.handle_backend_event(BackendEvent::ThinkingDelta("first".into()));
         app.handle_backend_event(BackendEvent::ThinkingReset);
+        assert_eq!(app.thinking, "first");
+
+        app.handle_backend_event(BackendEvent::ThinkingClear);
         assert!(app.thinking.is_empty());
 
         app.handle_backend_event(BackendEvent::ThinkingDelta("second".into()));
