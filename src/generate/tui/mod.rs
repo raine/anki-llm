@@ -164,7 +164,12 @@ impl App {
             .collect();
         let last_term = initial_term.clone();
         let mode = if let Some(term) = initial_term {
-            worker_tx.send(WorkerCommand::Start(term)).ok();
+            worker_tx
+                .send(WorkerCommand::Start {
+                    term,
+                    enable_thinking_stream: true,
+                })
+                .ok();
             AppMode::Running
         } else {
             AppMode::Input(LineInput::default())
@@ -540,7 +545,12 @@ impl App {
                     self.current_step_idx = None;
                     self.mode = AppMode::Running;
                     self.thinking.clear();
-                    self.worker_tx.send(WorkerCommand::Start(next_term)).ok();
+                    self.worker_tx
+                        .send(WorkerCommand::Start {
+                            term: next_term,
+                            enable_thinking_stream: false,
+                        })
+                        .ok();
                 } else {
                     self.batch_progress = None;
                     // If we accumulated cards before this error, show selection
@@ -737,7 +747,12 @@ impl App {
                     if let Some(term) = self.last_term.clone() {
                         self.reset_for_new_run();
                         self.mode = AppMode::Running;
-                        self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                        self.worker_tx
+                            .send(WorkerCommand::Start {
+                                term,
+                                enable_thinking_stream: true,
+                            })
+                            .ok();
                     }
                 }
                 KeyCode::Char('q') => {
@@ -894,7 +909,12 @@ impl App {
                         self.last_term = Some(term.clone());
                         self.batch_progress = None;
                         self.mode = AppMode::Running;
-                        self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                        self.worker_tx
+                            .send(WorkerCommand::Start {
+                                term,
+                                enable_thinking_stream: true,
+                            })
+                            .ok();
                     } else {
                         // Batch: queue has earlier terms, input has the last one
                         self.batch_queue.push(term);
@@ -907,7 +927,12 @@ impl App {
                         self.last_term = Some(first.clone());
                         self.batch_progress = Some((1, total));
                         self.mode = AppMode::Running;
-                        self.worker_tx.send(WorkerCommand::Start(first)).ok();
+                        self.worker_tx
+                            .send(WorkerCommand::Start {
+                                term: first,
+                                enable_thinking_stream: false,
+                            })
+                            .ok();
                     }
                 }
             }
@@ -1021,7 +1046,12 @@ impl App {
                             self.worker_tx.send(WorkerCommand::Cancel).ok();
                             self.pending_cancels += 1;
                             self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
-                            self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                            self.worker_tx
+                                .send(WorkerCommand::Start {
+                                    term,
+                                    enable_thinking_stream: true,
+                                })
+                                .ok();
                         } else {
                             state.refresh_in_flight = true;
                             self.worker_tx
@@ -1058,7 +1088,12 @@ impl App {
                     self.pending_cancels += 1;
                     self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
                     let term = self.last_term.clone().unwrap_or_default();
-                    self.worker_tx.send(WorkerCommand::Start(term)).ok();
+                    self.worker_tx
+                        .send(WorkerCommand::Start {
+                            term,
+                            enable_thinking_stream: true,
+                        })
+                        .ok();
                 } else {
                     state.refresh_in_flight = true;
                     self.worker_tx.send(WorkerCommand::Refresh).ok();

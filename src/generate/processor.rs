@@ -93,6 +93,9 @@ pub fn generate_cards(
         ) {
             Ok(result) => return Ok(result),
             Err(e) => {
+                if let Some(progress) = thinking_progress {
+                    progress.thinking_clear();
+                }
                 last_error = e.to_string();
                 // API errors (non-retryable) — break immediately
                 if let Some(LlmError::Api(_)) = e.downcast_ref::<LlmError>() {

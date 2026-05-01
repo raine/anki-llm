@@ -348,7 +348,10 @@ pub fn run_pipeline(
     // --- Per-term loop ---
     loop {
         match rx.recv() {
-            Ok(WorkerCommand::Start(term)) => {
+            Ok(WorkerCommand::Start {
+                term,
+                enable_thinking_stream,
+            }) => {
                 // Reset step statuses for the new run
                 for step in &[PipelineStep::LoadPrompt, PipelineStep::ValidateAnki] {
                     tx.send(BackendEvent::StepUpdate {
@@ -380,7 +383,7 @@ pub fn run_pipeline(
                     dry_run: args.dry_run,
                     output: args.output.as_deref(),
                     tts: session.tts.as_ref(),
-                    enable_thinking_stream: true,
+                    enable_thinking_stream,
                 };
 
                 match super::pipeline::run_pipeline_for_term(

@@ -145,6 +145,12 @@ impl TagSplitter {
                 self.open_tag
             };
             if let Some(idx) = self.buffer.find(target) {
+                if !self.in_thinking && idx > 0 && !self.buffer[..idx].trim().is_empty() {
+                    let emit_len = idx + target.len();
+                    let segment: String = self.buffer.drain(..emit_len).collect();
+                    out.push(Segment::Answer(segment));
+                    continue;
+                }
                 if idx > 0 {
                     let segment: String = self.buffer.drain(..idx).collect();
                     out.push(self.classify(segment));
@@ -392,6 +398,7 @@ impl LlmClient {
         let mut parser = SseParser::new();
         let mut reducer = StreamReducer::new(format);
 
+        let mut done = false;
         loop {
             let n = reader.read(&mut buf).map_err(|e| {
                 if is_timeout_err(&e) {
@@ -410,16 +417,20 @@ impl LlmClient {
                 .map_err(|e| LlmError::Decode(e.to_string()))?
             {
                 if event.data == "[DONE]" {
-                    let result = reducer.finish(&mut on_thinking);
-                    if result.content.is_empty() {
-                        return Err(LlmError::Decode("no content in response".into()));
-                    }
-                    return Ok(result);
+                    done = true;
+                    break;
                 }
                 let chunk = serde_json::from_str::<ChatChunk>(&event.data)
                     .map_err(|e| LlmError::Decode(e.to_string()))?;
                 reducer.apply_chunk(chunk, &mut on_thinking);
             }
+            if done {
+                break;
+            }
+        }
+
+        if !done {
+            return Err(LlmError::Http("stream ended before [DONE]".into()));
         }
 
         if let Some(event) = parser.flush()
@@ -615,6 +626,24 @@ mod tests {
         let result = reducer.finish(&mut |delta| thinking.push_str(delta));
         assert!(thinking.is_empty());
         assert_eq!(result.content, "[{\"Front\":\"literal <thought tag\"}]");
+    }
+
+    #[test]
+    fn tag_splitter_preserves_literal_full_thought_tag_inside_json() {
+        let mut reducer = StreamReducer::new(ThinkingFormat::GeminiThoughtTags);
+        let mut thinking = String::new();
+        reducer.apply_chunk(
+            chunk(serde_json::json!({
+                "choices": [{ "delta": { "content": "[{\"Front\":\"literal <thought>tag</thought> text\"}]" } }]
+            })),
+            &mut |delta| thinking.push_str(delta),
+        );
+        let result = reducer.finish(&mut |delta| thinking.push_str(delta));
+        assert!(thinking.is_empty());
+        assert_eq!(
+            result.content,
+            "[{\"Front\":\"literal <thought>tag</thought> text\"}]"
+        );
     }
 
     #[test]

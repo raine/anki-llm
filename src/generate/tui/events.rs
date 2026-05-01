@@ -96,7 +96,10 @@ pub enum BackendEvent {
 }
 
 pub enum WorkerCommand {
-    Start(String),           // term to generate cards for
+    Start {
+        term: String,
+        enable_thinking_stream: bool,
+    }, // term to generate cards for
     Refresh,                 // generate more cards for the same term
     RefreshWithTerm(String), // generate more cards with a different term
     /// Regenerate a single card with feedback. The card payload is the
