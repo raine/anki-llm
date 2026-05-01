@@ -2197,22 +2197,20 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    let thinking_lines = app.thinking.lines().count().max(1) as u16;
-    let thinking_height = (thinking_lines + 2)
-        .min(6)
-        .min(area.height.saturating_sub(5));
+    let log_height = (app.logs.len() as u16 + 2).clamp(4, 10);
+    let log_height = log_height.min(area.height.saturating_sub(4));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(4),
+            Constraint::Length(log_height),
             Constraint::Length(1),
-            Constraint::Length(thinking_height),
+            Constraint::Min(4),
         ])
         .split(area);
 
     draw_log_panel(frame, &app.logs, app.log_scroll, chunks[0]);
 
-    let visible_height = thinking_height.saturating_sub(2) as usize;
+    let visible_height = chunks[2].height.saturating_sub(2) as usize;
     let lines: Vec<&str> = app.thinking.lines().collect();
     let start = lines.len().saturating_sub(visible_height);
     let mut rendered = vec![
