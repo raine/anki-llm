@@ -2206,16 +2206,18 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
 
     let thinking_lines = app.thinking.lines().count().max(1) as u16;
     let thinking_height = (thinking_lines + 2)
-        .min(8)
-        .min(area.height.saturating_sub(3));
+        .min(6)
+        .min(area.height.saturating_sub(4));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(thinking_height),
+            Constraint::Min(4),
             Constraint::Length(1),
-            Constraint::Min(3),
+            Constraint::Length(thinking_height),
         ])
         .split(area);
+
+    draw_log_panel(frame, &app.logs, app.log_scroll, chunks[0]);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -2238,8 +2240,7 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
                 .add_modifier(Modifier::ITALIC),
         )
         .wrap(Wrap { trim: false });
-    frame.render_widget(paragraph, chunks[0]);
-    draw_log_panel(frame, &app.logs, app.log_scroll, chunks[2]);
+    frame.render_widget(paragraph, chunks[2]);
 }
 
 fn draw_done(
