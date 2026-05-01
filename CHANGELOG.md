@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.16 (2026-05-01)
+
+- Add xAI as a provider with Grok 4.3 model
+
 ## v2.0.15 (2026-04-26)
 
 - Add `doctor` command to diagnose configuration, API keys, AnkiConnect connectivity, and workspace setup.
