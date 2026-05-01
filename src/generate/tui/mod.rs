@@ -2181,7 +2181,7 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
 
     let thinking_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .constraints([Constraint::Length(2), Constraint::Min(0)])
         .split(chunks[1]);
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
@@ -2241,6 +2241,7 @@ fn thinking_markdown_lines(md: &str) -> Vec<Line<'static>> {
             }
             MarkdownEvent::End(TagEnd::Heading(_)) => {
                 lines.push(Line::from(std::mem::take(&mut spans)));
+                lines.push(Line::from(""));
                 style = base_style;
             }
             MarkdownEvent::Start(Tag::Strong) => {
@@ -2257,6 +2258,9 @@ fn thinking_markdown_lines(md: &str) -> Vec<Line<'static>> {
                 if !spans.is_empty() {
                     lines.push(Line::from(std::mem::take(&mut spans)));
                 }
+                if list_depth == 0 {
+                    lines.push(Line::from(""));
+                }
             }
             MarkdownEvent::Start(Tag::Item) => {
                 if !spans.is_empty() {
@@ -2267,8 +2271,12 @@ fn thinking_markdown_lines(md: &str) -> Vec<Line<'static>> {
                     base_style,
                 ));
             }
-            MarkdownEvent::End(TagEnd::Item) | MarkdownEvent::End(TagEnd::Paragraph) => {
+            MarkdownEvent::End(TagEnd::Item) => {
                 lines.push(Line::from(std::mem::take(&mut spans)));
+            }
+            MarkdownEvent::End(TagEnd::Paragraph) => {
+                lines.push(Line::from(std::mem::take(&mut spans)));
+                lines.push(Line::from(""));
             }
             MarkdownEvent::Start(Tag::CodeBlock(_)) => {
                 if !spans.is_empty() {
