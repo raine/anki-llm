@@ -31,11 +31,6 @@ ureq = { version = "3", features = ["json", "rustls"] }
 anyhow = "1.0"
 thiserror = "2.0"
 
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-appender = "0.2"
-
 # Data structures
 indexmap = { version = "2", features = ["serde"] }
 regex = "1"
@@ -43,9 +38,6 @@ regex = "1"
 # Files
 tempfile = "3"
 home = "0.5"
-
-# Signal handling
-ctrlc = "3.4"
 
 # Clipboard
 arboard = "3"
