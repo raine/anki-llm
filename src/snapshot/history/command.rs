@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::style::style;
 
-use super::store::list_snapshots;
+use super::super::store::list_snapshots;
 
 fn truncate_display(s: &str, max: usize) -> String {
     if s.chars().count() <= max {

@@ -144,7 +144,7 @@ pub fn run_tui(mut args: GenerateArgs) -> anyhow::Result<()> {
         };
 
         let worker_handle = std::thread::spawn(move || {
-            crate::generate::command_generate::run_pipeline(pipeline_args, tx_events, rx_cmd)
+            crate::generate::command::run_pipeline(pipeline_args, tx_events, rx_cmd)
         });
 
         let glyphs = Glyphs::from_config();

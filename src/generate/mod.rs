@@ -1,6 +1,6 @@
 pub mod anki_import;
 pub mod cards;
-pub mod command_generate;
+pub mod command;
 pub mod copy_mode;
 pub mod exporter;
 pub mod init;

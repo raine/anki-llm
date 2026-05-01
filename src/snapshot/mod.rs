@@ -1,3 +1,3 @@
-pub mod command_history;
-pub mod command_rollback;
+pub mod history;
+pub mod rollback;
 pub mod store;

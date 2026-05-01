@@ -5,7 +5,7 @@ use crate::anki::client::anki_client;
 use crate::cli::RollbackArgs;
 use crate::style::style;
 
-use super::store::{load_snapshot, save_snapshot};
+use super::super::store::{load_snapshot, save_snapshot};
 
 const ROLLBACK_BATCH_SIZE: usize = 50;
 

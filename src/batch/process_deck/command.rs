@@ -18,14 +18,14 @@ use crate::snapshot::store::{self, Snapshot};
 use crate::template::fill_template;
 use crate::template::process_prompt;
 
-use super::controller::{ControllerRuntime, run_batch_controller};
-use super::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
-use super::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
-use super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, RowDescriptor};
-use super::preview;
-use super::process_row::{ProcessRowConfig, build_process_fn};
-use super::report::RowOutcome;
-use super::session::{BatchSession, SharedSession};
+use super::super::controller::{ControllerRuntime, run_batch_controller};
+use super::super::deck_mode::{ANKI_NOTE_ID_KEY, DeckWriter};
+use super::super::engine::{EngineRunResult, IdExtractor, OnRowDone, ProcessFn};
+use super::super::events::{BatchPlan, BatchSummary, FailedRowInfo, InfoField, RowDescriptor};
+use super::super::preview;
+use super::super::process_row::{ProcessRowConfig, build_process_fn};
+use super::super::report::RowOutcome;
+use super::super::session::{BatchSession, SharedSession};
 
 fn deck_row_id(row: &Row) -> String {
     row.get(ANKI_NOTE_ID_KEY)

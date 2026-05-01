@@ -1,7 +1,7 @@
-pub mod command_export;
-pub mod command_import;
 pub mod csv_io;
 pub mod error;
+pub mod export;
+pub mod import;
 pub mod io;
 pub mod rows;
 pub mod slug;

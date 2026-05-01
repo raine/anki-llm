@@ -1,9 +1,9 @@
-pub mod command_process_deck;
-pub mod command_process_file;
 pub mod controller;
 pub mod deck_mode;
 pub mod engine;
 pub mod error;
+pub mod process_deck;
+pub mod process_file;
 // Fields are consumed by renderers in the binary crate; lib crate warns falsely.
 #[allow(dead_code)]
 pub mod events;
