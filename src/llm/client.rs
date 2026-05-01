@@ -10,7 +10,7 @@ use crate::llm::sse::SseParser;
 
 const DEFAULT_OPENAI_BASE: &str = "https://api.openai.com/v1";
 const TIMEOUT_SECS: u64 = 90;
-const STREAM_READ_TIMEOUT_SECS: u64 = 5;
+const STREAM_READ_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct JsonSchema {
