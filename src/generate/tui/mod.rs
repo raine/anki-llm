@@ -2226,7 +2226,21 @@ fn thinking_markdown_lines(md: &str) -> Vec<Line<'static>> {
                     .bg(THEME.highlight_bg),
             )),
             MarkdownEvent::Html(html) | MarkdownEvent::InlineHtml(html) => {
-                spans.push(Span::styled(html.to_string(), style));
+                let tag = html.trim().to_lowercase();
+                match tag.as_str() {
+                    "<b>" | "<strong>" => {
+                        style = style.add_modifier(Modifier::BOLD).fg(THEME.text);
+                    }
+                    "</b>" | "</strong>" => style = base_style,
+                    "<i>" | "<em>" => {
+                        style = style.add_modifier(Modifier::ITALIC);
+                    }
+                    "</i>" | "</em>" => style = base_style,
+                    "<br>" | "<br/>" | "<br />" => {
+                        lines.push(Line::from(std::mem::take(&mut spans)));
+                    }
+                    _ => spans.push(Span::styled(html.to_string(), style)),
+                }
             }
             MarkdownEvent::SoftBreak | MarkdownEvent::HardBreak => {
                 lines.push(Line::from(std::mem::take(&mut spans)));
@@ -2272,11 +2286,15 @@ fn thinking_markdown_lines(md: &str) -> Vec<Line<'static>> {
                 ));
             }
             MarkdownEvent::End(TagEnd::Item) => {
-                lines.push(Line::from(std::mem::take(&mut spans)));
+                if !spans.is_empty() {
+                    lines.push(Line::from(std::mem::take(&mut spans)));
+                }
             }
             MarkdownEvent::End(TagEnd::Paragraph) => {
                 lines.push(Line::from(std::mem::take(&mut spans)));
-                lines.push(Line::from(""));
+                if list_depth == 0 {
+                    lines.push(Line::from(""));
+                }
             }
             MarkdownEvent::Start(Tag::CodeBlock(_)) => {
                 if !spans.is_empty() {
