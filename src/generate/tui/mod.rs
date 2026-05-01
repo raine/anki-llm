@@ -2192,33 +2192,38 @@ fn draw_input(
 }
 
 fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
-    if app.thinking.is_empty() || area.height < 7 {
+    if app.thinking.is_empty() || area.height < 8 {
         draw_log_panel(frame, &app.logs, app.log_scroll, area);
         return;
     }
 
     let thinking_lines = app.thinking.lines().count().max(1) as u16;
-    let thinking_height = (thinking_lines + 1)
-        .min(5)
-        .min(area.height.saturating_sub(4));
+    let thinking_height = (thinking_lines + 2)
+        .min(6)
+        .min(area.height.saturating_sub(5));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(thinking_height),
-            Constraint::Length(1),
             Constraint::Min(4),
+            Constraint::Length(1),
+            Constraint::Length(thinking_height),
         ])
         .split(area);
 
-    let visible_height = thinking_height.saturating_sub(1) as usize;
+    draw_log_panel(frame, &app.logs, app.log_scroll, chunks[0]);
+
+    let visible_height = thinking_height.saturating_sub(2) as usize;
     let lines: Vec<&str> = app.thinking.lines().collect();
     let start = lines.len().saturating_sub(visible_height);
-    let mut rendered = vec![Line::from(Span::styled(
-        "Thinking",
-        Style::default()
-            .fg(THEME.info)
-            .add_modifier(Modifier::ITALIC),
-    ))];
+    let mut rendered = vec![
+        Line::from(Span::styled(
+            " Thinking ",
+            Style::default()
+                .fg(THEME.info)
+                .add_modifier(Modifier::ITALIC),
+        )),
+        Line::from(""),
+    ];
     rendered.extend(lines[start..].iter().map(|line| {
         Line::from(Span::styled(
             (*line).to_string(),
@@ -2227,9 +2232,14 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
                 .add_modifier(Modifier::ITALIC),
         ))
     }));
-    let paragraph = Paragraph::new(Text::from(rendered)).wrap(Wrap { trim: false });
-    frame.render_widget(paragraph, chunks[0]);
-    draw_log_panel(frame, &app.logs, app.log_scroll, chunks[2]);
+    let paragraph = Paragraph::new(Text::from(rendered))
+        .block(
+            Block::default()
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(THEME.border)),
+        )
+        .wrap(Wrap { trim: false });
+    frame.render_widget(paragraph, chunks[2]);
 }
 
 fn draw_done(
