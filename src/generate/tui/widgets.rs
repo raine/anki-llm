@@ -108,11 +108,13 @@ impl ModelPickerState {
 
     pub(super) fn add_filter_char(&mut self, c: char) {
         self.filter.push(c);
+        self.cursor = 0;
         self.clamp_cursor();
     }
 
     pub(super) fn remove_filter_char(&mut self) {
         self.filter.pop();
+        self.cursor = 0;
         self.clamp_cursor();
     }
 
