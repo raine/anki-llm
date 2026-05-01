@@ -123,10 +123,10 @@ cargo install anki-llm
 ## LLM Configuration
 
 `anki-llm` works with any LLM that exposes an OpenAI-compatible chat completions
-API. This includes OpenAI, Google Gemini, OpenRouter, Ollama, and many other
+API. This includes OpenAI, Google Gemini, xAI, OpenRouter, Ollama, and many other
 providers.
 
-### Quick start: OpenAI, Gemini, or DeepSeek
+### Quick start: OpenAI, Gemini, DeepSeek, or Grok
 
 Set the appropriate environment variable and you're ready to go:
 
@@ -139,13 +139,17 @@ export GEMINI_API_KEY="your-api-key-here"
 
 # DeepSeek
 export DEEPSEEK_API_KEY="your-api-key-here"
+
+# xAI / Grok
+export XAI_API_KEY="your-api-key-here"
 ```
 
 Get your API key from [OpenAI](https://platform.openai.com/api-keys),
-[Google AI Studio](https://aistudio.google.com/api-keys), or
-[DeepSeek](https://platform.deepseek.com/api_keys).
+[Google AI Studio](https://aistudio.google.com/api-keys),
+[DeepSeek](https://platform.deepseek.com/api_keys), or
+[xAI](https://console.x.ai/team/default/api-keys).
 
-OpenAI, Gemini, and DeepSeek models are auto-detected from the model name
+OpenAI, Gemini, DeepSeek, and Grok models are auto-detected from the model name
 prefix and work with zero additional configuration.
 
 ### Using OpenRouter
@@ -201,9 +205,9 @@ anki-llm process-file input.yaml -o output.yaml -p prompt.md \
 
 **Precedence:** CLI flag > environment variable > config file > auto-detect.
 
-For built-in providers (OpenAI, Gemini, DeepSeek), the provider-specific
-environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`)
-are used as a fallback when `ANKI_LLM_API_KEY` is not set.
+For built-in providers (OpenAI, Gemini, DeepSeek, xAI), the provider-specific
+environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`,
+`XAI_API_KEY`) are used as a fallback when `ANKI_LLM_API_KEY` is not set.
 
 ### Known models with pricing
 
@@ -241,6 +245,8 @@ display is simply skipped for models without pricing data.
 | **DeepSeek models**             |
 | `deepseek-v4-flash`             | $0.14/M | $0.28/M  | [🔗](https://api-docs.deepseek.com/quick_start/pricing)                          |
 | `deepseek-v4-pro`               | $1.74/M | $3.48/M  | [🔗](https://api-docs.deepseek.com/quick_start/pricing)                          |
+| **xAI models**                  |
+| `grok-4.3`                      | $1.25/M | $2.50/M  | [🔗](https://docs.x.ai/docs/models)                                              |
 
 Pricing is per million tokens (M). Check the latest prices on the provider's
 website to be sure.
@@ -1886,6 +1892,7 @@ roughly:
 | `gemini-3.1-flash-lite-preview` | ~$1.00               |
 | `gemini-2.5-flash`              | ~$1.50               |
 | `gpt-5-mini`                    | ~$3.00               |
+| `grok-4.3`                      | ~$3.50               |
 
 Smaller fields (a single hint, a short translation) cost a fraction of this;
 heavier prompts with multiple sections per card cost more. Use `--limit 20`

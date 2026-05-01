@@ -35,6 +35,8 @@ pub fn model_pricing(model: &str) -> Option<ModelPricing> {
         // DeepSeek family (cache-miss / undiscounted rates)
         "deepseek-v4-flash" => (0.14, 0.28),
         "deepseek-v4-pro" => (1.74, 3.48),
+        // Grok family
+        "grok-4.3" => (1.25, 2.50),
         _ => return None,
     };
     Some(ModelPricing {
@@ -94,6 +96,7 @@ pub const KNOWN_MODELS: &[&str] = &[
     "gemini-3.1-pro-preview",
     "deepseek-v4-flash",
     "deepseek-v4-pro",
+    "grok-4.3",
 ];
 
 #[cfg(test)]

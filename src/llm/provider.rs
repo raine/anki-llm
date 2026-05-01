@@ -22,6 +22,11 @@ pub fn provider_config(model: &str) -> ProviderConfig {
             base_url: Some("https://api.deepseek.com".to_string()),
             api_key_env: "DEEPSEEK_API_KEY",
         }
+    } else if model.starts_with("grok-") {
+        ProviderConfig {
+            base_url: Some("https://api.x.ai/v1".to_string()),
+            api_key_env: "XAI_API_KEY",
+        }
     } else {
         ProviderConfig {
             base_url: None,
@@ -98,6 +103,8 @@ pub fn resolve_model(user_model: Option<&str>) -> String {
         "gemini-2.5-flash".to_string()
     } else if has_key("DEEPSEEK_API_KEY") {
         "deepseek-v4-flash".to_string()
+    } else if has_key("XAI_API_KEY") {
+        "grok-4.3".to_string()
     } else {
         "gpt-5".to_string()
     }
@@ -141,6 +148,13 @@ mod tests {
 
         let config = provider_config("deepseek-v4-flash");
         assert_eq!(config.api_key_env, "DEEPSEEK_API_KEY");
+    }
+
+    #[test]
+    fn grok_model_uses_xai() {
+        let config = provider_config("grok-4.3");
+        assert_eq!(config.api_key_env, "XAI_API_KEY");
+        assert_eq!(config.base_url.as_deref(), Some("https://api.x.ai/v1"));
     }
 
     #[test]

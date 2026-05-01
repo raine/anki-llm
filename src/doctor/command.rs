@@ -147,6 +147,12 @@ const LLM_PROVIDERS: &[LlmProvider] = &[
         base_url: "https://api.deepseek.com",
         probe_model: "deepseek-v4-flash",
     },
+    LlmProvider {
+        name: "xAI",
+        env_var: "XAI_API_KEY",
+        base_url: "https://api.x.ai/v1",
+        probe_model: "grok-4.3",
+    },
 ];
 
 fn print_llm_section(check: bool) -> bool {
