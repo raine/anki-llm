@@ -469,6 +469,7 @@ pub struct LlmClient {
     base_url: String,
     api_key: Option<String>,
     agent: ureq::Agent,
+    gemini_thinking_enabled: bool,
 }
 
 impl LlmClient {
@@ -493,6 +494,7 @@ impl LlmClient {
             base_url,
             api_key: config.api_key.clone(),
             agent,
+            gemini_thinking_enabled: config.gemini_thinking_enabled,
         }
     }
 
@@ -516,11 +518,22 @@ impl LlmClient {
             base_url,
             api_key,
             agent,
+            gemini_thinking_enabled: true,
         })
     }
 
     pub fn supports_thinking_stream(&self, model: &str) -> bool {
-        provider::thinking_format_for(model, &self.base_url).is_some()
+        self.thinking_format_for_request(model).is_some()
+    }
+
+    fn thinking_format_for_request(&self, model: &str) -> Option<ThinkingFormat> {
+        match provider::thinking_format_for(model, &self.base_url) {
+            Some(ThinkingFormat::GeminiThoughtTags) if self.gemini_thinking_enabled => {
+                Some(ThinkingFormat::GeminiThoughtTags)
+            }
+            Some(ThinkingFormat::ReasoningContent) => Some(ThinkingFormat::ReasoningContent),
+            _ => None,
+        }
     }
 
     /// Send a chat completion request with a single user message.
@@ -543,7 +556,7 @@ impl LlmClient {
         mut on_reset: impl FnMut(),
         mut on_thinking: impl FnMut(&str),
     ) -> Result<ChatCompletionResult, LlmError> {
-        let Some(format) = provider::thinking_format_for(model, &self.base_url) else {
+        let Some(format) = self.thinking_format_for_request(model) else {
             return self.chat_completion(model, prompt, temperature, max_tokens);
         };
         on_reset();
@@ -714,6 +727,15 @@ mod tests {
         idx: usize,
     }
 
+    fn test_client(base_url: &str, gemini_thinking_enabled: bool) -> LlmClient {
+        LlmClient {
+            base_url: base_url.to_string(),
+            api_key: None,
+            agent: ureq::Agent::new_with_defaults(),
+            gemini_thinking_enabled,
+        }
+    }
+
     impl ChunkReader {
         fn new(chunks: Vec<&'static [u8]>) -> Self {
             Self { chunks, idx: 0 }
@@ -729,6 +751,27 @@ mod tests {
             buf[..chunk.len()].copy_from_slice(chunk);
             Ok(chunk.len())
         }
+    }
+
+    #[test]
+    fn gemini_thinking_config_gates_gemini_only() {
+        let gemini = test_client(
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            false,
+        );
+        assert!(!gemini.supports_thinking_stream("gemini-2.5-flash"));
+
+        let deepseek = test_client("https://api.deepseek.com", false);
+        assert!(deepseek.supports_thinking_stream("deepseek-v4-pro"));
+    }
+
+    #[test]
+    fn gemini_thinking_enabled_allows_gemini_streaming() {
+        let gemini = test_client(
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            true,
+        );
+        assert!(gemini.supports_thinking_stream("gemini-2.5-flash"));
     }
 
     #[test]

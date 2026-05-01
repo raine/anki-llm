@@ -12,6 +12,8 @@ pub struct AppConfig {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nerd_font: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gemini_thinking_enabled: Option<bool>,
     /// Default workspace used when running outside a workspace directory.
     /// Its `prompts/`, `note-types/`, and `anki-llm.yaml` are used as
     /// fallbacks for commands that depend on a workspace.
@@ -61,6 +63,7 @@ impl AppConfig {
         match key {
             "model" => self.model.clone(),
             "nerd_font" => self.nerd_font.map(|b| b.to_string()),
+            "gemini_thinking_enabled" => self.gemini_thinking_enabled.map(|b| b.to_string()),
             "default_workspace" => self
                 .default_workspace
                 .as_ref()
@@ -90,6 +93,10 @@ impl AppConfig {
             }
             "nerd_font" => {
                 self.nerd_font = Some(value != "false" && value != "0");
+                true
+            }
+            "gemini_thinking_enabled" => {
+                self.gemini_thinking_enabled = Some(value != "false" && value != "0");
                 true
             }
             "default_workspace" => {
@@ -156,6 +163,9 @@ impl AppConfig {
         }
         if let Some(v) = self.nerd_font {
             out.push(("nerd_font".into(), v.to_string()));
+        }
+        if let Some(v) = self.gemini_thinking_enabled {
+            out.push(("gemini_thinking_enabled".into(), v.to_string()));
         }
         if let Some(ref v) = self.default_workspace {
             out.push(("default_workspace".into(), v.display().to_string()));
@@ -389,6 +399,12 @@ mod tests {
         assert_eq!(config.get("model"), Some("gpt-5".into()));
         assert!(config.set("nerd_font", "false"));
         assert_eq!(config.get("nerd_font"), Some("false".into()));
+        assert!(config.set("gemini_thinking_enabled", "false"));
+        assert_eq!(config.get("gemini_thinking_enabled"), Some("false".into()));
+        assert!(config.set("gemini_thinking_enabled", "0"));
+        assert_eq!(config.gemini_thinking_enabled, Some(false));
+        assert!(config.set("gemini_thinking_enabled", "true"));
+        assert_eq!(config.gemini_thinking_enabled, Some(true));
         assert!(config.set("default_workspace", "/tmp/ws"));
         assert_eq!(config.get("default_workspace"), Some("/tmp/ws".into()));
         assert!(!config.set("unknown_key", "value"));

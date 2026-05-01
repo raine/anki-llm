@@ -197,11 +197,12 @@ anki-llm process-file input.yaml -o output.yaml -p prompt.md \
 
 ### Provider configuration options
 
-| Setting      | CLI flag         | Environment variable    | Config key     |
-| ------------ | ---------------- | ----------------------- | -------------- |
-| API base URL | `--api-base-url` | `ANKI_LLM_API_BASE_URL` | `api_base_url` |
-| API key      | `--api-key`      | `ANKI_LLM_API_KEY`      | -              |
-| Model        | `--model` / `-m` | -                       | `model`        |
+| Setting                 | CLI flag         | Environment variable    | Config key                |
+| ----------------------- | ---------------- | ----------------------- | ------------------------- |
+| API base URL            | `--api-base-url` | `ANKI_LLM_API_BASE_URL` | `api_base_url`            |
+| API key                 | `--api-key`      | `ANKI_LLM_API_KEY`      | -                         |
+| Model                   | `--model` / `-m` | -                       | `model`                   |
+| Gemini thinking         | -                | -                       | `gemini_thinking_enabled` |
 
 **Precedence:** CLI flag > environment variable > config file > auto-detect.
 
@@ -265,6 +266,9 @@ anki-llm config set api_base_url https://openrouter.ai/api/v1
 
 # WSL or remote Anki: point at a non-default AnkiConnect host
 anki-llm config set anki_connect_url http://192.168.1.100:8765
+
+# Disable Gemini thinking in the generate TUI
+anki-llm config set gemini_thinking_enabled false
 ```
 
 Config file lives at `~/.config/anki-llm/config.json`.
@@ -742,6 +746,9 @@ When a supported thinking model from Gemini, DeepSeek, or Grok emits raw
 reasoning during the primary generation request, the running view shows it live in
 a temporary Thinking block above the log. This stream is for display only: it is
 cleared when generation finishes and is not written to prompt/response logs.
+Gemini thinking can be disabled with
+`anki-llm config set gemini_thinking_enabled false`, which uses the normal
+non-thinking Gemini request path instead.
 
 Press `?` at any time to see keyboard shortcuts for the current mode. Token
 usage and estimated cost are tracked in the sidebar across the session.
