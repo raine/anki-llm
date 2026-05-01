@@ -2201,27 +2201,20 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
     let log_height = log_height.min(area.height.saturating_sub(4));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(log_height),
-            Constraint::Length(1),
-            Constraint::Min(4),
-        ])
+        .constraints([Constraint::Length(log_height), Constraint::Min(4)])
         .split(area);
 
     draw_log_panel(frame, &app.logs, app.log_scroll, chunks[0]);
 
-    let visible_height = chunks[2].height.saturating_sub(2) as usize;
+    let visible_height = chunks[1].height.saturating_sub(1) as usize;
     let lines: Vec<&str> = app.thinking.lines().collect();
     let start = lines.len().saturating_sub(visible_height);
-    let mut rendered = vec![
-        Line::from(Span::styled(
-            " Thinking ",
-            Style::default()
-                .fg(THEME.info)
-                .add_modifier(Modifier::ITALIC),
-        )),
-        Line::from(""),
-    ];
+    let mut rendered = vec![Line::from(Span::styled(
+        "Thinking",
+        Style::default()
+            .fg(THEME.info)
+            .add_modifier(Modifier::ITALIC),
+    ))];
     rendered.extend(lines[start..].iter().map(|line| {
         Line::from(Span::styled(
             (*line).to_string(),
@@ -2230,14 +2223,8 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
                 .add_modifier(Modifier::ITALIC),
         ))
     }));
-    let paragraph = Paragraph::new(Text::from(rendered))
-        .block(
-            Block::default()
-                .borders(Borders::TOP)
-                .border_style(Style::default().fg(THEME.border)),
-        )
-        .wrap(Wrap { trim: false });
-    frame.render_widget(paragraph, chunks[2]);
+    let paragraph = Paragraph::new(Text::from(rendered)).wrap(Wrap { trim: false });
+    frame.render_widget(paragraph, chunks[1]);
 }
 
 fn draw_done(
