@@ -6,6 +6,8 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::tts::cache::hex;
+
 use crate::anki::schema::CardTemplate;
 
 const STATE_FILE: &str = ".sync-state.json";
@@ -29,7 +31,7 @@ pub fn hash_remote(css: &str, templates: &IndexMap<String, CardTemplate>) -> Str
         hasher.update(b"\0back\0");
         hasher.update(tmpl.back.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    hex(&hasher.finalize())
 }
 
 pub fn read(root: &Path) -> Result<Option<SyncState>> {
