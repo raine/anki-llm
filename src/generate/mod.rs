@@ -1,13 +1,17 @@
 pub mod anki_import;
 pub mod cards;
 pub mod command_generate;
+pub mod copy_mode;
 pub mod exporter;
 pub mod init;
+pub mod legacy_adapter;
 pub mod manual;
 pub mod pipeline;
 pub mod process;
 pub mod processor;
 pub mod sanitize;
 pub mod selector;
+pub mod session;
 pub mod tui;
+pub mod tui_adapter;
 pub mod validate;
