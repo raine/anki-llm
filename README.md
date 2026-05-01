@@ -1866,6 +1866,7 @@ shows a full preview of the currently focused card.
 - <kbd>R</kbd>: regenerate a card with feedback
 - <kbd>d</kbd>: remove a card from the list
 - <kbd>c</kbd>: copy card to clipboard
+- <kbd>q</kbd> / <kbd>Ctrl-C</kbd>: quit the TUI
 - <kbd>p</kbd>: preview the focused card's audio when TTS is enabled
 - <kbd>z</kbd>: toggle skipping post-select processing
 

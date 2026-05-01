@@ -1044,6 +1044,11 @@ impl App {
         }
 
         match key.code {
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.worker_tx.send(WorkerCommand::Quit).ok();
+                self.should_quit = true;
+                self.user_quit = true;
+            }
             KeyCode::Up | KeyCode::Char('k') => state.move_up(),
             KeyCode::Down | KeyCode::Char('j') => state.move_down(),
             KeyCode::Char(' ') => state.toggle_current(),
@@ -1636,7 +1641,7 @@ fn draw_help_overlay(frame: &mut Frame, app: &App) {
                 ("Ctrl+O", "Model"),
                 ("Enter", "Confirm"),
                 ("Esc", "Back"),
-                ("q", "Quit"),
+                ("q / Ctrl+C", "Quit"),
                 ("PgUp/PgDn", "Scroll"),
             ]);
             v
