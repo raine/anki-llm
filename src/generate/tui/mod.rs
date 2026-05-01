@@ -2205,8 +2205,8 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     let thinking_lines = app.thinking.lines().count().max(1) as u16;
-    let thinking_height = (thinking_lines + 2)
-        .min(6)
+    let thinking_height = (thinking_lines + 1)
+        .min(5)
         .min(area.height.saturating_sub(4));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -2219,27 +2219,24 @@ fn draw_running(frame: &mut Frame, app: &App, area: Rect) {
 
     draw_log_panel(frame, &app.logs, app.log_scroll, chunks[0]);
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(Line::from(Span::styled(
-            " Thinking ",
-            Style::default()
-                .fg(THEME.info)
-                .add_modifier(Modifier::ITALIC),
-        )))
-        .border_style(Style::default().fg(THEME.help_border));
-    let visible_height = thinking_height.saturating_sub(2) as usize;
+    let visible_height = thinking_height.saturating_sub(1) as usize;
     let lines: Vec<&str> = app.thinking.lines().collect();
     let start = lines.len().saturating_sub(visible_height);
-    let text = lines[start..].join("\n");
-    let paragraph = Paragraph::new(text)
-        .block(block)
-        .style(
+    let mut rendered = vec![Line::from(Span::styled(
+        "Thinking",
+        Style::default()
+            .fg(THEME.info)
+            .add_modifier(Modifier::ITALIC),
+    ))];
+    rendered.extend(lines[start..].iter().map(|line| {
+        Line::from(Span::styled(
+            (*line).to_string(),
             Style::default()
                 .fg(THEME.dimmed)
                 .add_modifier(Modifier::ITALIC),
-        )
-        .wrap(Wrap { trim: false });
+        ))
+    }));
+    let paragraph = Paragraph::new(Text::from(rendered)).wrap(Wrap { trim: false });
     frame.render_widget(paragraph, chunks[2]);
 }
 
