@@ -3,115 +3,30 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use super::error::LlmError;
-use crate::llm::provider::{self, ThinkingFormat};
-use crate::llm::runtime::RuntimeConfig;
+use super::response::{ChatCompletionResult, ChatUsage, effective_usage};
+use crate::llm::error::LlmError;
+use crate::llm::provider::ThinkingFormat;
 use crate::llm::sse::SseParser;
 
-const DEFAULT_OPENAI_BASE: &str = "https://api.openai.com/v1";
-const TIMEOUT_SECS: u64 = 90;
-const STREAM_READ_TIMEOUT_SECS: u64 = 30;
-
-#[derive(Debug, Clone, Serialize)]
-pub struct JsonSchema {
-    pub name: String,
-    pub schema: serde_json::Value,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub strict: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ResponseFormat {
-    JsonSchema { json_schema: JsonSchema },
-}
-
-#[derive(Debug, Serialize)]
-struct ChatRequest<'a> {
-    model: &'a str,
-    messages: Vec<ChatMessage<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<&'a ResponseFormat>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    stream: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    stream_options: Option<StreamOptions>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    extra_body: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize)]
-struct ChatMessage<'a> {
-    role: &'a str,
-    content: &'a str,
-}
-
-#[derive(Debug, Clone, Copy, Serialize)]
-struct StreamOptions {
-    include_usage: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct ChatResponse {
-    choices: Vec<ChatChoice>,
-    usage: Option<ChatUsage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ChatChoice {
-    message: ChatChoiceMessage,
-}
-
-#[derive(Debug, Deserialize)]
-struct ChatChoiceMessage {
-    content: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct ChatUsage {
-    pub prompt_tokens: u64,
-    pub completion_tokens: u64,
+#[derive(Deserialize)]
+pub(super) struct ChatChunk {
     #[serde(default)]
-    total_tokens: Option<u64>,
-    #[serde(default)]
-    completion_tokens_details: Option<CompletionTokensDetails>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct CompletionTokensDetails {
-    #[serde(default)]
-    reasoning_tokens: Option<u64>,
-}
-
-/// Result of a chat completion call.
-pub struct ChatCompletionResult {
-    pub content: String,
+    pub choices: Vec<ChatChunkChoice>,
     pub usage: Option<ChatUsage>,
 }
 
 #[derive(Deserialize)]
-struct ChatChunk {
-    #[serde(default)]
-    choices: Vec<ChatChunkChoice>,
-    usage: Option<ChatUsage>,
-}
-
-#[derive(Deserialize)]
-struct ChatChunkChoice {
-    delta: ChatDelta,
+pub(super) struct ChatChunkChoice {
+    pub delta: ChatDelta,
 }
 
 #[derive(Deserialize, Default)]
-struct ChatDelta {
-    content: Option<String>,
+pub(super) struct ChatDelta {
+    pub content: Option<String>,
     #[serde(default)]
-    reasoning_content: Option<String>,
+    pub reasoning_content: Option<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -203,14 +118,14 @@ fn partial_suffix_len(buf: &str, tag: &str) -> usize {
     0
 }
 
-struct StreamReducer {
+pub(super) struct StreamReducer {
     splitter: Option<TagSplitter>,
     content: String,
     usage: Option<ChatUsage>,
 }
 
 impl StreamReducer {
-    fn new(format: ThinkingFormat) -> Self {
+    pub(super) fn new(format: ThinkingFormat) -> Self {
         let splitter = match format {
             ThinkingFormat::GeminiThoughtTags => Some(TagSplitter::new("<thought>", "</thought>")),
             ThinkingFormat::ReasoningContent => None,
@@ -222,7 +137,7 @@ impl StreamReducer {
         }
     }
 
-    fn apply_chunk(&mut self, chunk: ChatChunk, on_thinking: &mut impl FnMut(&str)) {
+    pub(super) fn apply_chunk(&mut self, chunk: ChatChunk, on_thinking: &mut impl FnMut(&str)) {
         if let Some(usage) = chunk.usage {
             self.usage = Some(effective_usage(usage));
         }
@@ -249,7 +164,7 @@ impl StreamReducer {
         }
     }
 
-    fn finish(mut self, on_thinking: &mut impl FnMut(&str)) -> ChatCompletionResult {
+    pub(super) fn finish(mut self, on_thinking: &mut impl FnMut(&str)) -> ChatCompletionResult {
         if let Some(splitter) = self.splitter.take()
             && let Some(segment) = splitter.flush()
         {
@@ -273,17 +188,12 @@ impl StreamReducer {
     }
 }
 
-fn effective_usage(mut usage: ChatUsage) -> ChatUsage {
-    if let Some(details) = &usage.completion_tokens_details
-        && let Some(reasoning_tokens) = details.reasoning_tokens
-    {
-        usage.completion_tokens = usage.completion_tokens.max(reasoning_tokens);
+fn is_timeout_err(e: &std::io::Error) -> bool {
+    if e.kind() == std::io::ErrorKind::TimedOut {
+        return true;
     }
-    if let Some(total) = usage.total_tokens {
-        let effective_completion = total.saturating_sub(usage.prompt_tokens);
-        usage.completion_tokens = usage.completion_tokens.max(effective_completion);
-    }
-    usage
+    let s = e.to_string();
+    s.contains("timeout") || s.contains("Timeout")
 }
 
 #[cfg(test)]
@@ -375,7 +285,7 @@ struct StreamReadResult {
     done: bool,
 }
 
-fn read_stream_completion_with_idle_timeout<R: Read + Send + 'static>(
+pub(super) fn read_stream_completion_with_idle_timeout<R: Read + Send + 'static>(
     mut reader: R,
     format: ThinkingFormat,
     idle_timeout_secs: u64,
@@ -465,253 +375,6 @@ fn read_timed_stream_events(
     Ok(reducer.finish(on_thinking))
 }
 
-pub struct LlmClient {
-    base_url: String,
-    api_key: Option<String>,
-    agent: ureq::Agent,
-    gemini_thinking_enabled: bool,
-}
-
-impl LlmClient {
-    /// Create a new LLM client from runtime config.
-    ///
-    /// Uses a ureq Agent with a global timeout (ureq v3 requires agent-level
-    /// timeout configuration, not per-request).
-    pub fn from_config(config: &RuntimeConfig) -> Self {
-        let base_url = config
-            .api_base_url
-            .clone()
-            .unwrap_or_else(|| DEFAULT_OPENAI_BASE.to_string())
-            .trim_end_matches('/')
-            .to_string();
-
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(std::time::Duration::from_secs(TIMEOUT_SECS)))
-            .build()
-            .into();
-
-        Self {
-            base_url,
-            api_key: config.api_key.clone(),
-            agent,
-            gemini_thinking_enabled: config.gemini_thinking_enabled,
-        }
-    }
-
-    /// Create a client for a specific model, resolving the correct provider
-    /// base URL and API key. The API key may be `None` for local servers.
-    pub fn for_model(model: &str) -> Option<Self> {
-        let config = provider::provider_config(model);
-        let api_key = provider::api_key_for_model(model);
-        let base_url = config
-            .base_url
-            .unwrap_or_else(|| DEFAULT_OPENAI_BASE.to_string())
-            .trim_end_matches('/')
-            .to_string();
-
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(std::time::Duration::from_secs(TIMEOUT_SECS)))
-            .build()
-            .into();
-
-        Some(Self {
-            base_url,
-            api_key,
-            agent,
-            gemini_thinking_enabled: true,
-        })
-    }
-
-    pub fn supports_thinking_stream(&self, model: &str) -> bool {
-        self.thinking_format_for_request(model).is_some()
-    }
-
-    fn thinking_format_for_request(&self, model: &str) -> Option<ThinkingFormat> {
-        match provider::thinking_format_for(model, &self.base_url) {
-            Some(ThinkingFormat::GeminiThoughtTags) if self.gemini_thinking_enabled => {
-                Some(ThinkingFormat::GeminiThoughtTags)
-            }
-            Some(ThinkingFormat::ReasoningContent) => Some(ThinkingFormat::ReasoningContent),
-            _ => None,
-        }
-    }
-
-    /// Send a chat completion request with a single user message.
-    pub fn chat_completion(
-        &self,
-        model: &str,
-        prompt: &str,
-        temperature: Option<f64>,
-        max_tokens: Option<u64>,
-    ) -> Result<ChatCompletionResult, LlmError> {
-        self.chat_completion_structured(model, None, prompt, temperature, max_tokens, None)
-    }
-
-    pub fn chat_completion_with_thinking(
-        &self,
-        model: &str,
-        prompt: &str,
-        temperature: Option<f64>,
-        max_tokens: Option<u64>,
-        mut on_reset: impl FnMut(),
-        mut on_thinking: impl FnMut(&str),
-    ) -> Result<ChatCompletionResult, LlmError> {
-        let Some(format) = self.thinking_format_for_request(model) else {
-            return self.chat_completion(model, prompt, temperature, max_tokens);
-        };
-        on_reset();
-
-        let body = ChatRequest {
-            model,
-            messages: vec![ChatMessage {
-                role: "user",
-                content: prompt,
-            }],
-            temperature,
-            max_tokens,
-            response_format: None,
-            stream: Some(true),
-            stream_options: Some(StreamOptions {
-                include_usage: true,
-            }),
-            extra_body: match format {
-                ThinkingFormat::GeminiThoughtTags => Some(serde_json::json!({
-                    "google": {
-                        "thinking_config": {
-                            "thinking_level": "high",
-                            "include_thoughts": true
-                        }
-                    }
-                })),
-                ThinkingFormat::ReasoningContent => None,
-            },
-        };
-        let response = self.send_chat_request(body, true)?;
-        let result = read_stream_completion_with_idle_timeout(
-            response.into_parts().1.into_reader(),
-            format,
-            STREAM_READ_TIMEOUT_SECS,
-            &mut on_thinking,
-            Instant::now,
-        )?;
-        if result.content.is_empty() {
-            return Err(LlmError::Decode("no content in response".into()));
-        }
-        Ok(result)
-    }
-
-    /// Send a chat completion request with optional system message and structured output.
-    pub fn chat_completion_structured(
-        &self,
-        model: &str,
-        system_prompt: Option<&str>,
-        user_prompt: &str,
-        temperature: Option<f64>,
-        max_tokens: Option<u64>,
-        response_format: Option<&ResponseFormat>,
-    ) -> Result<ChatCompletionResult, LlmError> {
-        let mut messages = Vec::new();
-        if let Some(sys) = system_prompt {
-            messages.push(ChatMessage {
-                role: "system",
-                content: sys,
-            });
-        }
-        messages.push(ChatMessage {
-            role: "user",
-            content: user_prompt,
-        });
-
-        let body = ChatRequest {
-            model,
-            messages,
-            temperature,
-            max_tokens,
-            response_format,
-            stream: None,
-            stream_options: None,
-            extra_body: None,
-        };
-
-        let mut response = self.send_chat_request(body, false)?;
-        let resp: ChatResponse = response
-            .body_mut()
-            .read_json()
-            .map_err(|e| LlmError::Decode(e.to_string()))?;
-
-        let content = resp
-            .choices
-            .into_iter()
-            .next()
-            .and_then(|c| c.message.content)
-            .ok_or_else(|| LlmError::Decode("no content in response".into()))?;
-
-        Ok(ChatCompletionResult {
-            content,
-            usage: resp.usage.map(effective_usage),
-        })
-    }
-
-    fn send_chat_request(
-        &self,
-        body: ChatRequest<'_>,
-        streaming: bool,
-    ) -> Result<ureq::http::Response<ureq::Body>, LlmError> {
-        let url = format!("{}/chat/completions", self.base_url);
-        let mut request = self
-            .agent
-            .post(&url)
-            .header("Content-Type", "application/json");
-
-        if streaming {
-            request = request
-                .config()
-                .timeout_global(None)
-                .http_status_as_error(false)
-                .build();
-        }
-
-        // Only send Authorization header when we have an API key.
-        // Local servers (Ollama, llama.cpp) often reject unexpected auth headers.
-        if let Some(ref key) = self.api_key {
-            request = request.header("Authorization", &format!("Bearer {key}"));
-        }
-
-        let body = serde_json::to_vec(&body).map_err(|e| LlmError::Decode(e.to_string()))?;
-        let mut response = request.send(&body[..]).map_err(|e| match e {
-            // 429 and 5xx are transient; other 4xx are permanent (bad key,
-            // invalid model, malformed request) and should not be retried.
-            ureq::Error::StatusCode(429) => LlmError::Http("HTTP 429: rate limited".to_string()),
-            ureq::Error::StatusCode(code) if code >= 500 => {
-                LlmError::Http(format!("HTTP {code}: server error"))
-            }
-            ureq::Error::StatusCode(code) => {
-                LlmError::Api(format!("HTTP {code}: non-retryable error"))
-            }
-            other => LlmError::Http(other.to_string()),
-        })?;
-
-        if streaming && !response.status().is_success() {
-            let status = response.status();
-            let body = response.body_mut().read_to_string().unwrap_or_default();
-            if status.as_u16() == 429 || status.is_server_error() {
-                return Err(LlmError::Http(format!("HTTP {status}: {body}")));
-            }
-            return Err(LlmError::Api(format!("HTTP {status}: {body}")));
-        }
-
-        Ok(response)
-    }
-}
-
-fn is_timeout_err(e: &std::io::Error) -> bool {
-    if e.kind() == std::io::ErrorKind::TimedOut {
-        return true;
-    }
-    let s = e.to_string();
-    s.contains("timeout") || s.contains("Timeout")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -725,15 +388,6 @@ mod tests {
     struct ChunkReader {
         chunks: Vec<&'static [u8]>,
         idx: usize,
-    }
-
-    fn test_client(base_url: &str, gemini_thinking_enabled: bool) -> LlmClient {
-        LlmClient {
-            base_url: base_url.to_string(),
-            api_key: None,
-            agent: ureq::Agent::new_with_defaults(),
-            gemini_thinking_enabled,
-        }
     }
 
     impl ChunkReader {
@@ -751,27 +405,6 @@ mod tests {
             buf[..chunk.len()].copy_from_slice(chunk);
             Ok(chunk.len())
         }
-    }
-
-    #[test]
-    fn gemini_thinking_config_gates_gemini_only() {
-        let gemini = test_client(
-            "https://generativelanguage.googleapis.com/v1beta/openai",
-            false,
-        );
-        assert!(!gemini.supports_thinking_stream("gemini-2.5-flash"));
-
-        let deepseek = test_client("https://api.deepseek.com", false);
-        assert!(deepseek.supports_thinking_stream("deepseek-v4-pro"));
-    }
-
-    #[test]
-    fn gemini_thinking_enabled_allows_gemini_streaming() {
-        let gemini = test_client(
-            "https://generativelanguage.googleapis.com/v1beta/openai",
-            true,
-        );
-        assert!(gemini.supports_thinking_stream("gemini-2.5-flash"));
     }
 
     #[test]
@@ -907,29 +540,5 @@ mod tests {
             result,
             Err(LlmError::Http(message)) if message == "stream idle timeout after 30s"
         ));
-    }
-
-    #[test]
-    fn effective_usage_includes_hidden_total_tokens() {
-        let usage = effective_usage(ChatUsage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
-            total_tokens: Some(30),
-            completion_tokens_details: None,
-        });
-        assert_eq!(usage.completion_tokens, 20);
-    }
-
-    #[test]
-    fn effective_usage_includes_reasoning_token_details() {
-        let usage = effective_usage(ChatUsage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
-            total_tokens: None,
-            completion_tokens_details: Some(CompletionTokensDetails {
-                reasoning_tokens: Some(12),
-            }),
-        });
-        assert_eq!(usage.completion_tokens, 12);
     }
 }
