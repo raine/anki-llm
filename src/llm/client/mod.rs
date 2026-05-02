@@ -8,7 +8,7 @@ pub use response::{ChatCompletionResult, ChatUsage};
 
 use std::time::Instant;
 
-use request::{ChatMessage, ChatRequest, StreamOptions};
+use request::{structured_chat_request, thinking_stream_chat_request};
 use response::{ChatResponse, effective_usage};
 use streaming::read_stream_completion_with_idle_timeout;
 use transport::TIMEOUT_SECS;
@@ -116,31 +116,7 @@ impl LlmClient {
         };
         on_reset();
 
-        let body = ChatRequest {
-            model,
-            messages: vec![ChatMessage {
-                role: "user",
-                content: prompt,
-            }],
-            temperature,
-            max_tokens,
-            response_format: None,
-            stream: Some(true),
-            stream_options: Some(StreamOptions {
-                include_usage: true,
-            }),
-            extra_body: match format {
-                ThinkingFormat::GeminiThoughtTags => Some(serde_json::json!({
-                    "google": {
-                        "thinking_config": {
-                            "thinking_level": "high",
-                            "include_thoughts": true
-                        }
-                    }
-                })),
-                ThinkingFormat::ReasoningContent => None,
-            },
-        };
+        let body = thinking_stream_chat_request(model, prompt, temperature, max_tokens, format);
         let response = self.send_chat_request(body, true)?;
         let result = read_stream_completion_with_idle_timeout(
             response.into_parts().1.into_reader(),
@@ -165,28 +141,14 @@ impl LlmClient {
         max_tokens: Option<u64>,
         response_format: Option<&ResponseFormat>,
     ) -> Result<ChatCompletionResult, LlmError> {
-        let mut messages = Vec::new();
-        if let Some(sys) = system_prompt {
-            messages.push(ChatMessage {
-                role: "system",
-                content: sys,
-            });
-        }
-        messages.push(ChatMessage {
-            role: "user",
-            content: user_prompt,
-        });
-
-        let body = ChatRequest {
+        let body = structured_chat_request(
             model,
-            messages,
+            system_prompt,
+            user_prompt,
             temperature,
             max_tokens,
             response_format,
-            stream: None,
-            stream_options: None,
-            extra_body: None,
-        };
+        );
 
         let mut response = self.send_chat_request(body, false)?;
         let resp: ChatResponse = response
