@@ -1,0 +1,12 @@
+Import CSV or YAML file into an Anki deck
+
+Usage: anki-llm import [OPTIONS] --deck <DECK> <INPUT>
+
+Arguments:
+  <INPUT>  Input file path (CSV or YAML)
+
+Options:
+  -d, --deck <DECK>            Target Anki deck name
+  -n, --note-type <NOTE_TYPE>  Anki note type name (inferred from deck if not specified)
+  -k, --key-field <KEY_FIELD>  Field name to use for identifying existing notes (auto-detected if not specified)
+  -h, --help                   Print help

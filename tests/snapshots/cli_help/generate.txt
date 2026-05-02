@@ -1,0 +1,22 @@
+Generate Anki cards using an LLM
+
+Usage: anki-llm generate [OPTIONS] [TERM]
+
+Arguments:
+  [TERM]  Term to generate cards for (omit to enter interactively in TUI)
+
+Options:
+  -p, --prompt <PROMPT>              Path to prompt template file with frontmatter (auto-resolved from the workspace's prompts/ if omitted)
+  -c, --count <COUNT>                Number of card examples to generate [default: 3]
+  -m, --model <MODEL>                Model name
+      --api-base-url <API_BASE_URL>  Custom API base URL (e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1)
+      --api-key <API_KEY>            API key (overrides environment variables)
+  -d, --dry-run                      Preview without importing to Anki
+  -r, --retries <RETRIES>            Number of retries for failed requests [default: 3]
+      --max-tokens <MAX_TOKENS>      Maximum tokens per response
+  -t, --temperature <TEMPERATURE>    LLM temperature (0-2)
+  -o, --output <OUTPUT>              Export cards to a file instead of importing to Anki
+      --copy                         Copy prompt to clipboard for manual LLM mode
+      --log <LOG>                    Append raw LLM prompts and responses to a log file (relative path)
+      --very-verbose                 Print raw LLM prompts and responses to stderr
+  -h, --help                         Print help

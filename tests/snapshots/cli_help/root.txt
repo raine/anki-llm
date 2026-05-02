@@ -1,0 +1,27 @@
+Bulk-process Anki flashcards with LLMs
+
+Usage: anki-llm <COMMAND>
+
+Commands:
+  export         Export an Anki deck to CSV or YAML
+  import         Import CSV or YAML file into an Anki deck
+  process-file   Process notes from a file with AI (supports resume)
+  process-deck   Process notes directly from an Anki deck
+  query          Query AnkiConnect API
+  config         Manage persistent configuration
+  generate       Generate Anki cards using an LLM
+  generate-init  Create a prompt template by querying your Anki collection
+  history        List past process-deck runs with snapshot data
+  rollback       Rollback a previous process-deck run
+  tts            Generate text-to-speech audio for notes and upload to Anki's media store
+  tts-voices     Browse and audition TTS voices across OpenAI / Azure / Google / Polly
+  update         Update anki-llm to the latest version
+  docs           Show bundled documentation
+  workspace      Manage anki-llm workspaces
+  note-type      Manage Anki note type templates and CSS
+  doctor         Diagnose configuration and provider connectivity
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version

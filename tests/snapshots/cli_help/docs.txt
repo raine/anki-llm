@@ -1,0 +1,6 @@
+Show bundled documentation
+
+Usage: anki-llm docs
+
+Options:
+  -h, --help  Print help

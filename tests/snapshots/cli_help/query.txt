@@ -1,0 +1,10 @@
+Query AnkiConnect API
+
+Usage: anki-llm query <ACTION> [PARAMS]
+
+Arguments:
+  <ACTION>  AnkiConnect action name
+  [PARAMS]  JSON parameters
+
+Options:
+  -h, --help  Print help

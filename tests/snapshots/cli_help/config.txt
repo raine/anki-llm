@@ -1,0 +1,13 @@
+Manage persistent configuration
+
+Usage: anki-llm config <COMMAND>
+
+Commands:
+  get   Get a configuration value
+  set   Set a configuration value
+  list  List all configuration settings
+  path  Show the config file path
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

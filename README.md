@@ -1882,6 +1882,20 @@ card includes a generated sound tag, <kbd>n</kbd> to start a new term,
 <kbd>r</kbd> to retry, or <kbd>q</kbd> to quit. Session cost is tracked in the
 sidebar throughout.
 
+## Development
+
+### Updating CLI help snapshots
+
+CLI help output is covered by integration snapshots in
+`tests/snapshots/cli_help/`. When intentionally changing top-level commands,
+flags, help text, or dispatch targets, refresh them with:
+
+```bash
+UPDATE_CLI_HELP_SNAPSHOTS=1 cargo test --test cli_help_snapshot
+```
+
+Then run `just check` before committing.
+
 ## FAQ
 
 ### Why AnkiConnect?

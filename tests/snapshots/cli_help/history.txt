@@ -1,0 +1,6 @@
+List past process-deck runs with snapshot data
+
+Usage: anki-llm history
+
+Options:
+  -h, --help  Print help

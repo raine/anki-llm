@@ -1,0 +1,26 @@
+Process notes directly from an Anki deck
+
+Usage: anki-llm process-deck [OPTIONS] --prompt <PROMPT> <DECK|--query <QUERY>>
+
+Arguments:
+  [DECK]  Deck name to process
+
+Options:
+  -q, --query <QUERY>                  Anki search query (e.g. "tag:leech", "prop:lapses>3", "deck:Japanese prop:lapses>5")
+  -p, --prompt <PROMPT>                Path to prompt template file (YAML frontmatter declares output.field)
+  -n, --note-type <NOTE_TYPE>          Filter by note type (required if deck contains multiple note types)
+  -m, --model <MODEL>                  Model name
+      --api-base-url <API_BASE_URL>    Custom API base URL (e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1)
+      --api-key <API_KEY>              API key (overrides environment variables)
+  -b, --batch-size <BATCH_SIZE>        Number of concurrent requests [default: 5]
+  -t, --temperature <TEMPERATURE>      Sampling temperature (0-2)
+      --max-tokens <MAX_TOKENS>        Maximum tokens per completion
+  -r, --retries <RETRIES>              Number of retries on failure [default: 3]
+  -d, --dry-run                        Preview without making API calls
+  -P, --preview                        Process a sample of cards with the LLM and show what would change
+      --preview-count <PREVIEW_COUNT>  Number of cards to process in preview mode (default: 3) [default: 3]
+      --limit <LIMIT>                  Limit the number of notes to process
+  -f, --force                          Re-process notes even if the target field already has content
+      --log <LOG>                      Append raw LLM prompts and responses to a log file (relative path)
+      --very-verbose                   Print raw LLM prompts and responses to stderr
+  -h, --help                           Print help

@@ -1,0 +1,12 @@
+Export an Anki deck to CSV or YAML
+
+Usage: anki-llm export [OPTIONS] <DECK|--query <QUERY>>
+
+Arguments:
+  [DECK]  Deck name to export
+
+Options:
+  -q, --query <QUERY>          Anki search query (e.g. "tag:leech", "prop:lapses>3", "deck:Japanese -field:Audio")
+  -o, --output <OUTPUT>        Output file path
+  -n, --note-type <NOTE_TYPE>  Filter by note type (required if deck contains multiple note types)
+  -h, --help                   Print help

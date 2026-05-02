@@ -1,0 +1,11 @@
+Rollback a previous process-deck run
+
+Usage: anki-llm rollback [OPTIONS] <RUN_ID>
+
+Arguments:
+  <RUN_ID>  Run ID to rollback (from `history` command)
+
+Options:
+      --force    Force rollback even if notes were modified after the run
+  -d, --dry-run  Preview without making changes
+  -h, --help     Print help

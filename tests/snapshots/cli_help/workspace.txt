@@ -1,0 +1,11 @@
+Manage anki-llm workspaces
+
+Usage: anki-llm workspace <COMMAND>
+
+Commands:
+  init  Initialize a new workspace in the current or specified directory
+  info  Show information about the current workspace
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

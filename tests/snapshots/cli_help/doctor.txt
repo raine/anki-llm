@@ -1,0 +1,7 @@
+Diagnose configuration and provider connectivity
+
+Usage: anki-llm doctor [OPTIONS]
+
+Options:
+      --check  Verify provider authentication and AnkiConnect reachability over the network
+  -h, --help   Print help

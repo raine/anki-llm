@@ -1,0 +1,6 @@
+Update anki-llm to the latest version
+
+Usage: anki-llm update
+
+Options:
+  -h, --help  Print help

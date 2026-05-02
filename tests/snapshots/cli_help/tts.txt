@@ -1,0 +1,54 @@
+Generate text-to-speech audio for notes and upload to Anki's media store
+
+Usage: anki-llm tts [OPTIONS] [DECK]
+
+Arguments:
+  [DECK]  Deck name to process (defaults to deck from --prompt frontmatter)
+
+Options:
+  -q, --query <QUERY>
+          Anki search query (e.g. "tag:leech", "deck:Japanese -Audio:")
+      --prompt <PROMPT>
+          Path to a generate prompt YAML; reads its `tts:` block instead of taking deck-design flags on the CLI
+      --field <FIELD>
+          Target field to write [sound:...] into (flag mode; required)
+  -p, --template <TEMPLATE>
+          Path to prompt template file (flag mode)
+      --text-field <TEXT_FIELD>
+          Source field name (flag mode; alternative to --template)
+      --provider <PROVIDER>
+          TTS provider identifier (flag mode; defaults to "openai")
+      --voice <VOICE>
+          Voice name (flag mode; provider-specific, e.g. alloy)
+      --tts-model <TTS_MODEL>
+          TTS backing model (flag mode; e.g. gpt-4o-mini-tts)
+      --format <FORMAT>
+          Output audio format (flag mode; defaults to "mp3")
+      --speed <SPEED>
+          Playback speed (flag mode; 1.0 = normal)
+      --api-base-url <API_BASE_URL>
+          API base URL override (OpenAI or OpenAI-compatible providers)
+      --api-key <API_KEY>
+          API key override. Used as the OpenAI bearer token or the Azure subscription key depending on the active provider
+      --azure-region <AZURE_REGION>
+          Azure region override (flag mode; provider must be 'azure')
+      --aws-region <AWS_REGION>
+          AWS region override for Amazon Polly (flag mode; provider must be 'amazon')
+      --aws-access-key-id <AWS_ACCESS_KEY_ID>
+          AWS access key id for Amazon Polly (flag mode)
+      --aws-secret-access-key <AWS_SECRET_ACCESS_KEY>
+          AWS secret access key for Amazon Polly (flag mode)
+  -n, --note-type <NOTE_TYPE>
+          Filter by note type (flag mode; rejected in --prompt mode)
+  -b, --batch-size <BATCH_SIZE>
+          Number of concurrent TTS requests [default: 5]
+  -r, --retries <RETRIES>
+          Number of retries on transient failures [default: 3]
+  -f, --force
+          Regenerate audio even for notes whose target field already contains a sound tag
+  -d, --dry-run
+          Preview without making API calls or mutating Anki
+      --limit <LIMIT>
+          Limit the number of notes to process
+  -h, --help
+          Print help

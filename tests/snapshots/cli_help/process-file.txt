@@ -1,0 +1,25 @@
+Process notes from a file with AI (supports resume)
+
+Usage: anki-llm process-file [OPTIONS] --prompt <PROMPT> --output <OUTPUT> <INPUT>
+
+Arguments:
+  <INPUT>  Input file path (CSV or YAML)
+
+Options:
+  -p, --prompt <PROMPT>                Path to prompt template file (YAML frontmatter declares output.field)
+  -o, --output <OUTPUT>                Output file path (CSV or YAML)
+  -m, --model <MODEL>                  Model name
+      --api-base-url <API_BASE_URL>    Custom API base URL (e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1)
+      --api-key <API_KEY>              API key (overrides environment variables)
+  -b, --batch-size <BATCH_SIZE>        Number of concurrent requests [default: 5]
+  -t, --temperature <TEMPERATURE>      Sampling temperature (0-2)
+      --max-tokens <MAX_TOKENS>        Maximum tokens per completion
+  -r, --retries <RETRIES>              Number of retries on failure [default: 3]
+  -f, --force                          Re-process all rows, ignoring existing output
+  -d, --dry-run                        Preview without making API calls
+  -P, --preview                        Process a sample of cards with the LLM and show what would change
+      --preview-count <PREVIEW_COUNT>  Number of cards to process in preview mode (default: 3) [default: 3]
+      --limit <LIMIT>                  Limit the number of rows to process
+      --log <LOG>                      Append raw LLM prompts and responses to a log file (relative path)
+      --very-verbose                   Print raw LLM prompts and responses to stderr
+  -h, --help                           Print help
