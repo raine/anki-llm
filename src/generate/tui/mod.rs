@@ -23,7 +23,8 @@ pub use super::pipeline::PipelineStep;
 #[cfg(test)]
 mod tests {
     use super::editor::parse_edited_anki_fields;
-    use super::events::{BackendEvent, TtsUiState, WorkerCommand};
+    use super::effects::Effect;
+    use super::events::{BackendEvent, SessionInfo, TtsUiState, WorkerCommand};
     use super::runner::any_card_synthesizing;
     use super::screens::selection::SelectionState;
     use super::state::{App as AppState, AppMode, MAX_THINKING_CHARS};
@@ -41,11 +42,15 @@ mod tests {
     }
 
     fn mk_card() -> ValidatedCard {
+        mk_card_with_front("x")
+    }
+
+    fn mk_card_with_front(front: &str) -> ValidatedCard {
         use std::collections::HashMap;
         let mut fields: HashMap<String, String> = HashMap::new();
-        fields.insert("front".into(), "x".into());
+        fields.insert("front".into(), front.into());
         let mut anki_fields: IndexMap<String, String> = IndexMap::new();
-        anki_fields.insert("Front".into(), "x".into());
+        anki_fields.insert("Front".into(), front.into());
         ValidatedCard {
             card_id: next_card_id(),
             fields,
@@ -56,6 +61,19 @@ mod tests {
             duplicate_fields: None,
             flags: Vec::new(),
             model: "test".into(),
+        }
+    }
+
+    fn mk_session_info(tts_configured: bool) -> SessionInfo {
+        SessionInfo {
+            deck: "deck".into(),
+            note_type: "note".into(),
+            model: "model".into(),
+            available_models: Vec::new(),
+            field_map: IndexMap::new(),
+            first_field_name: "Front".into(),
+            tts_configured,
+            post_select_configured: false,
         }
     }
 
@@ -116,8 +134,8 @@ mod tests {
     #[test]
     fn thinking_delta_is_ephemeral() {
         let mut app = mk_app();
-        app.handle_backend_event(BackendEvent::Log("normal".into()));
-        app.handle_backend_event(BackendEvent::ThinkingDelta("raw thought".into()));
+        let _ = app.handle_backend_event(BackendEvent::Log("normal".into()));
+        let _ = app.handle_backend_event(BackendEvent::ThinkingDelta("raw thought".into()));
 
         assert_eq!(app.thinking, "raw thought");
         assert_eq!(app.logs, vec!["normal"]);
@@ -127,22 +145,23 @@ mod tests {
     #[test]
     fn thinking_persists_on_reset_but_clears_on_done_error_and_cancel_discard() {
         let mut app = mk_app();
-        app.handle_backend_event(BackendEvent::ThinkingDelta("first".into()));
-        app.handle_backend_event(BackendEvent::ThinkingReset);
+        let _ = app.handle_backend_event(BackendEvent::ThinkingDelta("first".into()));
+        let _ = app.handle_backend_event(BackendEvent::ThinkingReset);
         assert_eq!(app.thinking, "first");
 
-        app.handle_backend_event(BackendEvent::ThinkingClear);
+        let _ = app.handle_backend_event(BackendEvent::ThinkingClear);
         assert!(app.thinking.is_empty());
 
-        app.handle_backend_event(BackendEvent::ThinkingDelta("second".into()));
-        app.handle_backend_event(BackendEvent::RunError("failed".into()));
+        let _ = app.handle_backend_event(BackendEvent::ThinkingDelta("second".into()));
+        let _ = app.handle_backend_event(BackendEvent::RunError("failed".into()));
         assert!(app.thinking.is_empty());
 
         let mut app = mk_app();
-        app.handle_backend_event(BackendEvent::ThinkingDelta("third".into()));
+        let _ = app.handle_backend_event(BackendEvent::ThinkingDelta("third".into()));
         app.pending_cancels = 1;
-        app.handle_backend_event(BackendEvent::ThinkingDelta(" stale".into()));
-        app.handle_backend_event(BackendEvent::RunDone {
+        let effects = app.handle_backend_event(BackendEvent::ThinkingDelta(" stale".into()));
+        assert!(effects.is_empty());
+        let _ = app.handle_backend_event(BackendEvent::RunDone {
             message: String::new(),
             cards: Vec::new(),
             note_ids: Vec::new(),
@@ -154,10 +173,140 @@ mod tests {
     #[test]
     fn thinking_buffer_is_bounded() {
         let mut app = mk_app();
-        app.handle_backend_event(BackendEvent::ThinkingDelta(
+        let _ = app.handle_backend_event(BackendEvent::ThinkingDelta(
             "x".repeat(MAX_THINKING_CHARS + 10),
         ));
         assert_eq!(app.thinking.len(), MAX_THINKING_CHARS);
+    }
+
+    #[test]
+    fn session_ready_returns_audio_player_start_effect() {
+        let mut app = mk_app();
+        app.player_binary = Some(crate::audio::PlayerBinary {
+            command: "player".into(),
+            args: vec!["--quiet".into()],
+        });
+
+        let effects = app.handle_backend_event(BackendEvent::SessionReady(mk_session_info(true)));
+
+        assert!(app.session_info.is_some());
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::StartAudioPlayer(binary)]
+                if binary.command == "player" && binary.args == ["--quiet"]
+        ));
+    }
+
+    #[test]
+    fn request_selection_batch_continuation_returns_worker_effect() {
+        let mut app = mk_app();
+        let first = mk_card_with_front("first");
+        app.batch_queue = vec!["next".into()];
+        app.batch_progress = Some((1, 2));
+
+        let effects = app.handle_backend_event(BackendEvent::RequestSelection(vec![first]));
+
+        assert_eq!(app.batch_queue, Vec::<String>::new());
+        assert_eq!(app.batch_progress, Some((2, 2)));
+        assert_eq!(app.last_term.as_deref(), Some("next"));
+        assert_eq!(app.batch_cards.len(), 1);
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::SendWorker(WorkerCommand::RefreshWithTerm(term))] if term == "next"
+        ));
+    }
+
+    #[test]
+    fn append_cards_batch_continuation_returns_worker_effect() {
+        let mut app = mk_app();
+        let first = mk_card_with_front("first");
+        app.batch_cards.push(first);
+        app.batch_queue = vec!["next".into()];
+        app.batch_progress = Some((1, 2));
+
+        let effects =
+            app.handle_backend_event(BackendEvent::AppendCards(vec![mk_card_with_front(
+                "second",
+            )]));
+
+        assert_eq!(app.batch_queue, Vec::<String>::new());
+        assert_eq!(app.batch_progress, Some((2, 2)));
+        assert_eq!(app.last_term.as_deref(), Some("next"));
+        assert_eq!(app.batch_cards.len(), 2);
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::SendWorker(WorkerCommand::RefreshWithTerm(term))] if term == "next"
+        ));
+    }
+
+    #[test]
+    fn batch_run_error_returns_start_effect_for_next_term() {
+        let mut app = mk_app();
+        app.last_term = Some("failed".into());
+        app.batch_queue = vec!["next".into()];
+        app.batch_progress = Some((1, 2));
+
+        let effects = app.handle_backend_event(BackendEvent::RunError("boom".into()));
+
+        assert_eq!(app.batch_queue, Vec::<String>::new());
+        assert_eq!(app.batch_progress, Some((2, 2)));
+        assert_eq!(app.last_term.as_deref(), Some("next"));
+        assert!(matches!(app.mode, AppMode::Running));
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::SendWorker(WorkerCommand::Start { term, enable_thinking_stream: false })]
+                if term == "next"
+        ));
+    }
+
+    #[test]
+    fn tts_ready_returns_play_audio_effect_for_existing_card() {
+        let mut app = mk_app();
+        let card = mk_card();
+        let card_id = card.card_id;
+        app.mode = AppMode::Selecting(SelectionState::new(vec![card]));
+        let path = std::path::PathBuf::from("/tmp/audio.mp3");
+
+        let effects = app.handle_backend_event(BackendEvent::TtsState {
+            card_id,
+            state: TtsUiState::Ready {
+                cache_path: path.clone(),
+            },
+        });
+
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::PlayAudio { card_id: id, path: effect_path }]
+                if *id == card_id && effect_path == &path
+        ));
+        let AppMode::Selecting(state) = &app.mode else {
+            panic!("expected selection mode");
+        };
+        assert!(matches!(
+            state.tts_states.get(&card_id),
+            Some(TtsUiState::Ready { cache_path }) if cache_path == &path
+        ));
+    }
+
+    #[test]
+    fn stale_tts_ready_returns_no_effect_and_stores_no_state() {
+        let mut app = mk_app();
+        let card = mk_card();
+        let stale_id = next_card_id();
+        app.mode = AppMode::Selecting(SelectionState::new(vec![card]));
+
+        let effects = app.handle_backend_event(BackendEvent::TtsState {
+            card_id: stale_id,
+            state: TtsUiState::Ready {
+                cache_path: std::path::PathBuf::from("/tmp/stale.mp3"),
+            },
+        });
+
+        assert!(effects.is_empty());
+        let AppMode::Selecting(state) = &app.mode else {
+            panic!("expected selection mode");
+        };
+        assert!(!state.tts_states.contains_key(&stale_id));
     }
 
     #[test]

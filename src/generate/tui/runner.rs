@@ -36,6 +36,11 @@ fn execute_effects(
             Effect::TrySendWorker(command) => {
                 app.worker_tx.try_send(command).ok();
             }
+            Effect::StartAudioPlayer(binary) => {
+                if app.player.is_none() {
+                    app.player = Some(crate::audio::spawn_player(binary));
+                }
+            }
             Effect::PlayAudio { card_id, path } => {
                 if let Some(player) = &app.player {
                     let _ = player.play(card_id, path);
@@ -76,7 +81,10 @@ fn run_app(
         // Drain all pending backend events
         loop {
             match app.backend_rx.try_recv() {
-                Ok(ev) => app.handle_backend_event(ev),
+                Ok(ev) => {
+                    let effects = app.handle_backend_event(ev);
+                    execute_effects(&mut terminal, &mut app, effects)?;
+                }
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
                     if !matches!(app.mode, AppMode::Done { .. } | AppMode::Error(_)) {

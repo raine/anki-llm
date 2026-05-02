@@ -1,25 +1,27 @@
+use super::effects::Effect;
 use super::events::{BackendEvent, StepStatus, TtsUiState, WorkerCommand};
 use super::screens::review::ReviewState;
 use super::screens::selection::SelectionState;
 use super::state::{App, AppMode, Toast, summary_step_idx};
 
 impl App {
-    pub(super) fn handle_backend_event(&mut self, event: BackendEvent) {
+    pub(super) fn handle_backend_event(&mut self, event: BackendEvent) -> Vec<Effect> {
         // SessionReady is always relevant
         if let BackendEvent::SessionReady(info) = event {
+            let mut effects = Vec::new();
             // Lazy-init the audio player the first time we see a session
             // where TTS preview is live (frontmatter has a `tts:` block
             // AND a playback binary was found at startup).
             if info.tts_configured && self.player.is_none() {
                 if let Some(bin) = self.player_binary.clone() {
-                    self.player = Some(crate::audio::spawn_player(bin));
+                    effects.push(Effect::StartAudioPlayer(bin));
                 } else {
                     self.logs
                         .push("Audio player not found — preview disabled".into());
                 }
             }
             self.session_info = Some(info);
-            return;
+            return effects;
         }
 
         // Discard events from abandoned runs. Each cancelled run will eventually
@@ -31,9 +33,10 @@ impl App {
             ) {
                 self.pending_cancels -= 1;
             }
-            return;
+            return Vec::new();
         }
 
+        let mut effects = Vec::new();
         match event {
             BackendEvent::SessionReady(_) => unreachable!(),
             BackendEvent::ThinkingReset => {}
@@ -79,9 +82,9 @@ impl App {
                         *current += 1;
                     }
                     self.last_term = Some(next_term.clone());
-                    self.worker_tx
-                        .send(WorkerCommand::RefreshWithTerm(next_term))
-                        .ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::RefreshWithTerm(
+                        next_term,
+                    )));
                 } else {
                     // batch_queue empty but batch_cards non-empty: handle gracefully
                     let mut all_cards = std::mem::take(&mut self.batch_cards);
@@ -100,9 +103,9 @@ impl App {
                             *current += 1;
                         }
                         self.last_term = Some(next_term.clone());
-                        self.worker_tx
-                            .send(WorkerCommand::RefreshWithTerm(next_term))
-                            .ok();
+                        effects.push(Effect::SendWorker(WorkerCommand::RefreshWithTerm(
+                            next_term,
+                        )));
                     } else {
                         // Last batch term done: enter selection with all cards
                         let all_cards = std::mem::take(&mut self.batch_cards);
@@ -132,7 +135,7 @@ impl App {
                         if state.regen_in_flight == Some(previous_card_id) {
                             state.regen_in_flight = None;
                         }
-                        return;
+                        return effects;
                     };
                     let was_selected = state.selected.remove(&previous_card_id);
                     state.tts_states.remove(&previous_card_id);
@@ -174,16 +177,13 @@ impl App {
                     // pre-edit audio once and leak an orphaned entry
                     // into `tts_states`.
                     if !sel.cards.iter().any(|c| c.card_id == card_id) {
-                        return;
+                        return effects;
                     }
-                    // On successful synth, immediately route a Play
-                    // command to the audio thread. The player itself
-                    // handles toggle-on-same-card semantics, so there's
-                    // no TUI-side state machine to keep coherent.
-                    if let TtsUiState::Ready { ref cache_path } = state
-                        && let Some(player) = &self.player
-                    {
-                        let _ = player.play(card_id, cache_path.clone());
+                    if let TtsUiState::Ready { ref cache_path } = state {
+                        effects.push(Effect::PlayAudio {
+                            card_id,
+                            path: cache_path.clone(),
+                        });
                     }
                     sel.tts_states.insert(card_id, state);
                 }
@@ -249,12 +249,10 @@ impl App {
                     self.current_step_idx = None;
                     self.mode = AppMode::Running;
                     self.thinking.clear();
-                    self.worker_tx
-                        .send(WorkerCommand::Start {
-                            term: next_term,
-                            enable_thinking_stream: false,
-                        })
-                        .ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::Start {
+                        term: next_term,
+                        enable_thinking_stream: false,
+                    }));
                 } else {
                     self.batch_progress = None;
                     // If we accumulated cards before this error, show selection
@@ -297,6 +295,7 @@ impl App {
                 self.is_fatal = true;
             }
         }
+        effects
     }
 
     pub(super) fn handle_player_event(&mut self, ev: crate::audio::PlayerEvent) {
