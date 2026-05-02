@@ -9,9 +9,9 @@ use crate::tts::voices::credentials::ProviderPreviewState;
 use crate::tts::voices::yaml::emit_scaffold;
 use crate::tui::theme::{THEME, footer_cmd, footer_pipe};
 
-use super::state::{App, FilterFacet, OverlayAction};
+use super::state::{App, FilterFacet, OverlayAction, ViewState};
 
-pub(super) fn draw(frame: &mut Frame, app: &mut App) {
+pub(super) fn draw(frame: &mut Frame, app: &App, view: &mut ViewState) {
     let area = frame.area();
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -27,7 +27,7 @@ pub(super) fn draw(frame: &mut Frame, app: &mut App) {
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
         .split(rows[0]);
 
-    draw_list_pane(frame, cols[0], app);
+    draw_list_pane(frame, cols[0], app, view);
     draw_detail_pane(frame, cols[1], app);
     draw_status(frame, rows[1], app);
     draw_footer(frame, rows[2]);
@@ -58,11 +58,11 @@ pub(super) fn draw(frame: &mut Frame, app: &mut App) {
         draw_help_overlay(frame);
     }
     if app.overlay.is_some() {
-        draw_filter_overlay(frame, app);
+        draw_filter_overlay(frame, app, view);
     }
 }
 
-fn draw_list_pane(frame: &mut Frame, area: Rect, app: &mut App) {
+fn draw_list_pane(frame: &mut Frame, area: Rect, app: &App, view: &mut ViewState) {
     let inner = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -144,7 +144,7 @@ fn draw_list_pane(frame: &mut Frame, area: Rect, app: &mut App) {
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("▶ ");
-    frame.render_stateful_widget(list, inner[2], &mut app.list_state);
+    frame.render_stateful_widget(list, inner[2], &mut view.list_state);
 }
 
 fn render_chip_row(app: &App) -> Line<'static> {
@@ -394,19 +394,12 @@ fn draw_help_overlay(frame: &mut Frame) {
     );
 }
 
-fn draw_filter_overlay(frame: &mut Frame, app: &mut App) {
-    let Some((facet, needle)) = app
-        .overlay
-        .as_ref()
-        .map(|overlay| (overlay.facet, overlay.search.value().to_string()))
-    else {
+fn draw_filter_overlay(frame: &mut Frame, app: &App, view: &mut ViewState) {
+    let Some(overlay) = app.overlay.as_ref() else {
         return;
     };
-    let rows = app.overlay_rows_for(facet, &needle);
-    let Some(overlay) = &mut app.overlay else {
-        return;
-    };
-    overlay.clamp_selection(rows.len());
+    let facet = overlay.facet;
+    let rows = app.overlay_rows_for(facet, overlay.search.value());
 
     let area = centered_rect(
         frame.area(),
@@ -514,7 +507,7 @@ fn draw_filter_overlay(frame: &mut Frame, app: &mut App) {
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("▸ ");
-    frame.render_stateful_widget(list, parts[1], &mut overlay.list_state);
+    frame.render_stateful_widget(list, parts[1], &mut view.overlay_list_state);
 }
 
 fn centered_rect(area: Rect, width: u16, height: u16) -> Rect {

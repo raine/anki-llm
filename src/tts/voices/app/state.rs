@@ -70,27 +70,50 @@ impl FilterFacet {
 pub(super) struct FilterOverlay {
     pub facet: FilterFacet,
     pub search: LineInput,
-    pub list_state: ListState,
+    pub selected: Option<usize>,
 }
 
 impl FilterOverlay {
     pub(super) fn new(facet: FilterFacet) -> Self {
-        let mut list_state = ListState::default();
-        list_state.select(Some(0));
         Self {
             facet,
             search: LineInput::default(),
-            list_state,
+            selected: Some(0),
         }
     }
 
+    pub(super) fn reset_selection(&mut self, len: usize) {
+        self.selected = first_selection(len);
+    }
+
     pub(super) fn clamp_selection(&mut self, len: usize) {
-        let next = if len == 0 {
-            None
-        } else {
-            Some(self.list_state.selected().unwrap_or(0).min(len - 1))
-        };
-        self.list_state.select(next);
+        self.selected = clamp_selection(self.selected, len);
+    }
+}
+
+#[derive(Default)]
+pub(super) struct ViewState {
+    pub list_state: ListState,
+    pub overlay_list_state: ListState,
+}
+
+impl ViewState {
+    pub(super) fn sync_from(&mut self, app: &App) {
+        self.list_state.select(app.selected);
+        self.overlay_list_state
+            .select(app.overlay.as_ref().and_then(|overlay| overlay.selected));
+    }
+}
+
+fn first_selection(len: usize) -> Option<usize> {
+    if len == 0 { None } else { Some(0) }
+}
+
+fn clamp_selection(selected: Option<usize>, len: usize) -> Option<usize> {
+    if len == 0 {
+        None
+    } else {
+        Some(selected.unwrap_or(0).min(len - 1))
     }
 }
 
@@ -122,7 +145,7 @@ pub(super) struct App {
     pub filtered: Vec<usize>,
     pub filters: VoiceFilters,
     pub search: LineInput,
-    pub list_state: ListState,
+    pub selected: Option<usize>,
     pub overlay: Option<FilterOverlay>,
     pub show_help: bool,
     pub provider_states: HashMap<ProviderId, ProviderPreviewState>,
@@ -161,7 +184,7 @@ impl App {
             filtered: Vec::new(),
             filters,
             search,
-            list_state: ListState::default(),
+            selected: None,
             overlay: None,
             show_help: false,
             provider_states,
@@ -186,20 +209,13 @@ impl App {
     pub(super) fn refilter(&mut self) {
         self.filters.text = self.search.value().to_string();
         self.filtered = filter(&self.entries, &self.filters);
-        self.list_state.select(if self.filtered.is_empty() {
-            None
-        } else {
-            Some(0)
-        });
+        self.selected = first_selection(self.filtered.len());
         let overlay_state = self
             .overlay
             .as_ref()
             .map(|overlay| (overlay.facet, overlay.search.value().to_string()));
         if let Some((facet, needle)) = overlay_state {
-            let len = self.overlay_rows_for(facet, &needle).len();
-            if let Some(overlay) = self.overlay.as_mut() {
-                overlay.clamp_selection(len);
-            }
+            self.clamp_overlay_selection(facet, &needle);
         }
     }
 
@@ -215,9 +231,7 @@ impl App {
     }
 
     pub(super) fn selected_index(&self) -> Option<usize> {
-        self.list_state
-            .selected()
-            .and_then(|i| self.filtered.get(i).copied())
+        self.selected.and_then(|i| self.filtered.get(i).copied())
     }
 
     pub(super) fn selected_entry(&self) -> Option<&VoiceEntry> {
@@ -226,36 +240,40 @@ impl App {
 
     pub(super) fn move_up(&mut self) {
         if self.filtered.is_empty() {
+            self.selected = None;
             return;
         }
-        let cur = self.list_state.selected().unwrap_or(0);
-        self.list_state.select(Some(cur.saturating_sub(1)));
+        let cur = self.selected.unwrap_or(0);
+        self.selected = Some(cur.saturating_sub(1));
     }
 
     pub(super) fn move_down(&mut self) {
         if self.filtered.is_empty() {
+            self.selected = None;
             return;
         }
-        let cur = self.list_state.selected().unwrap_or(0);
+        let cur = self.selected.unwrap_or(0);
         let next = (cur + 1).min(self.filtered.len().saturating_sub(1));
-        self.list_state.select(Some(next));
+        self.selected = Some(next);
     }
 
     pub(super) fn page_up(&mut self, rows: usize) {
         if self.filtered.is_empty() {
+            self.selected = None;
             return;
         }
-        let cur = self.list_state.selected().unwrap_or(0);
-        self.list_state.select(Some(cur.saturating_sub(rows)));
+        let cur = self.selected.unwrap_or(0);
+        self.selected = Some(cur.saturating_sub(rows));
     }
 
     pub(super) fn page_down(&mut self, rows: usize) {
         if self.filtered.is_empty() {
+            self.selected = None;
             return;
         }
-        let cur = self.list_state.selected().unwrap_or(0);
+        let cur = self.selected.unwrap_or(0);
         let max = self.filtered.len().saturating_sub(1);
-        self.list_state.select(Some((cur + rows).min(max)));
+        self.selected = Some((cur + rows).min(max));
     }
 
     pub(super) fn stop_player(&mut self) {
@@ -297,6 +315,30 @@ impl App {
             return Vec::new();
         };
         self.overlay_rows_for(overlay.facet, overlay.search.value())
+    }
+
+    pub(super) fn reset_overlay_selection(&mut self, facet: FilterFacet, needle: &str) {
+        let len = self.overlay_rows_for(facet, needle).len();
+        if let Some(overlay) = self.overlay.as_mut() {
+            overlay.reset_selection(len);
+        }
+    }
+
+    pub(super) fn clamp_overlay_selection(&mut self, facet: FilterFacet, needle: &str) {
+        let len = self.overlay_rows_for(facet, needle).len();
+        if let Some(overlay) = self.overlay.as_mut() {
+            overlay.clamp_selection(len);
+        }
+    }
+
+    pub(super) fn overlay_selected(&self) -> Option<usize> {
+        self.overlay.as_ref().and_then(|overlay| overlay.selected)
+    }
+
+    pub(super) fn select_overlay(&mut self, selected: Option<usize>) {
+        if let Some(overlay) = self.overlay.as_mut() {
+            overlay.selected = selected;
+        }
     }
 
     pub(super) fn overlay_rows_for(&self, facet: FilterFacet, needle: &str) -> Vec<OverlayRow> {
@@ -447,6 +489,8 @@ impl App {
 mod tests {
     use std::sync::mpsc;
 
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
     use super::*;
 
     fn test_worker() -> PreviewHandle {
@@ -501,11 +545,81 @@ mod tests {
         assert_eq!(app.filters.language.as_deref(), Some("ja"));
         assert_eq!(app.filters.provider, Some(ProviderId::Azure));
         assert_eq!(app.filtered, vec![0]);
-        assert_eq!(app.list_state.selected(), Some(0));
+        assert_eq!(app.selected, Some(0));
         assert!(!app.preview_busy);
         assert!(
             app.selected_entry()
                 .is_some_and(|entry| entry.voice_id == "ja-JP-NanamiNeural")
         );
+    }
+
+    #[test]
+    fn clamps_overlay_selection_when_rows_change() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let mut app = App::new(
+            InitialFilters {
+                lang: None,
+                provider: None,
+                query: None,
+            },
+            AppDependencies {
+                entries: vec![
+                    voice(ProviderId::Azure, "ja-JP-NanamiNeural", "Nanami", "ja-JP"),
+                    voice(ProviderId::Google, "en-US-Studio-O", "Studio O", "en-US"),
+                ],
+                provider_states: HashMap::new(),
+                cache,
+                worker: test_worker(),
+            },
+        );
+
+        app.overlay = Some(FilterOverlay::new(FilterFacet::Provider));
+        app.select_overlay(Some(2));
+        app.clamp_overlay_selection(FilterFacet::Provider, "azure");
+        assert_eq!(app.overlay_selected(), Some(0));
+
+        app.reset_overlay_selection(FilterFacet::Provider, "no matches");
+        assert_eq!(app.overlay_selected(), None);
+    }
+
+    #[test]
+    fn keeps_empty_overlay_selection_unselected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let mut app = App::new(
+            InitialFilters {
+                lang: None,
+                provider: None,
+                query: None,
+            },
+            AppDependencies {
+                entries: vec![voice(
+                    ProviderId::Azure,
+                    "ja-JP-NanamiNeural",
+                    "Nanami",
+                    "ja-JP",
+                )],
+                provider_states: HashMap::new(),
+                cache,
+                worker: test_worker(),
+            },
+        );
+
+        app.overlay = Some(FilterOverlay::new(FilterFacet::Provider));
+        if let Some(overlay) = app.overlay.as_mut() {
+            overlay.search.insert_str("no matches");
+        }
+        app.reset_overlay_selection(FilterFacet::Provider, "no matches");
+
+        for code in [
+            KeyCode::Up,
+            KeyCode::Down,
+            KeyCode::PageUp,
+            KeyCode::PageDown,
+        ] {
+            app.handle_key(KeyEvent::new(code, KeyModifiers::NONE));
+            assert_eq!(app.overlay_selected(), None);
+        }
     }
 }

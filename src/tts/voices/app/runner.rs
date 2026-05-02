@@ -10,10 +10,11 @@ use crate::tts::voices::credentials::probe_all;
 use crate::tts::voices::preview::spawn_worker;
 
 use super::draw::draw;
-use super::state::{App, AppDependencies, InitialFilters};
+use super::state::{App, AppDependencies, InitialFilters, ViewState};
 
 struct Controller {
     app: App,
+    view: ViewState,
 }
 
 impl Controller {
@@ -26,6 +27,7 @@ impl Controller {
         };
         Self {
             app: App::new(filters, deps),
+            view: ViewState::default(),
         }
     }
 
@@ -34,7 +36,8 @@ impl Controller {
     }
 
     fn draw(&mut self, terminal: &mut DefaultTerminal) {
-        terminal.draw(|f| draw(f, &mut self.app)).ok();
+        self.view.sync_from(&self.app);
+        terminal.draw(|f| draw(f, &self.app, &mut self.view)).ok();
     }
 
     fn drain_preview_results(&mut self) {

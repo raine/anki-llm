@@ -97,46 +97,46 @@ impl App {
     fn open_overlay(&mut self, facet: FilterFacet) {
         self.stop_player();
         self.overlay = Some(super::state::FilterOverlay::new(facet));
-        let len = self.overlay_rows_for(facet, "").len();
-        if let Some(overlay) = self.overlay.as_mut() {
-            overlay.clamp_selection(len);
-        }
+        self.clamp_overlay_selection(facet, "");
         self.status_line = format!("{} filter", facet.title());
     }
 
     fn handle_overlay_key(&mut self, key: KeyEvent) {
         let rows = self.overlay_rows();
-        let selected = self
-            .overlay
-            .as_ref()
-            .and_then(|overlay| overlay.list_state.selected())
-            .unwrap_or(0);
+        let selected = self.overlay_selected().unwrap_or(0);
         match key.code {
             KeyCode::Esc => {
                 self.overlay = None;
             }
             KeyCode::Up => {
-                if let Some(overlay) = self.overlay.as_mut() {
-                    let next = selected.saturating_sub(1);
-                    overlay.list_state.select(Some(next));
-                }
+                self.select_overlay(if rows.is_empty() {
+                    None
+                } else {
+                    Some(selected.saturating_sub(1))
+                });
             }
             KeyCode::Down => {
-                if let Some(overlay) = self.overlay.as_mut() {
+                self.select_overlay(if rows.is_empty() {
+                    None
+                } else {
                     let max = rows.len().saturating_sub(1);
-                    overlay.list_state.select(Some((selected + 1).min(max)));
-                }
+                    Some((selected + 1).min(max))
+                });
             }
             KeyCode::PageUp => {
-                if let Some(overlay) = self.overlay.as_mut() {
-                    overlay.list_state.select(Some(selected.saturating_sub(10)));
-                }
+                self.select_overlay(if rows.is_empty() {
+                    None
+                } else {
+                    Some(selected.saturating_sub(10))
+                });
             }
             KeyCode::PageDown => {
-                if let Some(overlay) = self.overlay.as_mut() {
+                self.select_overlay(if rows.is_empty() {
+                    None
+                } else {
                     let max = rows.len().saturating_sub(1);
-                    overlay.list_state.select(Some((selected + 10).min(max)));
-                }
+                    Some((selected + 10).min(max))
+                });
             }
             KeyCode::Enter => {
                 if let Some(row) = rows.get(selected) {
@@ -160,12 +160,7 @@ impl App {
                     let facet = overlay.facet;
                     let needle = overlay.search.value().to_string();
                     let _ = overlay;
-                    let len = self.overlay_rows_for(facet, &needle).len();
-                    if let Some(overlay) = self.overlay.as_mut() {
-                        overlay
-                            .list_state
-                            .select(if len == 0 { None } else { Some(0) });
-                    }
+                    self.reset_overlay_selection(facet, &needle);
                 }
             }
         }
@@ -179,12 +174,7 @@ impl App {
             let facet = overlay.facet;
             let needle = overlay.search.value().to_string();
             let _ = overlay;
-            let len = self.overlay_rows_for(facet, &needle).len();
-            if let Some(overlay) = self.overlay.as_mut() {
-                overlay
-                    .list_state
-                    .select(if len == 0 { None } else { Some(0) });
-            }
+            self.reset_overlay_selection(facet, &needle);
             return;
         }
         self.search.insert_str(&cleaned);
