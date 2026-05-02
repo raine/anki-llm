@@ -1,14 +1,16 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 
+use super::effects::Effect;
 use super::events::WorkerCommand;
 use super::runner::done_audio_cache_path;
 use super::state::{App, AppMode, Toast};
 
-use crate::anki::client::anki_client;
 use crate::tui::line_input::LineInput;
 
 impl App {
-    pub(super) fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
+    pub(super) fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Vec<Effect> {
+        let mut effects = Vec::new();
+
         // Model picker overlay intercepts all keys when visible
         if let Some(ref mut picker) = self.model_picker {
             match key.code {
@@ -43,7 +45,7 @@ impl App {
                                     tick: self.tick,
                                 });
                             } else {
-                                self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
+                                effects.push(Effect::SendWorker(WorkerCommand::SetModel(model)));
                             }
                         }
                     }
@@ -54,7 +56,7 @@ impl App {
                 }
                 _ => {}
             }
-            return;
+            return effects;
         }
 
         // Help overlay intercepts all keys when visible
@@ -63,7 +65,7 @@ impl App {
                 KeyCode::Char('?') | KeyCode::Esc => self.show_help = false,
                 _ => {}
             }
-            return;
+            return effects;
         }
 
         // Toggle help overlay from any mode (but not when typing in an inline input)
@@ -76,36 +78,36 @@ impl App {
             && !has_term_input
         {
             self.show_help = true;
-            return;
+            return effects;
         }
 
         match &mut self.mode {
-            AppMode::Input(_) => self.handle_key_input(key),
+            AppMode::Input(_) => effects.extend(self.handle_key_input(key)),
             AppMode::Running => match key.code {
                 KeyCode::Esc => {
                     // Cancel current run (and entire batch) and go back to term input.
                     self.batch_queue.clear();
                     self.batch_progress = None;
                     self.batch_cards.clear();
-                    self.worker_tx.send(WorkerCommand::Cancel).ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::Cancel));
                     self.pending_cancels += 1;
                     self.reset_for_new_run();
                     self.mode = AppMode::Input(LineInput::default());
                 }
                 KeyCode::Char('q') => {
-                    self.worker_tx.send(WorkerCommand::Quit).ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::Quit));
                     self.should_quit = true;
                     self.user_quit = true;
                 }
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.worker_tx.send(WorkerCommand::Quit).ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::Quit));
                     self.should_quit = true;
                     self.user_quit = true;
                 }
                 _ => {}
             },
             AppMode::Selecting(_) => self.handle_key_selection(key),
-            AppMode::Reviewing(_) => self.handle_key_review(key),
+            AppMode::Reviewing(_) => effects.extend(self.handle_key_review(key)),
             AppMode::Done { .. } | AppMode::Error(_) => match key.code {
                 KeyCode::Char('m')
                     if key.modifiers.contains(KeyModifiers::CONTROL) && !self.is_fatal =>
@@ -120,16 +122,14 @@ impl App {
                     if let Some(term) = self.last_term.clone() {
                         self.reset_for_new_run();
                         self.mode = AppMode::Running;
-                        self.worker_tx
-                            .send(WorkerCommand::Start {
-                                term,
-                                enable_thinking_stream: true,
-                            })
-                            .ok();
+                        effects.push(Effect::SendWorker(WorkerCommand::Start {
+                            term,
+                            enable_thinking_stream: true,
+                        }));
                     }
                 }
                 KeyCode::Char('q') => {
-                    self.worker_tx.send(WorkerCommand::Quit).ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::Quit));
                     self.should_quit = true;
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -156,8 +156,7 @@ impl App {
                 }
                 KeyCode::Char('c') => {
                     if let AppMode::Done { ref cards, .. } = self.mode {
-                        let cards = cards.clone();
-                        self.copy_cards(&cards);
+                        effects.push(Effect::CopyCards(cards.clone()));
                     }
                 }
                 KeyCode::Char('p') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -167,64 +166,49 @@ impl App {
                         .map(|info| info.tts_configured)
                         .unwrap_or(false);
                     if !enabled {
-                        return;
+                        return effects;
                     }
-                    let Some(player) = &self.player else {
-                        return;
-                    };
+                    if self.player.is_none() {
+                        return effects;
+                    }
                     let Some(card) = (match &self.mode {
                         AppMode::Done { cards, .. } => cards.first(),
                         _ => None,
                     }) else {
-                        return;
+                        return effects;
                     };
                     let Some(path) = done_audio_cache_path(card) else {
                         self.toast = Some(Toast {
                             message: "No cached audio to play".into(),
                             tick: self.tick,
                         });
-                        return;
+                        return effects;
                     };
-                    let _ = player.play(card.card_id, path);
+                    effects.push(Effect::PlayAudio {
+                        card_id: card.card_id,
+                        path,
+                    });
                 }
                 KeyCode::Char('d') => {
-                    if let AppMode::Done {
-                        ref mut note_ids,
-                        ref mut cards,
-                        ref mut message,
-                        ..
-                    } = self.mode
+                    if let AppMode::Done { ref note_ids, .. } = self.mode
                         && !note_ids.is_empty()
                     {
-                        let anki = anki_client();
-                        match anki.delete_notes(note_ids) {
-                            Ok(()) => {
-                                let count = note_ids.len();
-                                note_ids.clear();
-                                cards.clear();
-                                *message = format!("Deleted {count} note(s) from Anki.");
-                                self.toast = Some(Toast {
-                                    message: format!("Deleted {count} note(s)"),
-                                    tick: self.tick,
-                                });
-                            }
-                            Err(e) => {
-                                self.toast = Some(Toast {
-                                    message: format!("Delete failed: {e}"),
-                                    tick: self.tick,
-                                });
-                            }
-                        }
+                        effects.push(Effect::DeleteFromAnki {
+                            note_ids: note_ids.clone(),
+                        });
                     }
                 }
                 _ => {}
             },
         }
+
+        effects
     }
 
-    pub(super) fn handle_key_review(&mut self, key: crossterm::event::KeyEvent) {
+    pub(super) fn handle_key_review(&mut self, key: crossterm::event::KeyEvent) -> Vec<Effect> {
+        let mut effects = Vec::new();
         let AppMode::Reviewing(ref mut state) = self.mode else {
-            return;
+            return effects;
         };
 
         match (key.code, key.modifiers) {
@@ -250,10 +234,10 @@ impl App {
                 state.detail_scroll += 10;
             }
             (KeyCode::Char('q'), _) => {
-                self.worker_tx.send(WorkerCommand::Quit).ok();
+                effects.push(Effect::SendWorker(WorkerCommand::Quit));
                 self.should_quit = true;
                 self.user_quit = true;
-                return;
+                return effects;
             }
             _ => {}
         }
@@ -264,10 +248,12 @@ impl App {
         {
             let AppMode::Reviewing(state) = std::mem::replace(&mut self.mode, AppMode::Running)
             else {
-                return;
+                return effects;
             };
             let decisions = state.decisions.clone();
-            self.worker_tx.send(WorkerCommand::Review(decisions)).ok();
+            effects.push(Effect::SendWorker(WorkerCommand::Review(decisions)));
         }
+
+        effects
     }
 }

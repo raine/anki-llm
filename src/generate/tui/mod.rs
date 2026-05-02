@@ -25,12 +25,17 @@ mod tests {
     use super::editor::parse_edited_anki_fields;
     use super::effects::Effect;
     use super::events::{BackendEvent, SessionInfo, TtsUiState, WorkerCommand};
-    use super::runner::any_card_synthesizing;
+    use super::runner::{any_card_synthesizing, apply_delete_from_anki_result};
+    use super::screens::review::ReviewState;
     use super::screens::selection::SelectionState;
     use super::state::{App as AppState, AppMode, MAX_THINKING_CHARS};
     use crate::generate::cards::{ValidatedCard, next_card_id};
+    use crate::generate::process::FlaggedCard;
+    use crate::tui::line_input::LineInput;
     use crate::tui::theme::Glyphs;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use indexmap::IndexMap;
+    use std::path::PathBuf;
     use std::sync::mpsc;
 
     fn mk_app() -> AppState {
@@ -74,6 +79,17 @@ mod tests {
             first_field_name: "Front".into(),
             tts_configured,
             post_select_configured: false,
+        }
+    }
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn flagged_card(card: ValidatedCard) -> FlaggedCard {
+        FlaggedCard {
+            card,
+            reason: "review".into(),
         }
     }
 
@@ -307,6 +323,236 @@ mod tests {
             panic!("expected selection mode");
         };
         assert!(!state.tts_states.contains_key(&stale_id));
+    }
+
+    #[test]
+    fn input_enter_returns_start_effect_for_single_term() {
+        let mut app = mk_app();
+        app.mode = AppMode::Input(LineInput::new("term".into()));
+
+        let effects = app.handle_key(key(KeyCode::Enter));
+
+        assert!(matches!(app.mode, AppMode::Running));
+        assert_eq!(app.last_term.as_deref(), Some("term"));
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::SendWorker(WorkerCommand::Start { term, enable_thinking_stream: true })]
+                if term == "term"
+        ));
+    }
+
+    #[test]
+    fn running_escape_returns_cancel_effect_after_state_reset() {
+        let mut app = mk_app();
+        app.batch_queue = vec!["queued".into()];
+        app.batch_progress = Some((1, 2));
+        app.batch_cards.push(mk_card());
+
+        let effects = app.handle_key(key(KeyCode::Esc));
+
+        assert!(matches!(app.mode, AppMode::Input(_)));
+        assert!(app.batch_queue.is_empty());
+        assert_eq!(app.batch_progress, None);
+        assert!(app.batch_cards.is_empty());
+        assert_eq!(app.pending_cancels, 1);
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::SendWorker(WorkerCommand::Cancel)]
+        ));
+    }
+
+    #[test]
+    fn review_completion_returns_review_effect() {
+        let mut app = mk_app();
+        let card = mk_card();
+        app.mode = AppMode::Reviewing(ReviewState::new(vec![flagged_card(card)]));
+
+        let effects = app.handle_key(key(KeyCode::Enter));
+
+        assert!(matches!(app.mode, AppMode::Running));
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::SendWorker(WorkerCommand::Review(decisions))] if decisions == &vec![true]
+        ));
+    }
+
+    #[test]
+    fn done_copy_returns_copy_cards_effect() {
+        let mut app = mk_app();
+        let card = mk_card();
+        app.mode = AppMode::Done {
+            message: "done".into(),
+            cards: vec![card.clone()],
+            note_ids: vec![1],
+            failed: false,
+        };
+
+        let effects = app.handle_key(key(KeyCode::Char('c')));
+
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::CopyCards(cards)] if cards.len() == 1 && cards[0].card_id == card.card_id
+        ));
+    }
+
+    #[test]
+    fn done_play_returns_play_audio_effect_for_cached_audio() {
+        let mut app = mk_app();
+        let mut card = mk_card();
+        let filename = format!("anki-llm-test-{}.mp3", card.card_id);
+        card.raw_anki_fields
+            .insert("Audio".into(), format!("[sound:{filename}]"));
+        let cache_dir = crate::tts::cache::TtsCache::default_dir().unwrap();
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        let path = cache_dir.join(&filename);
+        std::fs::write(&path, b"audio").unwrap();
+        app.session_info = Some(mk_session_info(true));
+        app.player = Some(crate::audio::spawn_player(crate::audio::PlayerBinary {
+            command: "/nonexistent/anki-llm-test-player".into(),
+            args: Vec::new(),
+        }));
+        app.mode = AppMode::Done {
+            message: "done".into(),
+            cards: vec![card.clone()],
+            note_ids: Vec::new(),
+            failed: false,
+        };
+
+        let effects = app.handle_key(key(KeyCode::Char('p')));
+
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::PlayAudio { card_id, path: effect_path }]
+                if *card_id == card.card_id && effect_path == &PathBuf::from(&path)
+        ));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn done_play_without_cached_audio_sets_toast_and_returns_no_effect() {
+        let mut app = mk_app();
+        let mut card = mk_card();
+        card.raw_anki_fields.insert(
+            "Audio".into(),
+            format!("[sound:anki-llm-missing-{}.mp3]", card.card_id),
+        );
+        app.session_info = Some(mk_session_info(true));
+        app.player = Some(crate::audio::spawn_player(crate::audio::PlayerBinary {
+            command: "/nonexistent/anki-llm-test-player".into(),
+            args: Vec::new(),
+        }));
+        app.mode = AppMode::Done {
+            message: "done".into(),
+            cards: vec![card],
+            note_ids: Vec::new(),
+            failed: false,
+        };
+
+        let effects = app.handle_key(key(KeyCode::Char('p')));
+
+        assert!(effects.is_empty());
+        assert!(matches!(&app.toast, Some(toast) if toast.message == "No cached audio to play"));
+    }
+
+    #[test]
+    fn done_delete_returns_delete_effect_without_mutating_cards() {
+        let mut app = mk_app();
+        let card = mk_card();
+        app.mode = AppMode::Done {
+            message: "done".into(),
+            cards: vec![card.clone()],
+            note_ids: vec![10, 11],
+            failed: false,
+        };
+
+        let effects = app.handle_key(key(KeyCode::Char('d')));
+
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::DeleteFromAnki { note_ids }] if note_ids == &vec![10, 11]
+        ));
+        let AppMode::Done {
+            cards, note_ids, ..
+        } = &app.mode
+        else {
+            panic!("expected done mode");
+        };
+        assert_eq!(cards.len(), 1);
+        assert_eq!(note_ids, &vec![10, 11]);
+    }
+
+    #[test]
+    fn delete_result_success_clears_done_cards_and_notes() {
+        let mut app = mk_app();
+        app.mode = AppMode::Done {
+            message: "done".into(),
+            cards: vec![mk_card()],
+            note_ids: vec![10, 11],
+            failed: false,
+        };
+
+        apply_delete_from_anki_result::<&str>(&mut app, 2, Ok(()));
+
+        let AppMode::Done {
+            message,
+            cards,
+            note_ids,
+            ..
+        } = &app.mode
+        else {
+            panic!("expected done mode");
+        };
+        assert!(cards.is_empty());
+        assert!(note_ids.is_empty());
+        assert_eq!(message, "Deleted 2 note(s) from Anki.");
+        assert!(matches!(&app.toast, Some(toast) if toast.message == "Deleted 2 note(s)"));
+    }
+
+    #[test]
+    fn delete_result_failure_preserves_done_cards_and_notes() {
+        let mut app = mk_app();
+        app.mode = AppMode::Done {
+            message: "done".into(),
+            cards: vec![mk_card()],
+            note_ids: vec![10, 11],
+            failed: false,
+        };
+
+        apply_delete_from_anki_result(&mut app, 2, Err("boom"));
+
+        let AppMode::Done {
+            message,
+            cards,
+            note_ids,
+            ..
+        } = &app.mode
+        else {
+            panic!("expected done mode");
+        };
+        assert_eq!(cards.len(), 1);
+        assert_eq!(note_ids, &vec![10, 11]);
+        assert_eq!(message, "done");
+        assert!(matches!(&app.toast, Some(toast) if toast.message == "Delete failed: boom"));
+    }
+
+    #[test]
+    fn done_quit_preserves_natural_exit_semantics() {
+        let mut app = mk_app();
+        app.mode = AppMode::Done {
+            message: "done".into(),
+            cards: Vec::new(),
+            note_ids: Vec::new(),
+            failed: false,
+        };
+
+        let effects = app.handle_key(key(KeyCode::Char('q')));
+
+        assert!(app.should_quit);
+        assert!(!app.user_quit);
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::SendWorker(WorkerCommand::Quit)]
+        ));
     }
 
     #[test]

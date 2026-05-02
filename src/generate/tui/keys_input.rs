@@ -1,26 +1,24 @@
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 
+use super::effects::Effect;
 use super::events::WorkerCommand;
 use super::state::{App, AppMode};
 
 use crate::tui::line_input::LineInput;
 
 impl App {
-    pub(super) fn handle_key_input(&mut self, key: crossterm::event::KeyEvent) {
+    pub(super) fn handle_key_input(&mut self, key: crossterm::event::KeyEvent) -> Vec<Effect> {
+        let mut effects = Vec::new();
         let AppMode::Input(ref mut input) = self.mode else {
-            return;
+            return effects;
         };
 
         match key.code {
             KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.worker_tx.send(WorkerCommand::Quit).ok();
-                self.should_quit = true;
-                self.switch_prompt = true;
+                effects.push(Effect::SwitchPrompt);
             }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.worker_tx.send(WorkerCommand::Quit).ok();
-                self.should_quit = true;
-                self.user_quit = true;
+                effects.push(Effect::Quit);
             }
             KeyCode::Esc => {
                 if !input.value().is_empty() || !self.batch_queue.is_empty() {
@@ -66,12 +64,10 @@ impl App {
                         self.last_term = Some(term.clone());
                         self.batch_progress = None;
                         self.mode = AppMode::Running;
-                        self.worker_tx
-                            .send(WorkerCommand::Start {
-                                term,
-                                enable_thinking_stream: true,
-                            })
-                            .ok();
+                        effects.push(Effect::SendWorker(WorkerCommand::Start {
+                            term,
+                            enable_thinking_stream: true,
+                        }));
                     } else {
                         // Batch: queue has earlier terms, input has the last one
                         self.batch_queue.push(term);
@@ -84,12 +80,10 @@ impl App {
                         self.last_term = Some(first.clone());
                         self.batch_progress = Some((1, total));
                         self.mode = AppMode::Running;
-                        self.worker_tx
-                            .send(WorkerCommand::Start {
-                                term: first,
-                                enable_thinking_stream: false,
-                            })
-                            .ok();
+                        effects.push(Effect::SendWorker(WorkerCommand::Start {
+                            term: first,
+                            enable_thinking_stream: false,
+                        }));
                     }
                 }
             }
@@ -99,6 +93,7 @@ impl App {
                 }
             }
         }
+        effects
     }
 
     pub(super) fn handle_paste_input(&mut self, text: String) {

@@ -21,6 +21,7 @@ pub(super) enum Effect {
     StartAudioPlayer(crate::audio::PlayerBinary),
     PlayAudio { card_id: u64, path: PathBuf },
     CopyCards(Vec<ValidatedCard>),
+    DeleteFromAnki { note_ids: Vec<i64> },
     OpenEditor { card_index: usize },
     Quit,
     SwitchPrompt,

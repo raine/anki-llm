@@ -11,7 +11,7 @@ use super::events::{BackendEvent, TtsUiState, WorkerCommand};
 use super::prompt_picker::run_prompt_picker;
 use super::render::draw;
 use super::screens::selection::SelectionState;
-use super::state::{App, AppMode};
+use super::state::{App, AppMode, Toast};
 
 use crate::cli::GenerateArgs;
 use crate::generate::cards::ValidatedCard;
@@ -47,6 +47,11 @@ fn execute_effects(
                 }
             }
             Effect::CopyCards(cards) => app.copy_cards(&cards),
+            Effect::DeleteFromAnki { note_ids } => {
+                let count = note_ids.len();
+                let result = crate::anki::client::anki_client().delete_notes(&note_ids);
+                apply_delete_from_anki_result(app, count, result);
+            }
             Effect::OpenEditor { card_index } => {
                 edit_card_in_editor(terminal, app, card_index);
             }
@@ -63,6 +68,38 @@ fn execute_effects(
         }
     }
     Ok(())
+}
+
+pub(super) fn apply_delete_from_anki_result<E: std::fmt::Display>(
+    app: &mut App,
+    count: usize,
+    result: Result<(), E>,
+) {
+    match result {
+        Ok(()) => {
+            if let AppMode::Done {
+                ref mut note_ids,
+                ref mut cards,
+                ref mut message,
+                ..
+            } = app.mode
+            {
+                note_ids.clear();
+                cards.clear();
+                *message = format!("Deleted {count} note(s) from Anki.");
+                app.toast = Some(Toast {
+                    message: format!("Deleted {count} note(s)"),
+                    tick: app.tick,
+                });
+            }
+        }
+        Err(e) => {
+            app.toast = Some(Toast {
+                message: format!("Delete failed: {e}"),
+                tick: app.tick,
+            });
+        }
+    }
 }
 
 fn run_app(
@@ -113,7 +150,10 @@ fn run_app(
         // Poll for terminal input (50 ms timeout so we don't block backend events)
         if event::poll(Duration::from_millis(50))? {
             match event::read()? {
-                Event::Key(key) => app.handle_key(key),
+                Event::Key(key) => {
+                    let effects = app.handle_key(key);
+                    execute_effects(&mut terminal, &mut app, effects)?;
+                }
                 Event::Paste(text) => app.handle_paste_input(text),
                 _ => {}
             }
