@@ -18,6 +18,7 @@ pub(super) enum AppEvent {
 pub(super) enum Effect {
     SendWorker(WorkerCommand),
     TrySendWorker(WorkerCommand),
+    TryPreviewTts { card_id: u64, card: ValidatedCard },
     StartAudioPlayer(crate::audio::PlayerBinary),
     PlayAudio { card_id: u64, path: PathBuf },
     CopyCards(Vec<ValidatedCard>),

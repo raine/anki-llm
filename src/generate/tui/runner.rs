@@ -36,6 +36,26 @@ fn execute_effects(
             Effect::TrySendWorker(command) => {
                 app.worker_tx.try_send(command).ok();
             }
+            Effect::TryPreviewTts { card_id, card } => {
+                match app.worker_tx.try_send(WorkerCommand::PreviewTts { card }) {
+                    Ok(()) => {}
+                    Err(mpsc::TrySendError::Full(_)) => {
+                        if let AppMode::Selecting(ref mut state) = app.mode {
+                            state.tts_states.remove(&card_id);
+                        }
+                        app.toast = Some(Toast {
+                            message: "Preview queue full — try again".into(),
+                            tick: app.tick,
+                        });
+                    }
+                    Err(mpsc::TrySendError::Disconnected(_)) => {
+                        if let AppMode::Selecting(ref mut state) = app.mode {
+                            state.tts_states.remove(&card_id);
+                        }
+                        app.mode = AppMode::Error("Worker thread exited unexpectedly".into());
+                    }
+                }
+            }
             Effect::StartAudioPlayer(binary) => {
                 if app.player.is_none() {
                     app.player = Some(crate::audio::spawn_player(binary));
@@ -157,11 +177,6 @@ fn run_app(
                 Event::Paste(text) => app.handle_paste_input(text),
                 _ => {}
             }
-        }
-
-        // Handle pending editor launch (needs terminal access)
-        if let Some(card_index) = app.pending_edit.take() {
-            edit_card_in_editor(&mut terminal, &mut app, card_index);
         }
 
         execute_effects(&mut terminal, &mut app, Vec::new())?;

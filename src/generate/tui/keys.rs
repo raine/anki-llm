@@ -106,7 +106,7 @@ impl App {
                 }
                 _ => {}
             },
-            AppMode::Selecting(_) => self.handle_key_selection(key),
+            AppMode::Selecting(_) => effects.extend(self.handle_key_selection(key)),
             AppMode::Reviewing(_) => effects.extend(self.handle_key_review(key)),
             AppMode::Done { .. } | AppMode::Error(_) => match key.code {
                 KeyCode::Char('m')

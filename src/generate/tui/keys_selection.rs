@@ -1,7 +1,6 @@
-use std::sync::mpsc;
-
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 
+use super::effects::Effect;
 use super::events::{TtsUiState, WorkerCommand};
 use super::runner::any_card_synthesizing;
 use super::state::{App, AppMode, Toast};
@@ -9,9 +8,10 @@ use super::state::{App, AppMode, Toast};
 use crate::tui::line_input::LineInput;
 
 impl App {
-    pub(super) fn handle_key_selection(&mut self, key: crossterm::event::KeyEvent) {
+    pub(super) fn handle_key_selection(&mut self, key: crossterm::event::KeyEvent) -> Vec<Effect> {
+        let mut effects = Vec::new();
         let AppMode::Selecting(ref mut state) = self.mode else {
-            return;
+            return effects;
         };
 
         // When the inline feedback input is active (regen), route keys there
@@ -29,9 +29,10 @@ impl App {
                         && state.regen_in_flight.is_none()
                     {
                         state.regen_in_flight = Some(card.card_id);
-                        self.worker_tx
-                            .send(WorkerCommand::RegenerateCard { card, feedback })
-                            .ok();
+                        effects.push(Effect::SendWorker(WorkerCommand::RegenerateCard {
+                            card,
+                            feedback,
+                        }));
                     }
                 }
                 KeyCode::Esc => {
@@ -43,7 +44,7 @@ impl App {
                     }
                 }
             }
-            return;
+            return effects;
         }
 
         // When the inline term input is active, route keys there
@@ -62,20 +63,16 @@ impl App {
                         if let Some(model) = self.pending_model.take() {
                             // Deferred model change: cancel, switch, start fresh.
                             state.refresh_in_flight = true;
-                            self.worker_tx.send(WorkerCommand::Cancel).ok();
+                            effects.push(Effect::SendWorker(WorkerCommand::Cancel));
                             self.pending_cancels += 1;
-                            self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
-                            self.worker_tx
-                                .send(WorkerCommand::Start {
-                                    term,
-                                    enable_thinking_stream: true,
-                                })
-                                .ok();
+                            effects.push(Effect::SendWorker(WorkerCommand::SetModel(model)));
+                            effects.push(Effect::SendWorker(WorkerCommand::Start {
+                                term,
+                                enable_thinking_stream: true,
+                            }));
                         } else {
                             state.refresh_in_flight = true;
-                            self.worker_tx
-                                .send(WorkerCommand::RefreshWithTerm(term))
-                                .ok();
+                            effects.push(Effect::SendWorker(WorkerCommand::RefreshWithTerm(term)));
                         }
                     }
                 }
@@ -88,14 +85,12 @@ impl App {
                     }
                 }
             }
-            return;
+            return effects;
         }
 
         match key.code {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.worker_tx.send(WorkerCommand::Quit).ok();
-                self.should_quit = true;
-                self.user_quit = true;
+                effects.push(Effect::Quit);
             }
             KeyCode::Up | KeyCode::Char('k') => state.move_up(),
             KeyCode::Down | KeyCode::Char('j') => state.move_down(),
@@ -108,26 +103,26 @@ impl App {
                     // model, and start a fresh one. Stay in selection view —
                     // new cards will be appended when they arrive.
                     state.refresh_in_flight = true;
-                    self.worker_tx.send(WorkerCommand::Cancel).ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::Cancel));
                     self.pending_cancels += 1;
-                    self.worker_tx.send(WorkerCommand::SetModel(model)).ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::SetModel(model)));
                     let term = self.last_term.clone().unwrap_or_default();
-                    self.worker_tx
-                        .send(WorkerCommand::Start {
-                            term,
-                            enable_thinking_stream: true,
-                        })
-                        .ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::Start {
+                        term,
+                        enable_thinking_stream: true,
+                    }));
                 } else {
                     state.refresh_in_flight = true;
-                    self.worker_tx.send(WorkerCommand::Refresh).ok();
+                    effects.push(Effect::SendWorker(WorkerCommand::Refresh));
                 }
             }
             KeyCode::Char('t') if !state.refresh_in_flight => {
                 state.term_input = Some(LineInput::default());
             }
             KeyCode::Char('e') => {
-                self.pending_edit = Some(state.cursor);
+                effects.push(Effect::OpenEditor {
+                    card_index: state.cursor,
+                });
             }
             KeyCode::Char('R') if state.regen_in_flight.is_none() => {
                 // Don't allow regenerating duplicates
@@ -156,21 +151,19 @@ impl App {
                         message: "TTS preview in progress".into(),
                         tick: self.tick,
                     });
-                    return;
+                    return effects;
                 }
                 self.pending_model = None;
                 self.batch_queue.clear();
                 self.batch_progress = None;
                 self.batch_cards.clear();
-                self.worker_tx.send(WorkerCommand::Cancel).ok();
+                effects.push(Effect::SendWorker(WorkerCommand::Cancel));
                 self.pending_cancels += 1;
                 self.reset_for_new_run();
                 self.mode = AppMode::Input(LineInput::default());
             }
             KeyCode::Char('q') => {
-                self.worker_tx.send(WorkerCommand::Quit).ok();
-                self.should_quit = true;
-                self.user_quit = true;
+                effects.push(Effect::Quit);
             }
             KeyCode::Enter if !state.refresh_in_flight => {
                 // See the Esc arm for the race rationale; same guard.
@@ -179,21 +172,19 @@ impl App {
                         message: "TTS preview in progress".into(),
                         tick: self.tick,
                     });
-                    return;
+                    return effects;
                 }
                 self.pending_model = None;
                 let AppMode::Selecting(state) = std::mem::replace(&mut self.mode, AppMode::Running)
                 else {
-                    return;
+                    return effects;
                 };
                 let cards = state.selected_cards_in_order();
                 let skip_post_select = state.skip_post_select;
-                self.worker_tx
-                    .send(WorkerCommand::Selection {
-                        cards,
-                        skip_post_select,
-                    })
-                    .ok();
+                effects.push(Effect::SendWorker(WorkerCommand::Selection {
+                    cards,
+                    skip_post_select,
+                }));
             }
             KeyCode::Char('f') => {
                 state.force_toggle_duplicate();
@@ -213,7 +204,7 @@ impl App {
             }
             KeyCode::Char('c') => {
                 if let Some(card) = state.cards.get(state.cursor).cloned() {
-                    self.copy_cards(&[card]);
+                    effects.push(Effect::CopyCards(vec![card]));
                 }
             }
             KeyCode::Char('p') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -226,10 +217,10 @@ impl App {
                     .map(|info| info.tts_configured)
                     .unwrap_or(false);
                 if !enabled || self.player.is_none() {
-                    return;
+                    return effects;
                 }
                 let Some(card) = state.cards.get(state.cursor).cloned() else {
-                    return;
+                    return effects;
                 };
                 let card_id = card.card_id;
                 match state.tts_states.get(&card_id) {
@@ -237,11 +228,10 @@ impl App {
                         // Ignore repeat presses while synthesis is in flight.
                     }
                     Some(TtsUiState::Ready { cache_path }) => {
-                        // Already cached; tell the player directly. Same
-                        // card id will toggle it off if still playing.
-                        if let Some(player) = &self.player {
-                            let _ = player.play(card_id, cache_path.clone());
-                        }
+                        effects.push(Effect::PlayAudio {
+                            card_id,
+                            path: cache_path.clone(),
+                        });
                     }
                     _ => {
                         // Idle or failed: ask the worker to synthesize
@@ -255,29 +245,7 @@ impl App {
                         // round-trips. This is what blocks the
                         // press-p-then-Enter race on the same card.
                         state.tts_states.insert(card_id, TtsUiState::Synthesizing);
-                        // `try_send` instead of blocking `send`: the
-                        // command channel is a bounded `sync_channel`
-                        // and a full queue would otherwise block the
-                        // render thread. On `Full`, roll the optimistic
-                        // `Synthesizing` state back — otherwise the card
-                        // would stay stuck forever (no worker reply will
-                        // ever arrive) and `any_card_synthesizing` would
-                        // permanently block Enter/Esc.
-                        match self.worker_tx.try_send(WorkerCommand::PreviewTts { card }) {
-                            Ok(()) => {}
-                            Err(mpsc::TrySendError::Full(_)) => {
-                                state.tts_states.remove(&card_id);
-                                self.toast = Some(Toast {
-                                    message: "Preview queue full — try again".into(),
-                                    tick: self.tick,
-                                });
-                            }
-                            Err(mpsc::TrySendError::Disconnected(_)) => {
-                                state.tts_states.remove(&card_id);
-                                self.mode =
-                                    AppMode::Error("Worker thread exited unexpectedly".into());
-                            }
-                        }
+                        effects.push(Effect::TryPreviewTts { card_id, card });
                     }
                 }
             }
@@ -293,5 +261,7 @@ impl App {
             }
             _ => {}
         }
+
+        effects
     }
 }

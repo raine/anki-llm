@@ -96,8 +96,6 @@ pub(super) struct App {
     /// In Done/Error mode: selected step index for log browsing, None = summary.
     pub(super) browse_step: Option<usize>,
     pub(super) browse_scroll: u16,
-    /// When Some, the main loop should suspend the TUI and open $EDITOR for this card index.
-    pub(super) pending_edit: Option<usize>,
     /// Remaining terms to process in a batch (front = next term).
     pub(super) batch_queue: Vec<String>,
     /// Batch progress: (current 1-based index, total count). None when not in batch.
@@ -176,7 +174,6 @@ impl App {
             toast: None,
             browse_step: None,
             browse_scroll: 0,
-            pending_edit: None,
             batch_queue: Vec::new(),
             batch_progress: None,
             batch_cards: Vec::new(),
