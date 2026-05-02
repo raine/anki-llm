@@ -43,6 +43,14 @@ pub struct PreviewHandle {
 }
 
 impl PreviewHandle {
+    #[cfg(test)]
+    pub(crate) fn from_channels(
+        tx: Sender<Option<PreviewRequest>>,
+        rx: Receiver<PreviewResult>,
+    ) -> Self {
+        Self { tx, rx }
+    }
+
     pub fn submit(&self, req: PreviewRequest) {
         let _ = self.tx.send(Some(req));
     }

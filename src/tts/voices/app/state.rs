@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::process::Child;
 use std::sync::Arc;
 
@@ -7,16 +8,23 @@ use crate::tts::cache::TtsCache;
 use crate::tui::line_input::LineInput;
 
 use crate::tts::voices::catalog::{
-    FacetCatalog, ProviderId, VoiceEntry, VoiceFilters, build_facets, filter, load_snapshot,
+    FacetCatalog, ProviderId, VoiceEntry, VoiceFilters, build_facets, filter,
 };
-use crate::tts::voices::credentials::{ProviderPreviewState, probe_all};
+use crate::tts::voices::credentials::ProviderPreviewState;
 use crate::tts::voices::player;
-use crate::tts::voices::preview::{PreviewHandle, RequestId, spawn_worker};
+use crate::tts::voices::preview::{PreviewHandle, RequestId};
 
 pub struct InitialFilters {
     pub lang: Option<String>,
     pub provider: Option<ProviderId>,
     pub query: Option<String>,
+}
+
+pub(super) struct AppDependencies {
+    pub entries: Vec<VoiceEntry>,
+    pub provider_states: HashMap<ProviderId, ProviderPreviewState>,
+    pub cache: Arc<TtsCache>,
+    pub worker: PreviewHandle,
 }
 
 pub(super) struct Toast {
@@ -117,7 +125,7 @@ pub(super) struct App {
     pub list_state: ListState,
     pub overlay: Option<FilterOverlay>,
     pub show_help: bool,
-    pub provider_states: std::collections::HashMap<ProviderId, ProviderPreviewState>,
+    pub provider_states: HashMap<ProviderId, ProviderPreviewState>,
     pub cache: Arc<TtsCache>,
     pub worker: PreviewHandle,
     pub next_id: RequestId,
@@ -132,11 +140,14 @@ pub(super) struct App {
 }
 
 impl App {
-    pub(super) fn new(initial: InitialFilters, cache: Arc<TtsCache>) -> Self {
-        let entries = load_snapshot();
+    pub(super) fn new(initial: InitialFilters, deps: AppDependencies) -> Self {
+        let AppDependencies {
+            entries,
+            provider_states,
+            cache,
+            worker,
+        } = deps;
         let facets = build_facets(&entries);
-        let provider_states = probe_all();
-        let worker = spawn_worker();
         let search = LineInput::new(initial.query.unwrap_or_default());
         let filters = VoiceFilters {
             provider: initial.provider,
@@ -429,5 +440,72 @@ impl App {
         if close_after {
             self.overlay = None;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+
+    use super::*;
+
+    fn test_worker() -> PreviewHandle {
+        let (req_tx, req_rx) = mpsc::channel();
+        let (res_tx, res_rx) = mpsc::channel();
+        drop(req_rx);
+        drop(res_tx);
+        PreviewHandle::from_channels(req_tx, res_rx)
+    }
+
+    fn voice(
+        provider: ProviderId,
+        voice_id: &str,
+        display_name: &str,
+        language: &str,
+    ) -> VoiceEntry {
+        VoiceEntry {
+            provider,
+            voice_id: voice_id.into(),
+            display_name: display_name.into(),
+            languages: vec![language.into()],
+            multilingual: false,
+            gender: None,
+            preview_model: None,
+            tags: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn constructs_app_from_explicit_dependencies_without_side_effects() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let app = App::new(
+            InitialFilters {
+                lang: Some("ja".into()),
+                provider: Some(ProviderId::Azure),
+                query: Some("nanami".into()),
+            },
+            AppDependencies {
+                entries: vec![
+                    voice(ProviderId::Azure, "ja-JP-NanamiNeural", "Nanami", "ja-JP"),
+                    voice(ProviderId::Google, "en-US-Studio-O", "Studio O", "en-US"),
+                ],
+                provider_states: HashMap::new(),
+                cache,
+                worker: test_worker(),
+            },
+        );
+
+        assert_eq!(app.search.value(), "nanami");
+        assert_eq!(app.filters.text, "nanami");
+        assert_eq!(app.filters.language.as_deref(), Some("ja"));
+        assert_eq!(app.filters.provider, Some(ProviderId::Azure));
+        assert_eq!(app.filtered, vec![0]);
+        assert_eq!(app.list_state.selected(), Some(0));
+        assert!(!app.preview_busy);
+        assert!(
+            app.selected_entry()
+                .is_some_and(|entry| entry.voice_id == "ja-JP-NanamiNeural")
+        );
     }
 }
