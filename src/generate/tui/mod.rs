@@ -35,6 +35,7 @@ mod tests {
     use crate::tui::theme::Glyphs;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use indexmap::IndexMap;
+    use serial_test::serial;
     use std::path::PathBuf;
     use std::sync::mpsc;
 
@@ -93,6 +94,28 @@ mod tests {
         FlaggedCard {
             card,
             reason: "review".into(),
+        }
+    }
+
+    struct HomeGuard {
+        original: Option<std::ffi::OsString>,
+    }
+
+    impl HomeGuard {
+        fn set(path: &std::path::Path) -> Self {
+            let original = std::env::var_os("HOME");
+            unsafe { std::env::set_var("HOME", path) };
+            Self { original }
+        }
+    }
+
+    impl Drop for HomeGuard {
+        fn drop(&mut self) {
+            if let Some(value) = self.original.take() {
+                unsafe { std::env::set_var("HOME", value) };
+            } else {
+                unsafe { std::env::remove_var("HOME") };
+            }
         }
     }
 
@@ -425,7 +448,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn done_play_returns_play_audio_effect_for_cached_audio() {
+        let tmp_home = tempfile::tempdir().unwrap();
+        let _home = HomeGuard::set(tmp_home.path());
         let mut app = mk_app();
         let mut card = mk_card();
         let filename = format!("anki-llm-test-{}.mp3", card.card_id);
@@ -455,7 +481,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn done_play_without_cached_audio_sets_toast_and_returns_no_effect() {
+        let tmp_home = tempfile::tempdir().unwrap();
+        let _home = HomeGuard::set(tmp_home.path());
         let mut app = mk_app();
         let mut card = mk_card();
         card.raw_anki_fields.insert(
