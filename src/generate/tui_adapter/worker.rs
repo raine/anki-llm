@@ -7,152 +7,11 @@ use crate::llm::client::LlmClient;
 use crate::llm::provider::available_models;
 use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 
-use super::cards::ValidatedCard;
-use super::pipeline::{
-    PipelineConfig, PipelineInteraction, PipelineOutcome, PipelineProgress, PipelineStep,
-    ReviewResult, SelectionAction, TtsPreviewState,
-};
-use super::process::FlaggedCard;
-use super::session::prepare_session;
-use super::tui::{BackendEvent, SessionInfo, StepStatus, TtsUiState, WorkerCommand};
-
-pub(super) struct TuiProgress {
-    pub tx: mpsc::Sender<BackendEvent>,
-}
-
-impl PipelineProgress for TuiProgress {
-    fn log(&self, msg: &str) {
-        self.tx.send(BackendEvent::Log(msg.to_string())).ok();
-    }
-
-    fn step_start(&self, step: PipelineStep, _detail: Option<&str>) {
-        self.tx
-            .send(BackendEvent::StepUpdate {
-                step,
-                status: StepStatus::Running(None),
-            })
-            .ok();
-    }
-
-    fn step_done(&self, step: PipelineStep, detail: Option<String>) {
-        self.tx
-            .send(BackendEvent::StepUpdate {
-                step,
-                status: StepStatus::Done(detail),
-            })
-            .ok();
-    }
-
-    fn step_skip(&self, step: PipelineStep) {
-        self.tx
-            .send(BackendEvent::StepUpdate {
-                step,
-                status: StepStatus::Skipped,
-            })
-            .ok();
-    }
-
-    fn step_error(&self, step: PipelineStep, detail: &str) {
-        self.tx
-            .send(BackendEvent::StepUpdate {
-                step,
-                status: StepStatus::Error(detail.to_string()),
-            })
-            .ok();
-    }
-
-    fn cost_update(&self, input_tokens: u64, output_tokens: u64, cost: f64) {
-        self.tx
-            .send(BackendEvent::CostUpdate {
-                input_tokens,
-                output_tokens,
-                cost,
-            })
-            .ok();
-    }
-
-    fn thinking_reset(&self) {
-        self.tx.send(BackendEvent::ThinkingReset).ok();
-    }
-
-    fn thinking_delta(&self, delta: &str) {
-        self.tx
-            .send(BackendEvent::ThinkingDelta(delta.to_string()))
-            .ok();
-    }
-
-    fn thinking_clear(&self) {
-        self.tx.send(BackendEvent::ThinkingClear).ok();
-    }
-}
-
-pub(super) struct TuiInteraction<'a> {
-    pub tx: mpsc::Sender<BackendEvent>,
-    pub rx: &'a mpsc::Receiver<WorkerCommand>,
-}
-
-impl PipelineInteraction for TuiInteraction<'_> {
-    fn begin_selection(&self, cards: Vec<ValidatedCard>) {
-        self.tx.send(BackendEvent::RequestSelection(cards)).ok();
-    }
-
-    fn append_selection(&self, cards: Vec<ValidatedCard>) {
-        self.tx.send(BackendEvent::AppendCards(cards)).ok();
-    }
-
-    fn replace_card(&self, previous_card_id: u64, card: ValidatedCard) {
-        self.tx
-            .send(BackendEvent::ReplaceCard {
-                previous_card_id,
-                card,
-            })
-            .ok();
-    }
-
-    fn regen_error(&self, target_id: u64, message: String) {
-        self.tx
-            .send(BackendEvent::RegenError { target_id, message })
-            .ok();
-    }
-
-    fn wait_selection(&self) -> SelectionAction {
-        match self.rx.recv() {
-            Ok(WorkerCommand::Refresh) => SelectionAction::Refresh,
-            Ok(WorkerCommand::RefreshWithTerm(term)) => SelectionAction::RefreshWithTerm(term),
-            Ok(WorkerCommand::RegenerateCard { card, feedback }) => {
-                SelectionAction::RegenerateCard { card, feedback }
-            }
-            Ok(WorkerCommand::PreviewTts { card }) => SelectionAction::PreviewTts { card },
-            Ok(WorkerCommand::Selection {
-                cards,
-                skip_post_select,
-            }) => SelectionAction::Selected {
-                cards,
-                skip_post_select,
-            },
-            Ok(WorkerCommand::Cancel) => SelectionAction::Cancel,
-            Ok(WorkerCommand::Quit) | Err(_) => SelectionAction::Quit,
-            _ => SelectionAction::Cancel,
-        }
-    }
-
-    fn request_review(&self, flagged: Vec<FlaggedCard>) -> ReviewResult {
-        self.tx.send(BackendEvent::RequestReview(flagged)).ok();
-        match self.rx.recv() {
-            Ok(WorkerCommand::Review(decisions)) => ReviewResult::Reviewed(decisions),
-            _ => ReviewResult::Cancel,
-        }
-    }
-
-    fn tts_state(&self, card_id: u64, state: TtsPreviewState) {
-        let state = match state {
-            TtsPreviewState::Synthesizing => TtsUiState::Synthesizing,
-            TtsPreviewState::Ready { cache_path } => TtsUiState::Ready { cache_path },
-            TtsPreviewState::Failed(message) => TtsUiState::Failed(message),
-        };
-        self.tx.send(BackendEvent::TtsState { card_id, state }).ok();
-    }
-}
+use super::super::pipeline::{PipelineConfig, PipelineOutcome, PipelineStep};
+use super::super::session::prepare_session;
+use super::super::tui::{BackendEvent, SessionInfo, StepStatus, WorkerCommand};
+use super::interaction::TuiInteraction;
+use super::progress::TuiProgress;
 
 /// Pipeline logic for TUI mode. Sets up once, then loops waiting for terms.
 pub fn run_pipeline(
@@ -250,7 +109,7 @@ pub fn run_pipeline(
                     enable_thinking_stream,
                 };
 
-                match super::pipeline::run_pipeline_for_term(
+                match super::super::pipeline::run_pipeline_for_term(
                     &config,
                     &interaction,
                     &progress,
