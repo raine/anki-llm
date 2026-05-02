@@ -1,3 +1,5 @@
+mod app;
+
 pub mod anki;
 pub mod audio;
 pub mod batch;
@@ -17,3 +19,7 @@ pub mod tts;
 pub mod tui;
 pub mod update;
 pub mod workspace;
+
+pub fn run_cli(cli: cli::Cli) -> anyhow::Result<()> {
+    app::run(cli)
+}
