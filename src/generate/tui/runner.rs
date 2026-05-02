@@ -31,7 +31,10 @@ struct RuntimeContext {
     player_binary: Option<crate::audio::PlayerBinary>,
 }
 
-fn send_initial_start(worker_tx: &mpsc::SyncSender<WorkerCommand>, initial_term: Option<String>) {
+pub(super) fn send_initial_start(
+    worker_tx: &mpsc::SyncSender<WorkerCommand>,
+    initial_term: Option<String>,
+) {
     if let Some(term) = initial_term {
         worker_tx
             .send(WorkerCommand::Start {

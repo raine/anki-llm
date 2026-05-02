@@ -25,7 +25,7 @@ mod tests {
     use super::editor::parse_edited_anki_fields;
     use super::effects::Effect;
     use super::events::{BackendEvent, SessionInfo, TtsUiState, WorkerCommand};
-    use super::runner::{any_card_synthesizing, apply_delete_from_anki_result};
+    use super::runner::{any_card_synthesizing, apply_delete_from_anki_result, send_initial_start};
     use super::screens::review::ReviewState;
     use super::screens::selection::SelectionState;
     use super::state::{App as AppState, AppMode, AudioStatus, MAX_THINKING_CHARS};
@@ -36,6 +36,7 @@ mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use indexmap::IndexMap;
     use std::path::PathBuf;
+    use std::sync::mpsc;
 
     fn mk_app() -> AppState {
         let mut app = AppState::new(
@@ -208,6 +209,26 @@ mod tests {
 
         assert!(matches!(app.mode, AppMode::Running));
         assert_eq!(app.last_term.as_deref(), Some("term"));
+    }
+
+    #[test]
+    fn send_initial_start_emits_start_for_initial_term_only() {
+        let (tx, rx) = mpsc::sync_channel(1);
+
+        send_initial_start(&tx, Some("term".into()));
+
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(WorkerCommand::Start {
+                term,
+                enable_thinking_stream: true,
+            }) if term == "term"
+        ));
+        assert!(rx.try_recv().is_err());
+
+        send_initial_start(&tx, None);
+
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]
