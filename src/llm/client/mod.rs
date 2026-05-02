@@ -4,7 +4,7 @@ mod streaming;
 mod transport;
 
 pub use request::{JsonSchema, ResponseFormat};
-pub use response::{ChatCompletionResult, ChatUsage};
+pub use response::ChatCompletionResult;
 
 use std::time::Instant;
 

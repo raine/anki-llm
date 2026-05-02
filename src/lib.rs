@@ -1,24 +1,24 @@
 mod app;
 
 pub mod anki;
-pub mod audio;
-pub mod batch;
+pub(crate) mod audio;
+pub(crate) mod batch;
 pub mod cli;
-pub mod config;
-pub mod data;
-pub mod docs;
-pub mod doctor;
-pub mod generate;
-pub mod llm;
-pub mod note_type;
-pub mod snapshot;
-pub mod spinner;
-pub mod style;
-pub mod template;
-pub mod tts;
-pub mod tui;
-pub mod update;
-pub mod workspace;
+pub(crate) mod config;
+pub(crate) mod data;
+pub(crate) mod docs;
+pub(crate) mod doctor;
+pub(crate) mod generate;
+pub(crate) mod llm;
+pub(crate) mod note_type;
+pub(crate) mod snapshot;
+pub(crate) mod spinner;
+pub(crate) mod style;
+pub(crate) mod template;
+pub(crate) mod tts;
+pub(crate) mod tui;
+pub(crate) mod update;
+pub(crate) mod workspace;
 
 pub fn run_cli(cli: cli::Cli) -> anyhow::Result<()> {
     app::run(cli)

@@ -17,9 +17,6 @@ mod widgets;
 pub use events::{BackendEvent, SessionInfo, StepStatus, TtsUiState, WorkerCommand};
 pub use runner::run_tui;
 
-// Re-export PipelineStep from the shared pipeline module
-pub use super::pipeline::PipelineStep;
-
 #[cfg(test)]
 mod tests {
     use super::editor::parse_edited_anki_fields;

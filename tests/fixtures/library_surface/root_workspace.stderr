@@ -1,0 +1,13 @@
+error[E0603]: module `workspace` is private
+ --> tests/fixtures/library_surface/root_workspace.rs:2:23
+  |
+2 |     let _ = anki_llm::workspace::command::run;
+  |                       ^^^^^^^^^           --- function `run` is not publicly re-exported
+  |                       |
+  |                       private module
+  |
+note: the module `workspace` is defined here
+ --> src/lib.rs
+  |
+  | pub(crate) mod workspace;
+  | ^^^^^^^^^^^^^^^^^^^^^^^^

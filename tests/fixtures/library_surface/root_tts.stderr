@@ -1,0 +1,13 @@
+error[E0603]: module `tts` is private
+ --> tests/fixtures/library_surface/root_tts.rs:2:23
+  |
+2 |     let _ = anki_llm::tts::command::run;
+  |                       ^^^           --- function `run` is not publicly re-exported
+  |                       |
+  |                       private module
+  |
+note: the module `tts` is defined here
+ --> src/lib.rs
+  |
+  | pub(crate) mod tts;
+  | ^^^^^^^^^^^^^^^^^^

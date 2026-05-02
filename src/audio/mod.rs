@@ -9,6 +9,4 @@
 
 pub mod player;
 
-pub use player::{
-    PlayerBinary, PlayerCommand, PlayerEvent, PlayerHandle, detect_player_binary, spawn_player,
-};
+pub use player::{PlayerBinary, PlayerEvent, PlayerHandle, detect_player_binary, spawn_player};

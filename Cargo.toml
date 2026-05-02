@@ -75,3 +75,4 @@ integration = []
 assert_cmd = "2"
 predicates = "3"
 serial_test = "3.4.0"
+trybuild = "1"

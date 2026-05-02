@@ -1,0 +1,13 @@
+error[E0603]: module `llm` is private
+ --> tests/fixtures/library_surface/root_llm.rs:2:35
+  |
+2 |     let _client: Option<anki_llm::llm::client::LlmClient> = None;
+  |                                   ^^^          --------- struct `LlmClient` is not publicly re-exported
+  |                                   |
+  |                                   private module
+  |
+note: the module `llm` is defined here
+ --> src/lib.rs
+  |
+  | pub(crate) mod llm;
+  | ^^^^^^^^^^^^^^^^^^
