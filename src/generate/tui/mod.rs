@@ -1,5 +1,6 @@
 mod backend;
 mod editor;
+mod effects;
 pub(crate) mod events;
 mod history;
 mod keys;

@@ -6,6 +6,7 @@ use crossterm::event::{self, Event};
 use ratatui::DefaultTerminal;
 
 use super::editor::edit_card_in_editor;
+use super::effects::Effect;
 use super::events::{BackendEvent, TtsUiState, WorkerCommand};
 use super::prompt_picker::run_prompt_picker;
 use super::render::draw;
@@ -20,6 +21,43 @@ enum ExitReason {
     UserQuit,
     NaturalExit,
     SwitchPrompt,
+}
+
+fn execute_effects(
+    terminal: &mut DefaultTerminal,
+    app: &mut App,
+    effects: Vec<Effect>,
+) -> anyhow::Result<()> {
+    for effect in effects {
+        match effect {
+            Effect::SendWorker(command) => {
+                app.worker_tx.send(command).ok();
+            }
+            Effect::TrySendWorker(command) => {
+                app.worker_tx.try_send(command).ok();
+            }
+            Effect::PlayAudio { card_id, path } => {
+                if let Some(player) = &app.player {
+                    let _ = player.play(card_id, path);
+                }
+            }
+            Effect::CopyCards(cards) => app.copy_cards(&cards),
+            Effect::OpenEditor { card_index } => {
+                edit_card_in_editor(terminal, app, card_index);
+            }
+            Effect::Quit => {
+                app.worker_tx.send(WorkerCommand::Quit).ok();
+                app.should_quit = true;
+                app.user_quit = true;
+            }
+            Effect::SwitchPrompt => {
+                app.worker_tx.send(WorkerCommand::Quit).ok();
+                app.should_quit = true;
+                app.switch_prompt = true;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn run_app(
@@ -77,6 +115,8 @@ fn run_app(
         if let Some(card_index) = app.pending_edit.take() {
             edit_card_in_editor(&mut terminal, &mut app, card_index);
         }
+
+        execute_effects(&mut terminal, &mut app, Vec::new())?;
 
         if app.should_quit {
             break;
