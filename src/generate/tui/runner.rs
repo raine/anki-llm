@@ -8,10 +8,11 @@ use ratatui::DefaultTerminal;
 use super::editor::edit_card_in_editor;
 use super::effects::Effect;
 use super::events::{BackendEvent, TtsUiState, WorkerCommand};
+use super::history::InputHistory;
 use super::prompt_picker::run_prompt_picker;
 use super::render::draw;
 use super::screens::selection::SelectionState;
-use super::state::{App, AppMode, Toast};
+use super::state::{App, AppMode, AudioStatus, Toast};
 
 use crate::cli::GenerateArgs;
 use crate::generate::cards::ValidatedCard;
@@ -23,21 +24,43 @@ enum ExitReason {
     SwitchPrompt,
 }
 
+struct RuntimeContext {
+    backend_rx: mpsc::Receiver<BackendEvent>,
+    worker_tx: mpsc::SyncSender<WorkerCommand>,
+    player: Option<crate::audio::PlayerHandle>,
+    player_binary: Option<crate::audio::PlayerBinary>,
+}
+
+fn send_initial_start(worker_tx: &mpsc::SyncSender<WorkerCommand>, initial_term: Option<String>) {
+    if let Some(term) = initial_term {
+        worker_tx
+            .send(WorkerCommand::Start {
+                term,
+                enable_thinking_stream: true,
+            })
+            .ok();
+    }
+}
+
 fn execute_effects(
     terminal: &mut DefaultTerminal,
+    runtime: &mut RuntimeContext,
     app: &mut App,
     effects: Vec<Effect>,
 ) -> anyhow::Result<()> {
     for effect in effects {
         match effect {
             Effect::SendWorker(command) => {
-                app.worker_tx.send(command).ok();
+                runtime.worker_tx.send(command).ok();
             }
             Effect::TrySendWorker(command) => {
-                app.worker_tx.try_send(command).ok();
+                runtime.worker_tx.try_send(command).ok();
             }
             Effect::TryPreviewTts { card_id, card } => {
-                match app.worker_tx.try_send(WorkerCommand::PreviewTts { card }) {
+                match runtime
+                    .worker_tx
+                    .try_send(WorkerCommand::PreviewTts { card })
+                {
                     Ok(()) => {}
                     Err(mpsc::TrySendError::Full(_)) => {
                         if let AppMode::Selecting(ref mut state) = app.mode {
@@ -56,17 +79,20 @@ fn execute_effects(
                     }
                 }
             }
-            Effect::StartAudioPlayer(binary) => {
-                if app.player.is_none() {
-                    app.player = Some(crate::audio::spawn_player(binary));
+            Effect::StartAudioPlayer => {
+                if runtime.player.is_none()
+                    && let Some(binary) = runtime.player_binary.clone()
+                {
+                    runtime.player = Some(crate::audio::spawn_player(binary));
+                    app.audio_status = AudioStatus::Ready;
                 }
             }
             Effect::PlayAudio { card_id, path } => {
-                if let Some(player) = &app.player {
+                if let Some(player) = &runtime.player {
                     let _ = player.play(card_id, path);
                 }
             }
-            Effect::CopyCards(cards) => app.copy_cards(&cards),
+            Effect::CopyCards(cards) => copy_cards(app, &cards),
             Effect::DeleteFromAnki { note_ids } => {
                 let count = note_ids.len();
                 let result = crate::anki::client::anki_client().delete_notes(&note_ids);
@@ -76,18 +102,45 @@ fn execute_effects(
                 edit_card_in_editor(terminal, app, card_index);
             }
             Effect::Quit => {
-                app.worker_tx.send(WorkerCommand::Quit).ok();
+                runtime.worker_tx.send(WorkerCommand::Quit).ok();
                 app.should_quit = true;
                 app.user_quit = true;
             }
             Effect::SwitchPrompt => {
-                app.worker_tx.send(WorkerCommand::Quit).ok();
+                runtime.worker_tx.send(WorkerCommand::Quit).ok();
                 app.should_quit = true;
                 app.switch_prompt = true;
             }
         }
     }
     Ok(())
+}
+
+fn copy_cards(app: &mut App, cards: &[ValidatedCard]) {
+    if cards.is_empty() {
+        return;
+    }
+    let text = cards
+        .iter()
+        .map(|card| {
+            card.raw_anki_fields
+                .iter()
+                .map(|(name, value)| {
+                    let plain = crate::generate::selector::strip_html_tags(value);
+                    format!("{name}\n{plain}")
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n────────────────────────────────────────\n\n");
+    if let Ok(mut cb) = arboard::Clipboard::new() {
+        cb.set_text(text).ok();
+    }
+    app.toast = Some(Toast {
+        message: "Copied!".into(),
+        tick: app.tick,
+    });
 }
 
 pub(super) fn apply_delete_from_anki_result<E: std::fmt::Display>(
@@ -129,7 +182,25 @@ fn run_app(
     backend_rx: mpsc::Receiver<BackendEvent>,
     worker_tx: mpsc::SyncSender<WorkerCommand>,
 ) -> anyhow::Result<ExitReason> {
-    let mut app = App::new(initial_term, glyphs, backend_rx, worker_tx);
+    let player_binary = crate::audio::detect_player_binary();
+    let audio_status = if player_binary.is_some() {
+        AudioStatus::Available
+    } else {
+        AudioStatus::Unavailable
+    };
+    let mut runtime = RuntimeContext {
+        backend_rx,
+        worker_tx,
+        player: None,
+        player_binary,
+    };
+    let mut app = App::new(
+        initial_term.clone(),
+        glyphs,
+        InputHistory::load(),
+        audio_status,
+    );
+    send_initial_start(&runtime.worker_tx, initial_term);
 
     loop {
         app.tick = app.tick.wrapping_add(1);
@@ -137,10 +208,10 @@ fn run_app(
 
         // Drain all pending backend events
         loop {
-            match app.backend_rx.try_recv() {
+            match runtime.backend_rx.try_recv() {
                 Ok(ev) => {
                     let effects = app.handle_backend_event(ev);
-                    execute_effects(&mut terminal, &mut app, effects)?;
+                    execute_effects(&mut terminal, &mut runtime, &mut app, effects)?;
                 }
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
@@ -156,7 +227,7 @@ fn run_app(
         // them as toasts. Otherwise a failed `binary.spawn` leaves the
         // user staring at "♪ Audio ready" with nothing playing.
         loop {
-            let Some(player) = &app.player else { break };
+            let Some(player) = &runtime.player else { break };
             match player.try_recv_event() {
                 Ok(ev) => app.handle_player_event(ev),
                 Err(_) => break,
@@ -172,14 +243,14 @@ fn run_app(
             match event::read()? {
                 Event::Key(key) => {
                     let effects = app.handle_key(key);
-                    execute_effects(&mut terminal, &mut app, effects)?;
+                    execute_effects(&mut terminal, &mut runtime, &mut app, effects)?;
                 }
                 Event::Paste(text) => app.handle_paste_input(text),
                 _ => {}
             }
         }
 
-        execute_effects(&mut terminal, &mut app, Vec::new())?;
+        execute_effects(&mut terminal, &mut runtime, &mut app, Vec::new())?;
 
         if app.should_quit {
             break;

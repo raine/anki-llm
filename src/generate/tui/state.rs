@@ -1,6 +1,4 @@
-use std::sync::mpsc;
-
-use super::events::{BackendEvent, SessionInfo, StepStatus, WorkerCommand};
+use super::events::{SessionInfo, StepStatus};
 use super::history::InputHistory;
 use super::screens::review::ReviewState;
 use super::screens::selection::SelectionState;
@@ -57,6 +55,13 @@ pub(super) enum AppMode {
     Error(String),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum AudioStatus {
+    Unavailable,
+    Available,
+    Ready,
+}
+
 pub(super) struct App {
     pub(super) mode: AppMode,
     pub(super) session_info: Option<SessionInfo>,
@@ -102,16 +107,7 @@ pub(super) struct App {
     pub(super) batch_progress: Option<(usize, usize)>,
     /// Accumulated cards during batch processing (before entering selection).
     pub(super) batch_cards: Vec<ValidatedCard>,
-    pub(super) backend_rx: mpsc::Receiver<BackendEvent>,
-    pub(super) worker_tx: mpsc::SyncSender<WorkerCommand>,
-    /// Audio playback thread handle. `Some` when a system player was
-    /// detected at session startup AND the prompt has a `tts:` block;
-    /// the preview keybind is hidden and ignored when `None`.
-    pub(super) player: Option<crate::audio::PlayerHandle>,
-    /// Remembered binary discovered at startup. Retained so the player
-    /// could be lazily respawned later if needed; currently unused but
-    /// kept alongside the handle for symmetry.
-    pub(super) player_binary: Option<crate::audio::PlayerBinary>,
+    pub(super) audio_status: AudioStatus,
 }
 
 pub(super) struct Toast {
@@ -123,8 +119,8 @@ impl App {
     pub(super) fn new(
         initial_term: Option<String>,
         glyphs: Glyphs,
-        backend_rx: mpsc::Receiver<BackendEvent>,
-        worker_tx: mpsc::SyncSender<WorkerCommand>,
+        history: InputHistory,
+        audio_status: AudioStatus,
     ) -> Self {
         let steps = ALL_STEPS
             .iter()
@@ -135,13 +131,7 @@ impl App {
             })
             .collect();
         let last_term = initial_term.clone();
-        let mode = if let Some(term) = initial_term {
-            worker_tx
-                .send(WorkerCommand::Start {
-                    term,
-                    enable_thinking_stream: true,
-                })
-                .ok();
+        let mode = if initial_term.is_some() {
             AppMode::Running
         } else {
             AppMode::Input(LineInput::default())
@@ -170,18 +160,19 @@ impl App {
             pending_model: None,
             is_fatal: false,
             glyphs,
-            history: InputHistory::load(),
+            history,
             toast: None,
             browse_step: None,
             browse_scroll: 0,
             batch_queue: Vec::new(),
             batch_progress: None,
             batch_cards: Vec::new(),
-            backend_rx,
-            worker_tx,
-            player: None,
-            player_binary: crate::audio::detect_player_binary(),
+            audio_status,
         }
+    }
+
+    pub(super) fn audio_ready(&self) -> bool {
+        matches!(self.audio_status, AudioStatus::Ready)
     }
 
     pub(super) fn reset_for_new_run(&mut self) {
@@ -200,33 +191,6 @@ impl App {
         self.current_step_idx = None;
         self.browse_step = None;
         self.browse_scroll = 0;
-    }
-
-    pub(super) fn copy_cards(&mut self, cards: &[ValidatedCard]) {
-        if cards.is_empty() {
-            return;
-        }
-        let text = cards
-            .iter()
-            .map(|card| {
-                card.raw_anki_fields
-                    .iter()
-                    .map(|(name, value)| {
-                        let plain = crate::generate::selector::strip_html_tags(value);
-                        format!("{name}\n{plain}")
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n\n")
-            })
-            .collect::<Vec<_>>()
-            .join("\n\n────────────────────────────────────────\n\n");
-        if let Ok(mut cb) = arboard::Clipboard::new() {
-            cb.set_text(text).ok();
-        }
-        self.toast = Some(Toast {
-            message: "Copied!".into(),
-            tick: self.tick,
-        });
     }
 
     pub(super) fn open_model_picker(&mut self) {

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 pub(super) const HISTORY_MAX: usize = 100;
 
+#[derive(Default)]
 pub(super) struct InputHistory {
     entries: Vec<String>,
     /// Index into entries (0 = most recent). `None` = not browsing history.

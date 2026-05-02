@@ -76,7 +76,7 @@ pub(in crate::generate::tui) fn draw_footer(frame: &mut Frame, app: &App, area: 
                 .as_ref()
                 .map(|info| info.tts_configured)
                 .unwrap_or(false)
-                && app.player.is_some()
+                && app.audio_ready()
             {
                 s.extend(footer_cmd("p", "Play"));
                 s.push(footer_pipe());
@@ -159,7 +159,7 @@ pub(in crate::generate::tui) fn draw_footer(frame: &mut Frame, app: &App, area: 
                     .as_ref()
                     .map(|info| info.tts_configured)
                     .unwrap_or(false)
-                    && app.player.is_some()
+                    && app.audio_ready()
                     && cards.first().and_then(done_audio_cache_path).is_some()
                 {
                     s.push(footer_pipe());

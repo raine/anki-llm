@@ -28,7 +28,7 @@ mod tests {
     use super::runner::{any_card_synthesizing, apply_delete_from_anki_result};
     use super::screens::review::ReviewState;
     use super::screens::selection::SelectionState;
-    use super::state::{App as AppState, AppMode, MAX_THINKING_CHARS};
+    use super::state::{App as AppState, AppMode, AudioStatus, MAX_THINKING_CHARS};
     use crate::generate::cards::{ValidatedCard, next_card_id};
     use crate::generate::process::FlaggedCard;
     use crate::tui::line_input::LineInput;
@@ -36,12 +36,14 @@ mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use indexmap::IndexMap;
     use std::path::PathBuf;
-    use std::sync::mpsc;
 
     fn mk_app() -> AppState {
-        let (_tx_events, rx_events) = mpsc::channel();
-        let (tx_cmd, _rx_cmd) = mpsc::sync_channel::<WorkerCommand>(10);
-        let mut app = AppState::new(None, Glyphs::from_config(), rx_events, tx_cmd);
+        let mut app = AppState::new(
+            None,
+            Glyphs::from_config(),
+            Default::default(),
+            AudioStatus::Unavailable,
+        );
         app.mode = AppMode::Running;
         app
     }
@@ -196,21 +198,27 @@ mod tests {
     }
 
     #[test]
+    fn app_new_initial_term_is_pure_state_setup() {
+        let app = AppState::new(
+            Some("term".into()),
+            Glyphs::from_config(),
+            Default::default(),
+            AudioStatus::Unavailable,
+        );
+
+        assert!(matches!(app.mode, AppMode::Running));
+        assert_eq!(app.last_term.as_deref(), Some("term"));
+    }
+
+    #[test]
     fn session_ready_returns_audio_player_start_effect() {
         let mut app = mk_app();
-        app.player_binary = Some(crate::audio::PlayerBinary {
-            command: "player".into(),
-            args: vec!["--quiet".into()],
-        });
+        app.audio_status = AudioStatus::Available;
 
         let effects = app.handle_backend_event(BackendEvent::SessionReady(mk_session_info(true)));
 
         assert!(app.session_info.is_some());
-        assert!(matches!(
-            effects.as_slice(),
-            [Effect::StartAudioPlayer(binary)]
-                if binary.command == "player" && binary.args == ["--quiet"]
-        ));
+        assert!(matches!(effects.as_slice(), [Effect::StartAudioPlayer]));
     }
 
     #[test]
@@ -407,10 +415,7 @@ mod tests {
         let path = cache_dir.join(&filename);
         std::fs::write(&path, b"audio").unwrap();
         app.session_info = Some(mk_session_info(true));
-        app.player = Some(crate::audio::spawn_player(crate::audio::PlayerBinary {
-            command: "/nonexistent/anki-llm-test-player".into(),
-            args: Vec::new(),
-        }));
+        app.audio_status = AudioStatus::Ready;
         app.mode = AppMode::Done {
             message: "done".into(),
             cards: vec![card.clone()],
@@ -437,10 +442,7 @@ mod tests {
             format!("[sound:anki-llm-missing-{}.mp3]", card.card_id),
         );
         app.session_info = Some(mk_session_info(true));
-        app.player = Some(crate::audio::spawn_player(crate::audio::PlayerBinary {
-            command: "/nonexistent/anki-llm-test-player".into(),
-            args: Vec::new(),
-        }));
+        app.audio_status = AudioStatus::Ready;
         app.mode = AppMode::Done {
             message: "done".into(),
             cards: vec![card],

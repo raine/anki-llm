@@ -19,7 +19,7 @@ pub(super) enum Effect {
     SendWorker(WorkerCommand),
     TrySendWorker(WorkerCommand),
     TryPreviewTts { card_id: u64, card: ValidatedCard },
-    StartAudioPlayer(crate::audio::PlayerBinary),
+    StartAudioPlayer,
     PlayAudio { card_id: u64, path: PathBuf },
     CopyCards(Vec<ValidatedCard>),
     DeleteFromAnki { note_ids: Vec<i64> },

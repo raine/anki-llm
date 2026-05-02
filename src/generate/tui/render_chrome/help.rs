@@ -49,7 +49,7 @@ pub(in crate::generate::tui) fn draw_help_overlay(frame: &mut Frame, app: &App) 
                 .as_ref()
                 .map(|info| info.tts_configured)
                 .unwrap_or(false)
-                && app.player.is_some()
+                && app.audio_ready()
             {
                 v.push(("p", "Play audio"));
             }
@@ -86,7 +86,7 @@ pub(in crate::generate::tui) fn draw_help_overlay(frame: &mut Frame, app: &App) 
                 .as_ref()
                 .map(|info| info.tts_configured)
                 .unwrap_or(false)
-                && app.player.is_some()
+                && app.audio_ready()
                 && cards.first().and_then(done_audio_cache_path).is_some()
             {
                 v.push(("p", "Play audio"));

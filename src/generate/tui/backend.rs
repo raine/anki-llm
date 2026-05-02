@@ -2,22 +2,20 @@ use super::effects::Effect;
 use super::events::{BackendEvent, StepStatus, TtsUiState, WorkerCommand};
 use super::screens::review::ReviewState;
 use super::screens::selection::SelectionState;
-use super::state::{App, AppMode, Toast, summary_step_idx};
+use super::state::{App, AppMode, AudioStatus, Toast, summary_step_idx};
 
 impl App {
     pub(super) fn handle_backend_event(&mut self, event: BackendEvent) -> Vec<Effect> {
         // SessionReady is always relevant
         if let BackendEvent::SessionReady(info) = event {
             let mut effects = Vec::new();
-            // Lazy-init the audio player the first time we see a session
-            // where TTS preview is live (frontmatter has a `tts:` block
-            // AND a playback binary was found at startup).
-            if info.tts_configured && self.player.is_none() {
-                if let Some(bin) = self.player_binary.clone() {
-                    effects.push(Effect::StartAudioPlayer(bin));
-                } else {
-                    self.logs
-                        .push("Audio player not found — preview disabled".into());
+            if info.tts_configured {
+                match self.audio_status {
+                    AudioStatus::Available => effects.push(Effect::StartAudioPlayer),
+                    AudioStatus::Unavailable => self
+                        .logs
+                        .push("Audio player not found — preview disabled".into()),
+                    AudioStatus::Ready => {}
                 }
             }
             self.session_info = Some(info);

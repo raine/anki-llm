@@ -405,7 +405,7 @@ fn draw_done(
         .as_ref()
         .map(|info| info.tts_configured)
         .unwrap_or(false)
-        && app.player.is_some()
+        && app.audio_ready()
         && cards.first().and_then(done_audio_cache_path).is_some()
     {
         summary_lines.push(Line::from(""));

@@ -168,7 +168,7 @@ impl App {
                     if !enabled {
                         return effects;
                     }
-                    if self.player.is_none() {
+                    if !self.audio_ready() {
                         return effects;
                     }
                     let Some(card) = (match &self.mode {

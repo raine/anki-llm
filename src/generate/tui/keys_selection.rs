@@ -10,6 +10,7 @@ use crate::tui::line_input::LineInput;
 impl App {
     pub(super) fn handle_key_selection(&mut self, key: crossterm::event::KeyEvent) -> Vec<Effect> {
         let mut effects = Vec::new();
+        let audio_ready = self.audio_ready();
         let AppMode::Selecting(ref mut state) = self.mode else {
             return effects;
         };
@@ -209,14 +210,13 @@ impl App {
             }
             KeyCode::Char('p') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // TTS preview: hidden keybind unless the session actually
-                // supports it (prompt has `tts:` AND an audio player
-                // was detected at startup).
+                // supports it (prompt has `tts:` AND runner has started audio).
                 let enabled = self
                     .session_info
                     .as_ref()
                     .map(|info| info.tts_configured)
                     .unwrap_or(false);
-                if !enabled || self.player.is_none() {
+                if !enabled || !audio_ready {
                     return effects;
                 }
                 let Some(card) = state.cards.get(state.cursor).cloned() else {
