@@ -66,19 +66,10 @@ fn execute_effects(
                 {
                     Ok(()) => {}
                     Err(mpsc::TrySendError::Full(_)) => {
-                        if let AppMode::Selecting(ref mut state) = app.mode {
-                            state.tts_states.remove(&card_id);
-                        }
-                        app.toast = Some(Toast {
-                            message: "Preview queue full — try again".into(),
-                            tick: app.tick,
-                        });
+                        apply_preview_tts_send_failure(app, card_id, false);
                     }
                     Err(mpsc::TrySendError::Disconnected(_)) => {
-                        if let AppMode::Selecting(ref mut state) = app.mode {
-                            state.tts_states.remove(&card_id);
-                        }
-                        app.mode = AppMode::Error("Worker thread exited unexpectedly".into());
+                        apply_preview_tts_send_failure(app, card_id, true);
                     }
                 }
             }
@@ -117,6 +108,20 @@ fn execute_effects(
         }
     }
     Ok(())
+}
+
+pub(super) fn apply_preview_tts_send_failure(app: &mut App, card_id: u64, disconnected: bool) {
+    if let AppMode::Selecting(ref mut state) = app.mode {
+        state.tts_states.remove(&card_id);
+    }
+    if disconnected {
+        app.mode = AppMode::Error("Worker thread exited unexpectedly".into());
+    } else {
+        app.toast = Some(Toast {
+            message: "Preview queue full — try again".into(),
+            tick: app.tick,
+        });
+    }
 }
 
 fn copy_cards(app: &mut App, cards: &[ValidatedCard]) {

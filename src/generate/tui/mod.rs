@@ -25,7 +25,10 @@ mod tests {
     use super::editor::parse_edited_anki_fields;
     use super::effects::Effect;
     use super::events::{BackendEvent, SessionInfo, TtsUiState, WorkerCommand};
-    use super::runner::{any_card_synthesizing, apply_delete_from_anki_result, send_initial_start};
+    use super::runner::{
+        any_card_synthesizing, apply_delete_from_anki_result, apply_preview_tts_send_failure,
+        send_initial_start,
+    };
     use super::screens::review::ReviewState;
     use super::screens::selection::SelectionState;
     use super::state::{App as AppState, AppMode, AudioStatus, MAX_THINKING_CHARS};
@@ -95,6 +98,13 @@ mod tests {
             card,
             reason: "review".into(),
         }
+    }
+
+    fn selecting_state(app: &AppState) -> &SelectionState {
+        let AppMode::Selecting(state) = &app.mode else {
+            panic!("expected selection mode");
+        };
+        state
     }
 
     struct HomeGuard {
@@ -357,24 +367,189 @@ mod tests {
     }
 
     #[test]
-    fn stale_tts_ready_returns_no_effect_and_stores_no_state() {
+    fn stale_tts_state_returns_no_effect_and_stores_no_state() {
         let mut app = mk_app();
         let card = mk_card();
-        let stale_id = next_card_id();
+        let stale_ready_id = next_card_id();
+        let stale_synthesizing_id = next_card_id();
         app.mode = AppMode::Selecting(SelectionState::new(vec![card]));
 
         let effects = app.handle_backend_event(BackendEvent::TtsState {
-            card_id: stale_id,
+            card_id: stale_ready_id,
             state: TtsUiState::Ready {
                 cache_path: std::path::PathBuf::from("/tmp/stale.mp3"),
             },
         });
 
         assert!(effects.is_empty());
-        let AppMode::Selecting(state) = &app.mode else {
-            panic!("expected selection mode");
-        };
-        assert!(!state.tts_states.contains_key(&stale_id));
+        assert!(
+            !selecting_state(&app)
+                .tts_states
+                .contains_key(&stale_ready_id)
+        );
+
+        let effects = app.handle_backend_event(BackendEvent::TtsState {
+            card_id: stale_synthesizing_id,
+            state: TtsUiState::Synthesizing,
+        });
+
+        assert!(effects.is_empty());
+        assert!(
+            !selecting_state(&app)
+                .tts_states
+                .contains_key(&stale_synthesizing_id)
+        );
+    }
+
+    #[test]
+    fn selection_model_picker_defers_model_change() {
+        let mut app = mk_app();
+        let mut info = mk_session_info(false);
+        info.model = "old".into();
+        info.available_models = vec!["old".into(), "new".into()];
+        app.session_info = Some(info);
+        app.mode = AppMode::Selecting(SelectionState::new(vec![mk_card()]));
+
+        app.open_model_picker();
+        let effects = app.handle_key(key(KeyCode::Down));
+        assert!(effects.is_empty());
+        let effects = app.handle_key(key(KeyCode::Enter));
+
+        assert!(effects.is_empty());
+        assert_eq!(app.pending_model.as_deref(), Some("new"));
+        assert_eq!(app.session_info.as_ref().unwrap().model, "new");
+        assert!(app.model_picker.is_none());
+        assert!(matches!(&app.toast, Some(toast) if toast.message == "Model: new"));
+    }
+
+    #[test]
+    fn selection_refresh_applies_deferred_model_as_effects() {
+        let mut app = mk_app();
+        app.last_term = Some("term".into());
+        app.pending_model = Some("new".into());
+        app.mode = AppMode::Selecting(SelectionState::new(vec![mk_card()]));
+
+        let effects = app.handle_key(key(KeyCode::Char('r')));
+
+        assert_eq!(app.pending_model, None);
+        assert_eq!(app.pending_cancels, 1);
+        assert!(selecting_state(&app).refresh_in_flight);
+        assert!(matches!(
+            effects.as_slice(),
+            [
+                Effect::SendWorker(WorkerCommand::Cancel),
+                Effect::SendWorker(WorkerCommand::SetModel(model)),
+                Effect::SendWorker(WorkerCommand::Start { term, enable_thinking_stream: true }),
+            ] if model == "new" && term == "term"
+        ));
+    }
+
+    #[test]
+    fn preview_queue_full_rollback_clears_optimistic_tts_state() {
+        let mut app = mk_app();
+        app.audio_status = AudioStatus::Ready;
+        app.session_info = Some(mk_session_info(true));
+        let card = mk_card();
+        let card_id = card.card_id;
+        app.mode = AppMode::Selecting(SelectionState::new(vec![card]));
+
+        let effects = app.handle_key(key(KeyCode::Char('p')));
+
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::TryPreviewTts { card_id: id, card: effect_card }]
+                if *id == card_id && effect_card.card_id == card_id
+        ));
+        assert!(matches!(
+            selecting_state(&app).tts_states.get(&card_id),
+            Some(TtsUiState::Synthesizing)
+        ));
+
+        apply_preview_tts_send_failure(&mut app, card_id, false);
+
+        assert!(!selecting_state(&app).tts_states.contains_key(&card_id));
+        assert!(
+            matches!(&app.toast, Some(toast) if toast.message == "Preview queue full — try again")
+        );
+    }
+
+    #[test]
+    fn pending_cancel_discards_backend_events_until_completion() {
+        let mut app = mk_app();
+        app.mode = AppMode::Input(LineInput::new("fresh".into()));
+        app.pending_cancels = 2;
+
+        let effects = app.handle_backend_event(BackendEvent::Log("stale".into()));
+        assert!(effects.is_empty());
+        assert!(app.logs.is_empty());
+        assert_eq!(app.pending_cancels, 2);
+
+        let effects = app.handle_backend_event(BackendEvent::RunDone {
+            message: "stale done".into(),
+            cards: Vec::new(),
+            note_ids: Vec::new(),
+            failed: false,
+        });
+        assert!(effects.is_empty());
+        assert_eq!(app.pending_cancels, 1);
+        assert!(matches!(app.mode, AppMode::Input(_)));
+
+        let effects = app.handle_backend_event(BackendEvent::RunError("stale error".into()));
+        assert!(effects.is_empty());
+        assert_eq!(app.pending_cancels, 0);
+        assert!(matches!(app.mode, AppMode::Input(_)));
+    }
+
+    #[test]
+    fn selection_confirm_and_cancel_block_while_any_tts_synthesizes() {
+        fn app_with_synthesizing_unfocused_card() -> (AppState, u64, u64) {
+            let mut app = mk_app();
+            app.pending_model = Some("new".into());
+            app.batch_queue = vec!["queued".into()];
+            app.batch_progress = Some((1, 2));
+            app.batch_cards.push(mk_card_with_front("batched"));
+            let a = mk_card_with_front("a");
+            let b = mk_card_with_front("b");
+            let a_id = a.card_id;
+            let b_id = b.card_id;
+            let mut selection = SelectionState::new(vec![a, b]);
+            selection.selected.insert(b_id);
+            selection.tts_states.insert(a_id, TtsUiState::Synthesizing);
+            selection.move_down();
+            app.mode = AppMode::Selecting(selection);
+            (app, a_id, b_id)
+        }
+
+        let (mut app, synthesizing_id, selected_id) = app_with_synthesizing_unfocused_card();
+        let effects = app.handle_key(key(KeyCode::Enter));
+        assert!(effects.is_empty());
+        assert_eq!(app.pending_model.as_deref(), Some("new"));
+        assert_eq!(app.batch_queue, vec!["queued"]);
+        assert_eq!(app.batch_progress, Some((1, 2)));
+        assert_eq!(app.batch_cards.len(), 1);
+        let state = selecting_state(&app);
+        assert!(state.selected.contains(&selected_id));
+        assert!(matches!(
+            state.tts_states.get(&synthesizing_id),
+            Some(TtsUiState::Synthesizing)
+        ));
+        assert!(matches!(&app.toast, Some(toast) if toast.message == "TTS preview in progress"));
+
+        let (mut app, synthesizing_id, selected_id) = app_with_synthesizing_unfocused_card();
+        let effects = app.handle_key(key(KeyCode::Esc));
+        assert!(effects.is_empty());
+        assert_eq!(app.pending_cancels, 0);
+        assert_eq!(app.pending_model.as_deref(), Some("new"));
+        assert_eq!(app.batch_queue, vec!["queued"]);
+        assert_eq!(app.batch_progress, Some((1, 2)));
+        assert_eq!(app.batch_cards.len(), 1);
+        let state = selecting_state(&app);
+        assert!(state.selected.contains(&selected_id));
+        assert!(matches!(
+            state.tts_states.get(&synthesizing_id),
+            Some(TtsUiState::Synthesizing)
+        ));
+        assert!(matches!(&app.toast, Some(toast) if toast.message == "TTS preview in progress"));
     }
 
     #[test]
