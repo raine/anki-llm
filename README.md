@@ -120,14 +120,6 @@ cargo install anki-llm
   ([Why?](#why-ankiconnect)). Must be running for any command that talks to your
   collection; `process-file` works while Anki is closed.
 
-### Rust library surface
-
-`anki-llm` is published primarily as a CLI. The Rust library surface is
-intentionally narrow: `run_cli`, `cli`, and `anki` are public so the binary and
-integration tests can exercise the command parser and AnkiConnect client.
-Command implementation modules, including `generate` and its TUI/pipeline
-internals, are not public API.
-
 ## LLM Configuration
 
 `anki-llm` works with any LLM that exposes an OpenAI-compatible chat completions
