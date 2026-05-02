@@ -243,7 +243,8 @@ impl App {
             self.selected = None;
             return;
         }
-        let cur = self.selected.unwrap_or(0);
+        let max = self.filtered.len().saturating_sub(1);
+        let cur = self.selected.unwrap_or(0).min(max);
         self.selected = Some(cur.saturating_sub(1));
     }
 
@@ -262,7 +263,8 @@ impl App {
             self.selected = None;
             return;
         }
-        let cur = self.selected.unwrap_or(0);
+        let max = self.filtered.len().saturating_sub(1);
+        let cur = self.selected.unwrap_or(0).min(max);
         self.selected = Some(cur.saturating_sub(rows));
     }
 
@@ -487,18 +489,37 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::mpsc;
+    use std::process::{Child, Command};
+    use std::sync::mpsc::{self, Receiver};
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
+    use crate::tts::voices::preview::{PreviewRequest, PreviewResult};
+
+    use super::super::draw::draw;
     use super::*;
 
-    fn test_worker() -> PreviewHandle {
+    struct PreviewHarness {
+        handle: PreviewHandle,
+        req_rx: Receiver<Option<PreviewRequest>>,
+    }
+
+    fn preview_harness() -> PreviewHarness {
         let (req_tx, req_rx) = mpsc::channel();
         let (res_tx, res_rx) = mpsc::channel();
-        drop(req_rx);
         drop(res_tx);
-        PreviewHandle::from_channels(req_tx, res_rx)
+        PreviewHarness {
+            handle: PreviewHandle::from_channels(req_tx, res_rx),
+            req_rx,
+        }
+    }
+
+    fn test_worker() -> PreviewHandle {
+        preview_harness().handle
     }
 
     fn voice(
@@ -507,16 +528,114 @@ mod tests {
         display_name: &str,
         language: &str,
     ) -> VoiceEntry {
+        rich_voice(
+            provider,
+            voice_id,
+            display_name,
+            &[language],
+            false,
+            None,
+            None,
+            &[],
+        )
+    }
+
+    fn rich_voice(
+        provider: ProviderId,
+        voice_id: &str,
+        display_name: &str,
+        languages: &[&str],
+        multilingual: bool,
+        gender: Option<&str>,
+        preview_model: Option<&str>,
+        tags: &[&str],
+    ) -> VoiceEntry {
         VoiceEntry {
             provider,
             voice_id: voice_id.into(),
             display_name: display_name.into(),
-            languages: vec![language.into()],
-            multilingual: false,
-            gender: None,
-            preview_model: None,
-            tags: Vec::new(),
+            languages: languages
+                .iter()
+                .map(|language| (*language).into())
+                .collect(),
+            multilingual,
+            gender: gender.map(str::to_string),
+            preview_model: preview_model.map(str::to_string),
+            tags: tags.iter().map(|tag| (*tag).into()).collect(),
         }
+    }
+
+    fn test_app(entries: Vec<VoiceEntry>) -> App {
+        let harness = preview_harness();
+        test_app_with_worker(entries, harness.handle)
+    }
+
+    fn test_app_with_worker(entries: Vec<VoiceEntry>, worker: PreviewHandle) -> App {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        App::new(
+            InitialFilters {
+                lang: None,
+                provider: None,
+                query: None,
+            },
+            AppDependencies {
+                entries,
+                provider_states: HashMap::new(),
+                cache,
+                worker,
+            },
+        )
+    }
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    fn app_snapshot(app: &App) -> String {
+        let overlay = app.overlay.as_ref().map(|overlay| {
+            (
+                overlay.facet.title(),
+                overlay.search.value().to_string(),
+                overlay.selected,
+            )
+        });
+        format!(
+            "filtered={:?};filters={:?};search={:?};selected={:?};overlay={:?};help={};next={};current={};busy={};queued={:?};status={:?};toast={:?};tick={};quit={}",
+            app.filtered,
+            app.filters,
+            app.search.value(),
+            app.selected,
+            overlay,
+            app.show_help,
+            app.next_id,
+            app.current_id,
+            app.preview_busy,
+            app.queued,
+            app.status_line,
+            app.toast.as_ref().map(|toast| (&toast.message, toast.tick)),
+            app.tick,
+            app.should_quit,
+        )
+    }
+
+    fn spawn_shell(script: &str) -> Child {
+        Command::new("sh").arg("-c").arg(script).spawn().unwrap()
+    }
+
+    fn wait_for_exit(child: &mut Child) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            if child.try_wait().unwrap().is_some() {
+                return;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        panic!("child did not exit before deadline");
     }
 
     #[test]
@@ -621,5 +740,264 @@ mod tests {
             app.handle_key(KeyEvent::new(code, KeyModifiers::NONE));
             assert_eq!(app.overlay_selected(), None);
         }
+    }
+
+    #[test]
+    fn filter_application_updates_results_and_selection() {
+        let mut app = test_app(vec![
+            rich_voice(
+                ProviderId::Azure,
+                "ja-JP-NanamiNeural",
+                "Nanami",
+                &["ja-JP"],
+                false,
+                Some("Female"),
+                Some("neural"),
+                &["neural", "friendly"],
+            ),
+            rich_voice(
+                ProviderId::Google,
+                "en-US-Studio-O",
+                "Studio O",
+                &["en-US"],
+                false,
+                Some("Female"),
+                None,
+                &["studio"],
+            ),
+            rich_voice(
+                ProviderId::Openai,
+                "alloy",
+                "Alloy",
+                &[],
+                true,
+                None,
+                None,
+                &["multilingual"],
+            ),
+        ]);
+
+        app.handle_key(key(KeyCode::Char('n')));
+        app.handle_key(key(KeyCode::Char('a')));
+        assert_eq!(app.filters.text, "na");
+        assert_eq!(app.filtered, vec![0]);
+        assert_eq!(app.selected, Some(0));
+
+        app.clear_all_filters();
+        app.filters.language = Some("ja".into());
+        app.refilter();
+        assert_eq!(
+            app.filtered
+                .iter()
+                .map(|idx| app.entries[*idx].voice_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ja-JP-NanamiNeural", "alloy"]
+        );
+
+        app.filters.provider = Some(ProviderId::Azure);
+        app.filters.tags = vec!["friendly".into(), "neural".into()];
+        app.refilter();
+        assert_eq!(app.filtered, vec![0]);
+        assert_eq!(app.selected, Some(0));
+
+        app.search.reset();
+        app.search.insert_str("missing");
+        app.refilter();
+        assert!(app.filtered.is_empty());
+        assert_eq!(app.selected, None);
+
+        app.handle_key(ctrl('r'));
+        assert!(app.filters.is_empty());
+        assert_eq!(app.filtered, vec![0, 1, 2]);
+        assert_eq!(app.selected, Some(0));
+    }
+
+    #[test]
+    fn overlay_actions_update_filters_and_close_semantics() {
+        let mut app = test_app(vec![
+            rich_voice(
+                ProviderId::Azure,
+                "ja-JP-NanamiNeural",
+                "Nanami",
+                &["ja-JP"],
+                false,
+                Some("Female"),
+                Some("neural"),
+                &["friendly", "neural"],
+            ),
+            rich_voice(
+                ProviderId::Google,
+                "en-US-Studio-O",
+                "Studio O",
+                &["en-US"],
+                false,
+                Some("Female"),
+                None,
+                &["studio"],
+            ),
+        ]);
+
+        app.handle_key(ctrl('p'));
+        assert!(app.overlay.is_some());
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.filters.provider, Some(ProviderId::Azure));
+        assert!(app.overlay.is_none());
+        assert_eq!(app.filtered, vec![0]);
+
+        app.handle_key(ctrl('t'));
+        let rows = app.overlay_rows();
+        let neural = rows.iter().position(|row| row.label == "neural").unwrap();
+        app.select_overlay(Some(neural));
+        app.handle_key(key(KeyCode::Char(' ')));
+        assert!(app.overlay.is_some());
+        assert_eq!(app.filters.tags, vec!["neural"]);
+        assert_eq!(app.filtered, vec![0]);
+
+        let friendly = app
+            .overlay_rows()
+            .iter()
+            .position(|row| row.label == "friendly")
+            .unwrap();
+        app.select_overlay(Some(friendly));
+        app.handle_key(key(KeyCode::Char(' ')));
+        assert_eq!(app.filters.tags, vec!["friendly", "neural"]);
+
+        app.handle_key(key(KeyCode::Enter));
+        assert!(app.overlay.is_none());
+        assert_eq!(app.filters.tags, vec!["neural"]);
+
+        app.apply_overlay_action(OverlayAction::ClearTags, false);
+        assert!(app.filters.tags.is_empty());
+        assert_eq!(app.filtered, vec![0]);
+    }
+
+    #[test]
+    fn stale_main_selection_clamps_during_update_not_draw() {
+        let mut app = test_app(vec![
+            voice(ProviderId::Azure, "ja-JP-NanamiNeural", "Nanami", "ja-JP"),
+            voice(ProviderId::Google, "en-US-Studio-O", "Studio O", "en-US"),
+        ]);
+
+        app.selected = Some(99);
+        app.move_down();
+        assert_eq!(app.selected, Some(1));
+
+        app.selected = Some(99);
+        app.page_down(10);
+        assert_eq!(app.selected, Some(1));
+
+        app.selected = Some(99);
+        app.move_up();
+        assert_eq!(app.selected, Some(0));
+
+        app.selected = Some(99);
+        app.page_up(10);
+        assert_eq!(app.selected, Some(0));
+    }
+
+    #[test]
+    fn preview_queue_dispatches_after_stale_and_current_results() {
+        let harness = preview_harness();
+        let mut app = test_app_with_worker(
+            vec![
+                voice(ProviderId::Azure, "ja-JP-NanamiNeural", "Nanami", "ja-JP"),
+                voice(ProviderId::Google, "en-US-Studio-O", "Studio O", "en-US"),
+            ],
+            harness.handle,
+        );
+
+        app.request_preview();
+        let first = harness.req_rx.recv().unwrap().unwrap();
+        assert_eq!(first.id, 1);
+        assert_eq!(first.entry.voice_id, "ja-JP-NanamiNeural");
+        assert!(app.preview_busy);
+        assert_eq!(app.current_id, 1);
+
+        app.move_down();
+        app.request_preview();
+        assert_eq!(app.queued, Some(1));
+        assert_eq!(app.status_line, "Queued next preview...");
+        assert!(harness.req_rx.try_recv().is_err());
+
+        app.handle_preview_result(PreviewResult::Err {
+            id: 999,
+            message: "stale".into(),
+        });
+        let second = harness.req_rx.recv().unwrap().unwrap();
+        assert_eq!(second.id, 2);
+        assert_eq!(second.entry.voice_id, "en-US-Studio-O");
+        assert!(app.preview_busy);
+        assert_eq!(app.current_id, 2);
+        assert_eq!(app.queued, None);
+
+        app.handle_preview_result(PreviewResult::Err {
+            id: 2,
+            message: "provider unavailable".into(),
+        });
+        assert!(!app.preview_busy);
+        assert_eq!(app.current_id, 2);
+        assert_eq!(app.status_line, "provider unavailable");
+        assert!(app.queued.is_none());
+    }
+
+    #[test]
+    fn player_cleanup_reaps_and_stops_children() {
+        let mut app = test_app(vec![voice(
+            ProviderId::Azure,
+            "ja-JP-NanamiNeural",
+            "Nanami",
+            "ja-JP",
+        )]);
+
+        let mut finished = spawn_shell("exit 0");
+        wait_for_exit(&mut finished);
+        app.active_player = Some(finished);
+        app.reap_player();
+        assert!(app.active_player.is_none());
+
+        app.active_player = Some(spawn_shell("sleep 30"));
+        app.stop_player();
+        assert!(app.active_player.is_none());
+    }
+
+    #[test]
+    fn draw_does_not_mutate_app_state() {
+        let mut app = test_app(vec![
+            rich_voice(
+                ProviderId::Azure,
+                "ja-JP-NanamiNeural",
+                "Nanami",
+                &["ja-JP"],
+                false,
+                Some("Female"),
+                Some("neural"),
+                &["friendly", "neural"],
+            ),
+            voice(ProviderId::Google, "en-US-Studio-O", "Studio O", "en-US"),
+        ]);
+        app.filters.provider = Some(ProviderId::Azure);
+        app.refilter();
+        app.overlay = Some(FilterOverlay::new(FilterFacet::Tag));
+        app.select_overlay(Some(99));
+        app.toast = Some(Toast {
+            message: "Copied yaml for ja-JP-NanamiNeural".into(),
+            tick: 3,
+        });
+        app.tick = 5;
+        app.preview_busy = true;
+        app.queued = Some(0);
+        let before = app_snapshot(&app);
+
+        let mut view = ViewState::default();
+        view.sync_from(&app);
+        assert_eq!(view.list_state.selected(), app.selected);
+        assert_eq!(view.overlay_list_state.selected(), Some(99));
+
+        let backend = TestBackend::new(100, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| draw(frame, &app, &mut view)).unwrap();
+
+        assert_eq!(app_snapshot(&app), before);
     }
 }
