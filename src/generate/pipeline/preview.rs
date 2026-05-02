@@ -1,18 +1,16 @@
 use super::super::cards::ValidatedCard;
-use super::types::{PipelineConfig, PipelineInteraction, PipelineProgress};
+use super::types::{PipelineConfig, PipelineInteraction, PipelineProgress, TtsPreviewState};
 
 /// Synthesize preview audio for a card. On success, caches the audio
-/// to disk and emits `TtsUiState::Ready { cache_path }` so the TUI can
-/// route a `PlayerCommand::Play` to its owned audio thread. On failure,
-/// emits `TtsUiState::Failed` with a user-facing message.
+/// to disk and emits `TtsPreviewState::Ready { cache_path }` so the UI
+/// can route playback through its owned audio thread. On failure, emits
+/// `TtsPreviewState::Failed` with a user-facing message.
 pub(super) fn handle_preview_tts(
     config: &PipelineConfig,
     interaction: &dyn PipelineInteraction,
     progress: &dyn PipelineProgress,
     card: &ValidatedCard,
 ) {
-    use super::super::tui::events::TtsUiState;
-
     let Some(session_tts) = config.tts else {
         // No TTS configured — silently drop the request. The TUI should
         // never send this command in that case, but defend anyway.
@@ -20,7 +18,7 @@ pub(super) fn handle_preview_tts(
     };
     let card_id = card.card_id;
 
-    interaction.tts_state(card_id, TtsUiState::Synthesizing);
+    interaction.tts_state(card_id, TtsPreviewState::Synthesizing);
 
     // First preview in a session materializes the bundle via
     // `spec::resolve`. If credentials are missing the failure surfaces
@@ -30,7 +28,7 @@ pub(super) fn handle_preview_tts(
         Ok(b) => b,
         Err(e) => {
             progress.log(&format!("TTS unavailable: {e:#}"));
-            interaction.tts_state(card_id, TtsUiState::Failed(format!("{e:#}")));
+            interaction.tts_state(card_id, TtsPreviewState::Failed(format!("{e:#}")));
             return;
         }
     };
@@ -42,7 +40,7 @@ pub(super) fn handle_preview_tts(
         Ok(p) => p,
         Err(e) => {
             progress.log(&format!("TTS prepare failed: {e:#}"));
-            interaction.tts_state(card_id, TtsUiState::Failed(format!("{e:#}")));
+            interaction.tts_state(card_id, TtsPreviewState::Failed(format!("{e:#}")));
             return;
         }
     };
@@ -55,14 +53,14 @@ pub(super) fn handle_preview_tts(
             ));
             interaction.tts_state(
                 card_id,
-                TtsUiState::Ready {
+                TtsPreviewState::Ready {
                     cache_path: prepared.cache_path,
                 },
             );
         }
         Err(e) => {
             progress.log(&format!("TTS synthesis failed: {e:#}"));
-            interaction.tts_state(card_id, TtsUiState::Failed(format!("{e:#}")));
+            interaction.tts_state(card_id, TtsPreviewState::Failed(format!("{e:#}")));
         }
     }
 }

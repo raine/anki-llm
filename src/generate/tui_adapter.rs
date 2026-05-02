@@ -10,11 +10,11 @@ use crate::llm::runtime::{RuntimeConfigArgs, build_runtime_config};
 use super::cards::ValidatedCard;
 use super::pipeline::{
     PipelineConfig, PipelineInteraction, PipelineOutcome, PipelineProgress, PipelineStep,
-    ReviewResult, SelectionAction,
+    ReviewResult, SelectionAction, TtsPreviewState,
 };
 use super::process::FlaggedCard;
 use super::session::prepare_session;
-use super::tui::{BackendEvent, SessionInfo, StepStatus, WorkerCommand};
+use super::tui::{BackendEvent, SessionInfo, StepStatus, TtsUiState, WorkerCommand};
 
 pub(super) struct TuiProgress {
     pub tx: mpsc::Sender<BackendEvent>,
@@ -144,7 +144,12 @@ impl PipelineInteraction for TuiInteraction<'_> {
         }
     }
 
-    fn tts_state(&self, card_id: u64, state: crate::generate::tui::events::TtsUiState) {
+    fn tts_state(&self, card_id: u64, state: TtsPreviewState) {
+        let state = match state {
+            TtsPreviewState::Synthesizing => TtsUiState::Synthesizing,
+            TtsPreviewState::Ready { cache_path } => TtsUiState::Ready { cache_path },
+            TtsPreviewState::Failed(message) => TtsUiState::Failed(message),
+        };
         self.tx.send(BackendEvent::TtsState { card_id, state }).ok();
     }
 }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::anki::client::AnkiClient;
 use crate::llm::client::LlmClient;
 use crate::llm::logger::LlmLogger;
@@ -76,6 +78,13 @@ pub enum ReviewResult {
     Cancel,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TtsPreviewState {
+    Synthesizing,
+    Ready { cache_path: PathBuf },
+    Failed(String),
+}
+
 pub trait PipelineInteraction {
     fn begin_selection(&self, cards: Vec<ValidatedCard>);
     fn append_selection(&self, cards: Vec<ValidatedCard>);
@@ -85,7 +94,7 @@ pub trait PipelineInteraction {
     fn request_review(&self, flagged: Vec<FlaggedCard>) -> ReviewResult;
     /// Announce a TTS preview state transition for a given card id.
     /// Default impl is a no-op so legacy / copy mode can ignore it.
-    fn tts_state(&self, _card_id: u64, _state: super::super::tui::events::TtsUiState) {}
+    fn tts_state(&self, _card_id: u64, _state: TtsPreviewState) {}
 }
 
 pub struct PipelineConfig<'a> {

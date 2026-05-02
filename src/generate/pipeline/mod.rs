@@ -15,7 +15,7 @@ use anyhow::Result;
 
 pub use types::{
     PipelineConfig, PipelineInteraction, PipelineOutcome, PipelineProgress, PipelineStep,
-    ReviewResult, SelectionAction,
+    ReviewResult, SelectionAction, TtsPreviewState,
 };
 
 use finalize::{run_export, run_finalize_tts_step, run_import_step};
