@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.17 (2026-05-03)
+
+- Stream LLM thinking content in real-time during card generation in the TUI
+- Add `gemini_thinking_enabled` config option to disable thinking for Gemini models
+- Verify duplicate search candidates match exactly before flagging duplicates
+  ([#5](https://github.com/raine/anki-llm/issues/5))
+- Fix model picker selection resetting after filtering with keyboard input
+
 ## v2.0.16 (2026-05-01)
 
 - Add xAI as a provider with Grok 4.3 model
