@@ -1,3 +1,4 @@
+#[cfg(test)]
 use std::time::Duration;
 
 /// Retry `f` with exponential backoff (1s, 2s, 4s, …, capped at 30s).
@@ -6,7 +7,8 @@ use std::time::Duration;
 /// checked — if it returns true the error is returned immediately without
 /// further retries. Returns `Ok(T)` on first success, or `Err(last_error)`
 /// once all retries are exhausted.
-pub fn retry_with_backoff<T, E, F>(
+#[cfg(test)]
+fn retry_with_backoff<T, E, F>(
     max_retries: u32,
     is_fatal: impl Fn(&E) -> bool,
     mut f: F,

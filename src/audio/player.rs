@@ -31,7 +31,6 @@ impl PlayerBinary {
 #[derive(Debug, Clone)]
 pub enum PlayerCommand {
     Play { card_id: u64, path: PathBuf },
-    Stop,
     Shutdown,
 }
 
@@ -54,19 +53,10 @@ pub struct PlayerHandle {
 }
 
 impl PlayerHandle {
-    pub fn sender(&self) -> Sender<PlayerCommand> {
-        self.tx.clone()
-    }
-
     /// Non-blocking: send a `Play` request. Returns an error only if the
     /// player thread has already exited.
     pub fn play(&self, card_id: u64, path: PathBuf) -> Result<(), mpsc::SendError<PlayerCommand>> {
         self.tx.send(PlayerCommand::Play { card_id, path })
-    }
-
-    /// Non-blocking: send a `Stop` request.
-    pub fn stop(&self) -> Result<(), mpsc::SendError<PlayerCommand>> {
-        self.tx.send(PlayerCommand::Stop)
     }
 
     /// Drain all pending player events (spawn failures, etc.) without
@@ -138,8 +128,7 @@ pub fn detect_player_binary() -> Option<PlayerBinary> {
 /// - Incoming `Play`: kill+wait any active child, then spawn the new one.
 /// - Incoming `Play` for the SAME `card_id` while already playing: kill
 ///   the active child and do NOT start a new one (toggle-to-stop).
-/// - Incoming `Stop` / `Shutdown`: kill+wait the active child and
-///   (on `Shutdown`) break the loop.
+/// - Incoming `Shutdown`: kill+wait the active child and break the loop.
 /// - On timeout: `try_wait` the active child to reap it if it finished
 ///   naturally. This keeps zombies from accumulating without a second
 ///   reaper thread.
@@ -193,12 +182,6 @@ fn run_player_loop(
                             message: format!("audio player failed: {e}"),
                         });
                     }
-                }
-            }
-            Ok(PlayerCommand::Stop) => {
-                if let Some(mut a) = active.take() {
-                    let _ = a.child.kill();
-                    let _ = a.child.wait();
                 }
             }
             Ok(PlayerCommand::Shutdown) => {
@@ -352,8 +335,6 @@ mod tests {
         std::thread::sleep(Duration::from_millis(150));
         handle.play(2, audio.clone()).unwrap();
         std::thread::sleep(Duration::from_millis(150));
-        handle.stop().unwrap();
-        std::thread::sleep(Duration::from_millis(100));
         drop(handle);
     }
 

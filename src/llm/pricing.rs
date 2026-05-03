@@ -61,14 +61,6 @@ pub fn format_cost(cost: f64) -> String {
     format!("${cost:.4}")
 }
 
-/// Format a cost display string with token counts.
-pub fn format_cost_display(total_cost: f64, input_tokens: u64, output_tokens: u64) -> String {
-    format!(
-        "  Cost: {} ({input_tokens} input + {output_tokens} output tokens)",
-        format_cost(total_cost),
-    )
-}
-
 /// List of known models with pricing data.
 /// This is NOT a whitelist — any model name is accepted. These are models
 /// for which we can display cost estimates and show in the TUI model picker.
@@ -123,14 +115,6 @@ mod tests {
     #[test]
     fn format_cost_small() {
         assert_eq!(format_cost(0.001), "$0.0010");
-    }
-
-    #[test]
-    fn format_cost_display_string() {
-        let s = format_cost_display(0.005, 1000, 500);
-        assert!(s.contains("$0.0050"));
-        assert!(s.contains("1000 input"));
-        assert!(s.contains("500 output"));
     }
 
     #[test]

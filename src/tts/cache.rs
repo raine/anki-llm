@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use sha2::{Digest, Sha256};
@@ -31,10 +31,6 @@ impl TtsCache {
     /// Default on-disk cache location: `~/.cache/anki-llm/tts/`.
     pub fn default_dir() -> Option<PathBuf> {
         home::home_dir().map(|h| h.join(".cache").join("anki-llm").join("tts"))
-    }
-
-    pub fn dir(&self) -> &Path {
-        &self.dir
     }
 
     /// Canonical cache key: SHA-256 over a stable serialization of every

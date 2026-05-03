@@ -67,37 +67,6 @@ impl VoiceEntry {
     pub fn primary_language(&self) -> &str {
         self.languages.first().map(String::as_str).unwrap_or("en")
     }
-
-    /// Lowercase concatenation of every field used for omni-search.
-    /// Cached form of this string lives in the filter index.
-    pub fn searchable_text(&self) -> String {
-        let mut s = String::new();
-        s.push_str(self.provider.as_str());
-        s.push(' ');
-        s.push_str(&self.voice_id.to_ascii_lowercase());
-        s.push(' ');
-        s.push_str(&self.display_name.to_ascii_lowercase());
-        for lang in &self.languages {
-            s.push(' ');
-            s.push_str(&lang.to_ascii_lowercase());
-        }
-        if let Some(g) = &self.gender {
-            s.push(' ');
-            s.push_str(g);
-        }
-        if let Some(m) = &self.preview_model {
-            s.push(' ');
-            s.push_str(m);
-        }
-        for t in &self.tags {
-            s.push(' ');
-            s.push_str(t);
-        }
-        if self.multilingual {
-            s.push_str(" multilingual");
-        }
-        s
-    }
 }
 
 /// Load the committed snapshot. Panics on malformed JSON — that's a
@@ -130,15 +99,6 @@ pub struct VoiceFilters {
 }
 
 impl VoiceFilters {
-    pub fn is_empty(&self) -> bool {
-        self.provider.is_none()
-            && self.language.is_none()
-            && self.gender.is_none()
-            && self.engine.is_none()
-            && self.tags.is_empty()
-            && self.text.is_empty()
-    }
-
     pub fn active_count(&self) -> usize {
         let mut n = 0;
         if self.provider.is_some() {

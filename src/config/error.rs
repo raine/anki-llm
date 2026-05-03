@@ -3,9 +3,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("config file must contain a JSON object")]
-    NotAnObject,
-
     #[error("could not determine home directory")]
     HomeDirUnavailable,
 

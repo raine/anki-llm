@@ -99,13 +99,6 @@ pub fn format_sound_tag(filename: &str) -> String {
     format!("[sound:{filename}]")
 }
 
-/// Does the given raw field value already contain at least one Anki sound
-/// tag? Used to skip rows that already have audio unless the user passed
-/// `--force`.
-pub fn field_has_sound_tag(value: &str) -> bool {
-    value.contains("[sound:")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,12 +106,5 @@ mod tests {
     #[test]
     fn format_sound_tag_wraps() {
         assert_eq!(format_sound_tag("foo.mp3"), "[sound:foo.mp3]");
-    }
-
-    #[test]
-    fn detects_sound_tag() {
-        assert!(field_has_sound_tag("hello [sound:a.mp3]"));
-        assert!(!field_has_sound_tag("hello"));
-        assert!(!field_has_sound_tag(""));
     }
 }

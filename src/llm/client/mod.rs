@@ -53,30 +53,6 @@ impl LlmClient {
         }
     }
 
-    /// Create a client for a specific model, resolving the correct provider
-    /// base URL and API key. The API key may be `None` for local servers.
-    pub fn for_model(model: &str) -> Option<Self> {
-        let config = provider::provider_config(model);
-        let api_key = provider::api_key_for_model(model);
-        let base_url = config
-            .base_url
-            .unwrap_or_else(|| DEFAULT_OPENAI_BASE.to_string())
-            .trim_end_matches('/')
-            .to_string();
-
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(std::time::Duration::from_secs(TIMEOUT_SECS)))
-            .build()
-            .into();
-
-        Some(Self {
-            base_url,
-            api_key,
-            agent,
-            gemini_thinking_enabled: true,
-        })
-    }
-
     pub fn supports_thinking_stream(&self, model: &str) -> bool {
         self.thinking_format_for_request(model).is_some()
     }

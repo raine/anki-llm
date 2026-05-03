@@ -176,7 +176,8 @@ impl Utterance {
     /// Stable, rebuild-safe serialization used as cache-key input. Two
     /// utterances with identical span sequences always produce the same
     /// string, regardless of how the original input was formatted.
-    pub fn canonical(&self) -> String {
+    #[cfg(test)]
+    fn canonical(&self) -> String {
         let mut out = String::new();
         for span in &self.spans {
             match span {

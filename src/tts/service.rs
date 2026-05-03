@@ -13,7 +13,7 @@ use crate::template::frontmatter::TtsSpec;
 use super::cache::TtsCache;
 use super::error::TtsError;
 use super::ir::parse_furigana;
-use super::media::{AnkiMediaStore, format_sound_tag};
+use super::media::AnkiMediaStore;
 use super::provider::{
     AudioFormat, SynthesisRequest, TextFormat, TtsProvider, build as build_provider,
 };
@@ -31,7 +31,6 @@ use super::text::strip_annotations;
 pub struct PreparedSynthesis {
     pub request: SynthesisRequest,
     pub filename: String,
-    pub sound_tag: String,
     pub cache_path: PathBuf,
     /// Character count of the spoken text (the plain-text rendering of
     /// the IR). Used by the batch engine for progress-bar metrics.
@@ -150,12 +149,9 @@ impl TtsService {
 
         let filename = TtsCache::filename(&request);
         let cache_path = self.cache.path_for(&request);
-        let sound_tag = format_sound_tag(&filename);
-
         Ok(PreparedSynthesis {
             request,
             filename,
-            sound_tag,
             cache_path,
             spoken_chars,
         })
@@ -453,7 +449,6 @@ mod tests {
         assert_eq!(prepared.request.voice, "alloy");
         assert!(prepared.filename.starts_with("anki-llm-tts-"));
         assert!(prepared.filename.ends_with(".mp3"));
-        assert_eq!(prepared.sound_tag, format!("[sound:{}]", prepared.filename));
         assert_eq!(prepared.spoken_chars, 5);
     }
 
@@ -553,7 +548,6 @@ mod tests {
             .prepare_from_anki_fields(&anki_fields, &field_map)
             .unwrap();
         assert_eq!(p1.filename, p2.filename);
-        assert_eq!(p1.sound_tag, p2.sound_tag);
     }
 
     #[test]

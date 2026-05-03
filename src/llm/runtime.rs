@@ -12,7 +12,6 @@ pub struct RuntimeConfig {
     pub max_tokens: Option<u64>,
     pub batch_size: u32,
     pub retries: u32,
-    pub dry_run: bool,
     pub gemini_thinking_enabled: bool,
 }
 
@@ -107,7 +106,6 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
         max_tokens: args.max_tokens,
         batch_size: args.batch_size.unwrap_or(5),
         retries: args.retries,
-        dry_run: args.dry_run,
         gemini_thinking_enabled,
     })
 }

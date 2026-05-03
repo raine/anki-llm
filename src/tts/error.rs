@@ -9,9 +9,3 @@ pub enum TtsError {
     #[error("{0}")]
     Permanent(String),
 }
-
-impl TtsError {
-    pub fn is_retryable(&self) -> bool {
-        matches!(self, TtsError::Transient(_))
-    }
-}

@@ -807,7 +807,7 @@ mod tests {
         assert_eq!(app.selected, None);
 
         app.handle_key(ctrl('r'));
-        assert!(app.filters.is_empty());
+        assert_eq!(app.filters.active_count(), 0);
         assert_eq!(app.filtered, vec![0, 1, 2]);
         assert_eq!(app.selected, Some(0));
     }

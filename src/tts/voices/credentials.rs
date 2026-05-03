@@ -23,12 +23,6 @@ pub enum ProviderPreviewState {
     },
 }
 
-impl ProviderPreviewState {
-    pub fn is_ready(&self) -> bool {
-        matches!(self, Self::Ready { .. })
-    }
-}
-
 /// Probe every provider and return a per-provider readiness state.
 /// Never fails.
 pub fn probe_all() -> HashMap<ProviderId, ProviderPreviewState> {
