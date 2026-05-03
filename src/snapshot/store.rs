@@ -137,8 +137,11 @@ fn days_to_ymd(days: u64) -> (u64, u64, u64) {
 
 /// Save a snapshot to disk atomically.
 pub fn save_snapshot(snapshot: &Snapshot) -> Result<PathBuf> {
-    let dir = snapshots_dir()?;
-    fs::create_dir_all(&dir)
+    save_snapshot_to_dir(snapshot, &snapshots_dir()?)
+}
+
+fn save_snapshot_to_dir(snapshot: &Snapshot, dir: &Path) -> Result<PathBuf> {
+    fs::create_dir_all(dir)
         .with_context(|| format!("failed to create snapshots dir: {}", dir.display()))?;
     let path = dir.join(format!("{}.json", snapshot.run_id));
     let json = serde_json::to_string_pretty(snapshot).context("failed to serialize snapshot")?;
@@ -148,8 +151,12 @@ pub fn save_snapshot(snapshot: &Snapshot) -> Result<PathBuf> {
 
 /// Load a snapshot by run ID.
 pub fn load_snapshot(run_id: &str) -> Result<Snapshot> {
+    load_snapshot_from_dir(run_id, &snapshots_dir()?)
+}
+
+fn load_snapshot_from_dir(run_id: &str, dir: &Path) -> Result<Snapshot> {
     validate_run_id(run_id)?;
-    let path = snapshots_dir()?.join(format!("{run_id}.json"));
+    let path = dir.join(format!("{run_id}.json"));
     let content =
         fs::read_to_string(&path).with_context(|| format!("snapshot not found: {run_id}"))?;
     let snapshot: Snapshot = serde_json::from_str(&content)
@@ -318,8 +325,6 @@ mod tests {
     #[test]
     fn save_and_load_snapshot() {
         let tmp = tempfile::tempdir().unwrap();
-        // Override HOME so snapshots_dir() points to temp
-        unsafe { std::env::set_var("HOME", tmp.path()) };
 
         let snap = Snapshot {
             run_id: "20260411T120000Z".into(),
@@ -331,10 +336,8 @@ mod tests {
             rolled_back: false,
             notes: vec![],
         };
-        save_snapshot(&snap).unwrap();
-        let loaded = load_snapshot("20260411T120000Z").unwrap();
+        save_snapshot_to_dir(&snap, tmp.path()).unwrap();
+        let loaded = load_snapshot_from_dir("20260411T120000Z", tmp.path()).unwrap();
         assert_eq!(loaded.deck.as_deref(), Some("Test"));
-
-        unsafe { std::env::remove_var("HOME") };
     }
 }

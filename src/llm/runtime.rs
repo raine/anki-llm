@@ -30,7 +30,13 @@ pub struct RuntimeConfigArgs<'a> {
 /// Validates temperature range. Resolves API key and base URL with precedence:
 /// CLI flag > environment variable > config file > auto-detect.
 pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig> {
-    let app_config = crate::config::store::read_config().ok();
+    build_runtime_config_with_app_config(args, crate::config::store::read_config().ok())
+}
+
+fn build_runtime_config_with_app_config(
+    args: RuntimeConfigArgs<'_>,
+    app_config: Option<crate::config::store::AppConfig>,
+) -> Result<RuntimeConfig> {
     let model = resolve_model(args.model);
 
     if let Some(t) = args.temperature
@@ -112,8 +118,6 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
 
 #[cfg(test)]
 mod tests {
-    use serial_test::serial;
-
     use super::*;
 
     #[test]
@@ -191,50 +195,44 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn gemini_thinking_defaults_to_enabled() {
-        let tmp = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("HOME", tmp.path()) };
-        let config = build_runtime_config(RuntimeConfigArgs {
-            model: Some("gemini-2.5-flash"),
-            api_base_url: None,
-            api_key: None,
-            batch_size: None,
-            max_tokens: None,
-            temperature: None,
-            retries: 0,
-            dry_run: true,
-        })
+        let config = build_runtime_config_with_app_config(
+            RuntimeConfigArgs {
+                model: Some("gemini-2.5-flash"),
+                api_base_url: None,
+                api_key: None,
+                batch_size: None,
+                max_tokens: None,
+                temperature: None,
+                retries: 0,
+                dry_run: true,
+            },
+            None,
+        )
         .unwrap();
         assert!(config.gemini_thinking_enabled);
-        unsafe { std::env::remove_var("HOME") };
     }
 
     #[test]
-    #[serial]
     fn gemini_thinking_reads_config() {
-        let tmp = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("HOME", tmp.path()) };
-        let dir = tmp.path().join(".config").join("anki-llm");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("config.json"),
-            r#"{"gemini_thinking_enabled": false}"#,
+        let config = build_runtime_config_with_app_config(
+            RuntimeConfigArgs {
+                model: Some("gemini-2.5-flash"),
+                api_base_url: None,
+                api_key: None,
+                batch_size: None,
+                max_tokens: None,
+                temperature: None,
+                retries: 0,
+                dry_run: true,
+            },
+            Some(crate::config::store::AppConfig {
+                gemini_thinking_enabled: Some(false),
+                ..Default::default()
+            }),
         )
         .unwrap();
-        let config = build_runtime_config(RuntimeConfigArgs {
-            model: Some("gemini-2.5-flash"),
-            api_base_url: None,
-            api_key: None,
-            batch_size: None,
-            max_tokens: None,
-            temperature: None,
-            retries: 0,
-            dry_run: true,
-        })
-        .unwrap();
         assert!(!config.gemini_thinking_enabled);
-        unsafe { std::env::remove_var("HOME") };
     }
 
     #[test]
