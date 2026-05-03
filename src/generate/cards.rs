@@ -81,31 +81,11 @@ pub fn build_duplicate_query(note_type: &str, deck: &str, field_name: &str, valu
     )
 }
 
-/// Check if a note with this first field value already exists.
-/// Returns the note ID of the first match, or None if no duplicate found.
-fn check_duplicate(
-    anki: &AnkiClient,
-    first_field_value: &str,
-    first_field_name: &str,
-    note_type: &str,
-    deck: &str,
-) -> Result<Option<i64>, anyhow::Error> {
-    let query = build_duplicate_query(note_type, deck, first_field_name, first_field_value);
-    let ids = anki.find_notes(&query)?;
-    Ok(ids.into_iter().next())
-}
+const DUPLICATE_CANDIDATE_CHUNK_SIZE: usize = 50;
 
-/// Fetch the fields of an existing note by its ID.
-fn fetch_note_fields(
-    anki: &AnkiClient,
-    note_id: i64,
-) -> Result<IndexMap<String, String>, anyhow::Error> {
-    let notes = anki.notes_info(&[note_id])?;
-    let note = notes
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("Note {note_id} not found"))?;
-    Ok(note.fields.into_iter().map(|(k, v)| (k, v.value)).collect())
+fn fields_from_note(note: crate::anki::schema::NoteInfo) -> (i64, IndexMap<String, String>) {
+    let fields = note.fields.into_iter().map(|(k, v)| (k, v.value)).collect();
+    (note.note_id, fields)
 }
 
 /// The full duplicate-metadata shape returned by
@@ -130,9 +110,19 @@ pub(super) fn lookup_duplicate_metadata(
     if first_field_value.is_empty() {
         return Ok((None, None));
     }
-    let dup_note_id = check_duplicate(anki, first_field_value, first_field_name, note_type, deck)?;
-    let duplicate_fields = dup_note_id.and_then(|id| fetch_note_fields(anki, id).ok());
-    Ok((dup_note_id, duplicate_fields))
+
+    let query = build_duplicate_query(note_type, deck, first_field_name, first_field_value);
+    let ids = anki.find_notes(&query)?;
+    for chunk in ids.chunks(DUPLICATE_CANDIDATE_CHUNK_SIZE) {
+        for note in anki.notes_info(chunk)? {
+            let (note_id, fields) = fields_from_note(note);
+            if fields.get(first_field_name).map(String::as_str) == Some(first_field_value) {
+                return Ok((Some(note_id), Some(fields)));
+            }
+        }
+    }
+
+    Ok((None, None))
 }
 
 /// Build a fully-populated `ValidatedCard` from already-sanitized LLM-keyed
@@ -305,6 +295,48 @@ mod tests {
             }
         });
         url
+    }
+
+    #[test]
+    fn ignores_search_candidate_without_exact_first_field_match() {
+        let find_notes_body = r#"{"result":[12345],"error":null}"#;
+        let notes_info_body = r#"{"result":[{"noteId":12345,"tags":[],"fields":{"Word":{"value":"赋值","order":0},"Meaning":{"value":"assignment","order":1}},"modelName":"MineChinese v4","cards":[1]}],"error":null}"#;
+        let url = spawn_mock_anki(vec![find_notes_body, notes_info_body]);
+        let anki = AnkiClient::with_url(&url);
+
+        let (note_id, fields) = lookup_duplicate_metadata(
+            &anki,
+            "值",
+            "Word",
+            "MineChinese v4",
+            "Chinese::MineChinese v4",
+        )
+        .unwrap();
+
+        assert_eq!(note_id, None);
+        assert_eq!(fields, None);
+    }
+
+    #[test]
+    fn uses_exact_first_field_match_when_search_returns_multiple_candidates() {
+        let find_notes_body = r#"{"result":[111,222],"error":null}"#;
+        let notes_info_body = r#"{"result":[{"noteId":111,"tags":[],"fields":{"Word":{"value":"赋值","order":0},"Meaning":{"value":"assignment","order":1}},"modelName":"MineChinese v4","cards":[1]},{"noteId":222,"tags":[],"fields":{"Word":{"value":"值","order":0},"Meaning":{"value":"value","order":1}},"modelName":"MineChinese v4","cards":[2]}],"error":null}"#;
+        let url = spawn_mock_anki(vec![find_notes_body, notes_info_body]);
+        let anki = AnkiClient::with_url(&url);
+
+        let (note_id, fields) = lookup_duplicate_metadata(
+            &anki,
+            "值",
+            "Word",
+            "MineChinese v4",
+            "Chinese::MineChinese v4",
+        )
+        .unwrap();
+
+        assert_eq!(note_id, Some(222));
+        let fields = fields.unwrap();
+        assert_eq!(fields.get("Word").map(String::as_str), Some("值"));
+        assert_eq!(fields.get("Meaning").map(String::as_str), Some("value"));
     }
 
     #[test]

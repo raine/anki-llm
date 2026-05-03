@@ -231,18 +231,18 @@ fn recheck_duplicates(
             .anki_fields
             .get(first_field_name)
             .filter(|v| !v.is_empty())
+            && let Ok((dup_note_id, duplicate_fields)) =
+                super::super::cards::lookup_duplicate_metadata(
+                    config.anki,
+                    val,
+                    first_field_name,
+                    &config.frontmatter.note_type,
+                    &config.frontmatter.deck,
+                )
         {
-            let query = super::super::cards::build_duplicate_query(
-                &config.frontmatter.note_type,
-                &config.frontmatter.deck,
-                first_field_name,
-                val,
-            );
-            card.is_duplicate = config
-                .anki
-                .find_notes(&query)
-                .map(|ids| !ids.is_empty())
-                .unwrap_or(false);
+            card.is_duplicate = dup_note_id.is_some();
+            card.duplicate_note_id = dup_note_id;
+            card.duplicate_fields = duplicate_fields;
         }
     }
 }

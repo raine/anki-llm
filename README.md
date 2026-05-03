@@ -1870,8 +1870,10 @@ shows a full preview of the currently focused card.
 - <kbd>p</kbd>: preview the focused card's audio when TTS is enabled
 - <kbd>z</kbd>: toggle skipping post-select processing
 
-Duplicate cards are flagged with `[dup]` and shown as a diff against the
-existing Anki card. Press <kbd>f</kbd> to force-select a duplicate if needed.
+Duplicate cards are flagged with `[dup]` when the generated value for the note
+type's first Anki field exactly matches an existing note in the configured deck,
+and they are shown as a diff against that existing Anki card. Press <kbd>f</kbd>
+to force-select a duplicate if needed.
 
 Press <kbd>Enter</kbd> to confirm your selection and import the cards into Anki.
 
