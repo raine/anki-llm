@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.18 (2026-05-10)
+
+- Add Microsoft Edge TTS support, including bundled Edge voices and no required API key. ([#6](https://github.com/raine/anki-llm/issues/6))
+
 ## v2.0.17 (2026-05-03)
 
 - Stream LLM thinking content in real-time during card generation in the TUI
