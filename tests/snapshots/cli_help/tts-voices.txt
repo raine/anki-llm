@@ -4,6 +4,6 @@ Usage: anki-llm tts-voices [OPTIONS]
 
 Options:
       --lang <LANG>          Pre-filter by language code prefix, e.g. "ja" or "en-US"
-      --provider <PROVIDER>  Pre-filter by provider id (openai, azure, google, amazon)
+      --provider <PROVIDER>  Pre-filter by provider id (openai, azure, google, amazon, edge)
   -q, --query <QUERY>        Initial text query for the omni-search field
   -h, --help                 Print help

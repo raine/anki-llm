@@ -245,6 +245,18 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
                     ));
                 }
             }
+            "edge" => {
+                if tts.region.is_some() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.region is only valid when tts.provider is 'azure' or 'amazon'".into(),
+                    ));
+                }
+                if tts.model.is_some() {
+                    return Err(TemplateError::InvalidFrontmatter(
+                        "tts.model is not supported with tts.provider 'edge'".into(),
+                    ));
+                }
+            }
             "amazon" => {
                 let region = tts
                     .region
@@ -274,7 +286,7 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
             other => {
                 return Err(TemplateError::InvalidFrontmatter(format!(
                     "tts.provider '{other}' is not supported \
-                     (expected: openai, azure, google, or amazon)"
+                     (expected: openai, azure, google, amazon, or edge)"
                 )));
             }
         }
@@ -747,6 +759,72 @@ tts:
 body";
         let err = parse_prompt_file(content).unwrap_err();
         assert!(err.to_string().contains("tts.speed"));
+    }
+
+    #[test]
+    fn tts_edge_with_speed_parses_without_region() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+tts:
+  target: Audio
+  source:
+    field: front
+  voice: ja-JP-NanamiNeural
+  provider: edge
+  speed: 1.25
+---
+
+body";
+        let parsed = parse_prompt_file(content).unwrap();
+        let tts = parsed.frontmatter.tts.unwrap();
+        assert_eq!(tts.provider.as_deref(), Some("edge"));
+        assert_eq!(tts.speed, Some(1.25));
+        assert!(tts.region.is_none());
+    }
+
+    #[test]
+    fn tts_edge_rejects_region() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+tts:
+  target: Audio
+  source:
+    field: front
+  voice: ja-JP-NanamiNeural
+  provider: edge
+  region: eastus
+---
+
+body";
+        let err = parse_prompt_file(content).unwrap_err();
+        assert!(err.to_string().contains("tts.region"));
+    }
+
+    #[test]
+    fn tts_edge_rejects_model() {
+        let content = "---
+deck: Test
+note_type: Basic
+field_map:
+  front: Front
+tts:
+  target: Audio
+  source:
+    field: front
+  voice: ja-JP-NanamiNeural
+  provider: edge
+  model: something
+---
+
+body";
+        let err = parse_prompt_file(content).unwrap_err();
+        assert!(err.to_string().contains("tts.model"));
     }
 
     #[test]

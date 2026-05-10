@@ -4,7 +4,7 @@ use std::time::Duration;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
-use super::{AudioFormat, SynthesisRequest, TextFormat, TtsProvider};
+use super::{AudioFormat, RenderProfile, SynthesisRequest, TtsProvider};
 use crate::tts::error::TtsError;
 
 const ENDPOINT: &str = "https://texttospeech.googleapis.com/v1/text:synthesize";
@@ -95,8 +95,8 @@ impl TtsProvider for GoogleTtsProvider {
         "google"
     }
 
-    fn text_format(&self) -> TextFormat {
-        TextFormat::PlainText
+    fn render_profile(&self) -> RenderProfile {
+        RenderProfile::PlainText
     }
 
     fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {
@@ -194,7 +194,7 @@ mod tests {
     fn id_and_text_format() {
         let p = GoogleTtsProvider::new("fake".into());
         assert_eq!(p.id(), "google");
-        assert_eq!(p.text_format(), TextFormat::PlainText);
+        assert_eq!(p.render_profile(), RenderProfile::PlainText);
     }
 
     #[test]

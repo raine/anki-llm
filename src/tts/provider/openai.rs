@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use super::{SynthesisRequest, TextFormat, TtsProvider};
+use super::{RenderProfile, SynthesisRequest, TtsProvider};
 use crate::tts::error::TtsError;
 
 const DEFAULT_BASE: &str = "https://api.openai.com/v1";
@@ -45,8 +45,8 @@ impl TtsProvider for OpenAiTtsProvider {
         "openai"
     }
 
-    fn text_format(&self) -> TextFormat {
-        TextFormat::PlainText
+    fn render_profile(&self) -> RenderProfile {
+        RenderProfile::PlainText
     }
 
     fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {

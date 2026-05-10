@@ -574,10 +574,12 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
                     eprintln!("Sample normalized: {normalized}");
                     match super::ir::parse_furigana(&normalized) {
                         Ok(utterance) => {
-                            let payload = match resolved.provider.id() {
-                                "azure" => super::render::render_ssml(&utterance, &resolved.voice),
-                                _ => super::render::render_plain_text(&utterance),
-                            };
+                            let payload = super::service::render_payload(
+                                resolved.provider.render_profile(),
+                                &utterance,
+                                &resolved.voice,
+                                resolved.speed,
+                            );
                             eprintln!("Sample payload:    {payload}");
                         }
                         Err(e) => eprintln!("Parser error: {e}"),

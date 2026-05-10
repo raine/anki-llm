@@ -56,6 +56,39 @@ pub fn render_ssml(utterance: &Utterance, voice: &str) -> String {
     )
 }
 
+pub fn render_edge_ssml(utterance: &Utterance, voice: &str, speed: Option<f32>) -> String {
+    let text = xml_escape(&render_plain_text(utterance));
+    let voice = xml_attr_escape(voice);
+    let rate = xml_attr_escape(&edge_rate(speed));
+    format!(
+        "<speak version=\"1.0\" xmlns=\"http://www.w3.org/2001/10/synthesis\" \
+         xmlns:mstts=\"https://www.w3.org/2001/mstts\" xml:lang=\"en-US\"><voice \
+         name=\"{voice}\"><prosody pitch=\"medium\" rate=\"{rate}\" \
+         volume=\"medium\">{text}</prosody></voice></speak>"
+    )
+}
+
+pub fn edge_rate(speed: Option<f32>) -> String {
+    let Some(speed) = speed else {
+        return "default".to_string();
+    };
+    if (speed - 1.0).abs() < f32::EPSILON {
+        return "default".to_string();
+    }
+    let percent = ((speed - 1.0) * 100.0).round().clamp(-100.0, 100.0) as i32;
+    if percent >= 0 {
+        format!("+{percent}%")
+    } else {
+        format!("{percent}%")
+    }
+}
+
+fn xml_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    push_xml_escaped(&mut out, s);
+    out
+}
+
 fn push_xml_escaped(out: &mut String, s: &str) {
     for c in s.chars() {
         match c {
@@ -206,5 +239,42 @@ mod tests {
         let u = parse_furigana("転がり込[こ]んだ").unwrap();
         let out = render_ssml(&u, VOICE);
         assert!(out.contains("転がり<sub alias=\"こ\">込</sub>んだ"));
+    }
+
+    #[test]
+    fn edge_ssml_uses_plain_readings_inside_prosody() {
+        let u = parse_furigana("日本語[にほんご]を").unwrap();
+        let out = render_edge_ssml(&u, "ja-JP-NanamiNeural", Some(1.25));
+        assert!(out.contains("name=\"ja-JP-NanamiNeural\""));
+        assert!(out.contains("rate=\"+25%\""));
+        assert!(out.contains(">にほんごを</prosody>"));
+        assert!(!out.contains("<sub"));
+    }
+
+    #[test]
+    fn edge_ssml_escapes_text_and_attributes() {
+        let u = Utterance {
+            spans: vec![text("A & B < C > D")],
+        };
+        let out = render_edge_ssml(&u, "evil\"voice&name", None);
+        assert!(out.contains("name=\"evil&quot;voice&amp;name\""));
+        assert!(out.contains("rate=\"default\""));
+        assert!(out.contains("A &amp; B &lt; C &gt; D"));
+    }
+
+    #[test]
+    fn edge_rate_mapping_is_deterministic() {
+        let cases = [
+            (None, "default"),
+            (Some(1.0), "default"),
+            (Some(0.75), "-25%"),
+            (Some(1.25), "+25%"),
+            (Some(1.333), "+33%"),
+            (Some(3.0), "+100%"),
+            (Some(-1.0), "-100%"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(edge_rate(input), expected);
+        }
     }
 }

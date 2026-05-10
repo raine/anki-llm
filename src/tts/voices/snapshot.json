@@ -1,6 +1,17 @@
 [
   {
     "provider": "amazon",
+    "voice_id": "Geraint",
+    "display_name": "Geraint (Standard)",
+    "languages": [],
+    "gender": "male",
+    "preview_model": "standard",
+    "tags": [
+      "standard"
+    ]
+  },
+  {
+    "provider": "amazon",
     "voice_id": "Hala",
     "display_name": "Hala (Neural)",
     "languages": [
@@ -2223,17 +2234,6 @@
     ]
   },
   {
-    "provider": "amazon",
-    "voice_id": "Geraint",
-    "display_name": "Geraint (Standard)",
-    "languages": [],
-    "gender": "male",
-    "preview_model": "standard",
-    "tags": [
-      "standard"
-    ]
-  },
-  {
     "provider": "azure",
     "voice_id": "af-ZA-AdriNeural",
     "display_name": "Adri (Neural)",
@@ -3201,8 +3201,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-AU-WilliamNeural",
-    "display_name": "William (Neural)",
+    "voice_id": "en-AU-WilliamMultilingualNeural",
+    "display_name": "William Multilingual (Neural)",
     "languages": [
       "en-AU"
     ],
@@ -3211,8 +3211,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-AU-WilliamMultilingualNeural",
-    "display_name": "William Multilingual (Neural)",
+    "voice_id": "en-AU-WilliamNeural",
+    "display_name": "William (Neural)",
     "languages": [
       "en-AU"
     ],
@@ -3405,16 +3405,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-GB-RyanNeural",
-    "display_name": "Ryan (Neural)",
-    "languages": [
-      "en-GB"
-    ],
-    "gender": "male",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "en-GB-Ryan:DragonHDLatestNeural",
     "display_name": "Ryan Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -3427,12 +3417,12 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-GB-SoniaNeural",
-    "display_name": "Sonia (Neural)",
+    "voice_id": "en-GB-RyanNeural",
+    "display_name": "Ryan (Neural)",
     "languages": [
       "en-GB"
     ],
-    "gender": "female",
+    "gender": "male",
     "tags": []
   },
   {
@@ -3446,6 +3436,16 @@
     "tags": [
       "dragon-hd"
     ]
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-GB-SoniaNeural",
+    "display_name": "Sonia (Neural)",
+    "languages": [
+      "en-GB"
+    ],
+    "gender": "female",
+    "tags": []
   },
   {
     "provider": "azure",
@@ -3509,16 +3509,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-IN-AartiNeural",
-    "display_name": "Aarti (Neural)",
-    "languages": [
-      "en-IN"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "en-IN-Aarti:DragonHDLatestNeural",
     "display_name": "Aarti Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -3533,6 +3523,16 @@
     "provider": "azure",
     "voice_id": "en-IN-AartiIndicNeural",
     "display_name": "Aarti Indic (Neural)",
+    "languages": [
+      "en-IN"
+    ],
+    "gender": "female",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-IN-AartiNeural",
+    "display_name": "Aarti (Neural)",
     "languages": [
       "en-IN"
     ],
@@ -3561,16 +3561,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-IN-ArjunNeural",
-    "display_name": "Arjun (Neural)",
-    "languages": [
-      "en-IN"
-    ],
-    "gender": "male",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "en-IN-Arjun:DragonHDLatestNeural",
     "display_name": "Arjun Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -3585,6 +3575,16 @@
     "provider": "azure",
     "voice_id": "en-IN-ArjunIndicNeural",
     "display_name": "Arjun Indic (Neural)",
+    "languages": [
+      "en-IN"
+    ],
+    "gender": "male",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-IN-ArjunNeural",
+    "display_name": "Arjun (Neural)",
     "languages": [
       "en-IN"
     ],
@@ -3625,16 +3625,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-IN-NeerjaNeural",
-    "display_name": "Neerja (Neural)",
-    "languages": [
-      "en-IN"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "en-IN-NeerjaIndicNeural",
     "display_name": "Neerja Indic (Neural)",
     "languages": [
@@ -3645,8 +3635,18 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-IN-PrabhatNeural",
-    "display_name": "Prabhat (Neural)",
+    "voice_id": "en-IN-NeerjaNeural",
+    "display_name": "Neerja (Neural)",
+    "languages": [
+      "en-IN"
+    ],
+    "gender": "female",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-IN-PrabhatIndicNeural",
+    "display_name": "Prabhat Indic (Neural)",
     "languages": [
       "en-IN"
     ],
@@ -3655,8 +3655,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-IN-PrabhatIndicNeural",
-    "display_name": "Prabhat Indic (Neural)",
+    "voice_id": "en-IN-PrabhatNeural",
+    "display_name": "Prabhat (Neural)",
     "languages": [
       "en-IN"
     ],
@@ -3889,13 +3889,27 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-AndrewNeural",
-    "display_name": "Andrew (Neural)",
+    "voice_id": "en-US-Andrew2:DragonHDLatestNeural",
+    "display_name": "Andrew2 Dragon HD Latest (NeuralHD)",
     "languages": [
       "en-US"
     ],
     "gender": "male",
-    "tags": []
+    "tags": [
+      "dragon-hd"
+    ]
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-US-Andrew3:DragonHDLatestNeural",
+    "display_name": "Andrew3 Dragon HD Latest (NeuralHD)",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "dragon-hd"
+    ]
   },
   {
     "provider": "azure",
@@ -3933,36 +3947,12 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-Andrew2:DragonHDLatestNeural",
-    "display_name": "Andrew2 Dragon HD Latest (NeuralHD)",
+    "voice_id": "en-US-AndrewNeural",
+    "display_name": "Andrew (Neural)",
     "languages": [
       "en-US"
     ],
     "gender": "male",
-    "tags": [
-      "dragon-hd"
-    ]
-  },
-  {
-    "provider": "azure",
-    "voice_id": "en-US-Andrew3:DragonHDLatestNeural",
-    "display_name": "Andrew3 Dragon HD Latest (NeuralHD)",
-    "languages": [
-      "en-US"
-    ],
-    "gender": "male",
-    "tags": [
-      "dragon-hd"
-    ]
-  },
-  {
-    "provider": "azure",
-    "voice_id": "en-US-AriaNeural",
-    "display_name": "Aria (Neural)",
-    "languages": [
-      "en-US"
-    ],
-    "gender": "female",
     "tags": []
   },
   {
@@ -3976,6 +3966,16 @@
     "tags": [
       "dragon-hd"
     ]
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-US-AriaNeural",
+    "display_name": "Aria (Neural)",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": []
   },
   {
     "provider": "azure",
@@ -3999,13 +3999,15 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-AvaNeural",
-    "display_name": "Ava (Neural)",
+    "voice_id": "en-US-Ava3:DragonHDLatestNeural",
+    "display_name": "Ava3 Dragon HD Latest (NeuralHD)",
     "languages": [
       "en-US"
     ],
     "gender": "female",
-    "tags": []
+    "tags": [
+      "dragon-hd"
+    ]
   },
   {
     "provider": "azure",
@@ -4031,15 +4033,13 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-Ava3:DragonHDLatestNeural",
-    "display_name": "Ava3 Dragon HD Latest (NeuralHD)",
+    "voice_id": "en-US-AvaNeural",
+    "display_name": "Ava (Neural)",
     "languages": [
       "en-US"
     ],
     "gender": "female",
-    "tags": [
-      "dragon-hd"
-    ]
+    "tags": []
   },
   {
     "provider": "azure",
@@ -4053,8 +4053,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-BrandonNeural",
-    "display_name": "Brandon (Neural)",
+    "voice_id": "en-US-BrandonMultilingualNeural",
+    "display_name": "Brandon Multilingual (Neural)",
     "languages": [
       "en-US"
     ],
@@ -4063,8 +4063,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-BrandonMultilingualNeural",
-    "display_name": "Brandon Multilingual (Neural)",
+    "voice_id": "en-US-BrandonNeural",
+    "display_name": "Brandon (Neural)",
     "languages": [
       "en-US"
     ],
@@ -4082,16 +4082,6 @@
     "tags": [
       "dragon-hd"
     ]
-  },
-  {
-    "provider": "azure",
-    "voice_id": "en-US-BrianNeural",
-    "display_name": "Brian (Neural)",
-    "languages": [
-      "en-US"
-    ],
-    "gender": "male",
-    "tags": []
   },
   {
     "provider": "azure",
@@ -4117,6 +4107,16 @@
   },
   {
     "provider": "azure",
+    "voice_id": "en-US-BrianNeural",
+    "display_name": "Brian (Neural)",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": []
+  },
+  {
+    "provider": "azure",
     "voice_id": "en-US-Caleb:DragonHDOmniLatestNeural",
     "display_name": "Caleb Dragon HD Omni Latest (NeuralHD)",
     "languages": [
@@ -4126,16 +4126,6 @@
     "tags": [
       "dragon-hd"
     ]
-  },
-  {
-    "provider": "azure",
-    "voice_id": "en-US-ChristopherNeural",
-    "display_name": "Christopher (Neural)",
-    "languages": [
-      "en-US"
-    ],
-    "gender": "male",
-    "tags": []
   },
   {
     "provider": "azure",
@@ -4149,8 +4139,18 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-CoraNeural",
-    "display_name": "Cora (Neural)",
+    "voice_id": "en-US-ChristopherNeural",
+    "display_name": "Christopher (Neural)",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-US-CoraMultilingualNeural",
+    "display_name": "Cora Multilingual (Neural)",
     "languages": [
       "en-US"
     ],
@@ -4159,8 +4159,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-CoraMultilingualNeural",
-    "display_name": "Cora Multilingual (Neural)",
+    "voice_id": "en-US-CoraNeural",
+    "display_name": "Cora (Neural)",
     "languages": [
       "en-US"
     ],
@@ -4181,16 +4181,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-DavisNeural",
-    "display_name": "Davis (Neural)",
-    "languages": [
-      "en-US"
-    ],
-    "gender": "male",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "en-US-Davis:DragonHDLatestNeural",
     "display_name": "Davis Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -4205,6 +4195,16 @@
     "provider": "azure",
     "voice_id": "en-US-DavisMultilingualNeural",
     "display_name": "Davis Multilingual (Neural)",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-US-DavisNeural",
+    "display_name": "Davis (Neural)",
     "languages": [
       "en-US"
     ],
@@ -4253,13 +4253,15 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-EmmaNeural",
-    "display_name": "Emma (Neural)",
+    "voice_id": "en-US-Emma2:DragonHDLatestNeural",
+    "display_name": "Emma2 Dragon HD Latest (NeuralHD)",
     "languages": [
       "en-US"
     ],
     "gender": "female",
-    "tags": []
+    "tags": [
+      "dragon-hd"
+    ]
   },
   {
     "provider": "azure",
@@ -4285,15 +4287,13 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-Emma2:DragonHDLatestNeural",
-    "display_name": "Emma2 Dragon HD Latest (NeuralHD)",
+    "voice_id": "en-US-EmmaNeural",
+    "display_name": "Emma (Neural)",
     "languages": [
       "en-US"
     ],
     "gender": "female",
-    "tags": [
-      "dragon-hd"
-    ]
+    "tags": []
   },
   {
     "provider": "azure",
@@ -4371,16 +4371,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-JaneNeural",
-    "display_name": "Jane (Neural)",
-    "languages": [
-      "en-US"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "en-US-Jane:DragonHDLatestNeural",
     "display_name": "Jane Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -4390,6 +4380,16 @@
     "tags": [
       "dragon-hd"
     ]
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-US-JaneNeural",
+    "display_name": "Jane (Neural)",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": []
   },
   {
     "provider": "azure",
@@ -4415,16 +4415,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-JennyNeural",
-    "display_name": "Jenny (Neural)",
-    "languages": [
-      "en-US"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "en-US-Jenny:DragonHDLatestNeural",
     "display_name": "Jenny Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -4439,6 +4429,16 @@
     "provider": "azure",
     "voice_id": "en-US-JennyMultilingualNeural",
     "display_name": "Jenny Multilingual (Neural)",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-US-JennyNeural",
+    "display_name": "Jenny (Neural)",
     "languages": [
       "en-US"
     ],
@@ -4555,8 +4555,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-NancyNeural",
-    "display_name": "Nancy (Neural)",
+    "voice_id": "en-US-NancyMultilingualNeural",
+    "display_name": "Nancy Multilingual (Neural)",
     "languages": [
       "en-US"
     ],
@@ -4565,8 +4565,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-NancyMultilingualNeural",
-    "display_name": "Nancy Multilingual (Neural)",
+    "voice_id": "en-US-NancyNeural",
+    "display_name": "Nancy (Neural)",
     "languages": [
       "en-US"
     ],
@@ -4725,16 +4725,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "en-US-SteffanNeural",
-    "display_name": "Steffan (Neural)",
-    "languages": [
-      "en-US"
-    ],
-    "gender": "male",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "en-US-Steffan:DragonHDLatestNeural",
     "display_name": "Steffan Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -4749,6 +4739,16 @@
     "provider": "azure",
     "voice_id": "en-US-SteffanMultilingualNeural",
     "display_name": "Steffan Multilingual (Neural)",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "en-US-SteffanNeural",
+    "display_name": "Steffan (Neural)",
     "languages": [
       "en-US"
     ],
@@ -5175,16 +5175,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "es-ES-XimenaNeural",
-    "display_name": "Ximena (Neural)",
-    "languages": [
-      "es-ES"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "es-ES-Ximena:DragonHDLatestNeural",
     "display_name": "Ximena Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -5199,6 +5189,16 @@
     "provider": "azure",
     "voice_id": "es-ES-XimenaMultilingualNeural",
     "display_name": "Ximena Multilingual (Neural)",
+    "languages": [
+      "es-ES"
+    ],
+    "gender": "female",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "es-ES-XimenaNeural",
+    "display_name": "Ximena (Neural)",
     "languages": [
       "es-ES"
     ],
@@ -5307,8 +5307,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "es-MX-DaliaNeural",
-    "display_name": "Dalia (Neural)",
+    "voice_id": "es-MX-DaliaMultilingualNeural",
+    "display_name": "Dalia Multilingual (Neural)",
     "languages": [
       "es-MX"
     ],
@@ -5317,8 +5317,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "es-MX-DaliaMultilingualNeural",
-    "display_name": "Dalia Multilingual (Neural)",
+    "voice_id": "es-MX-DaliaNeural",
+    "display_name": "Dalia (Neural)",
     "languages": [
       "es-MX"
     ],
@@ -5337,8 +5337,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "es-MX-JorgeNeural",
-    "display_name": "Jorge (Neural)",
+    "voice_id": "es-MX-JorgeMultilingualNeural",
+    "display_name": "Jorge Multilingual (Neural)",
     "languages": [
       "es-MX"
     ],
@@ -5347,8 +5347,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "es-MX-JorgeMultilingualNeural",
-    "display_name": "Jorge Multilingual (Neural)",
+    "voice_id": "es-MX-JorgeNeural",
+    "display_name": "Jorge (Neural)",
     "languages": [
       "es-MX"
     ],
@@ -5803,16 +5803,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "fr-CA-SylvieNeural",
-    "display_name": "Sylvie (Neural)",
-    "languages": [
-      "fr-CA"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "fr-CA-Sylvie:DragonHDLatestNeural",
     "display_name": "Sylvie Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -5825,12 +5815,12 @@
   },
   {
     "provider": "azure",
-    "voice_id": "fr-CA-ThierryNeural",
-    "display_name": "Thierry (Neural)",
+    "voice_id": "fr-CA-SylvieNeural",
+    "display_name": "Sylvie (Neural)",
     "languages": [
       "fr-CA"
     ],
-    "gender": "male",
+    "gender": "female",
     "tags": []
   },
   {
@@ -5844,6 +5834,16 @@
     "tags": [
       "dragon-hd"
     ]
+  },
+  {
+    "provider": "azure",
+    "voice_id": "fr-CA-ThierryNeural",
+    "display_name": "Thierry (Neural)",
+    "languages": [
+      "fr-CA"
+    ],
+    "gender": "male",
+    "tags": []
   },
   {
     "provider": "azure",
@@ -6433,8 +6433,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "it-IT-GiuseppeNeural",
-    "display_name": "Giuseppe (Neural)",
+    "voice_id": "it-IT-GiuseppeMultilingualNeural",
+    "display_name": "Giuseppe Multilingual (Neural)",
     "languages": [
       "it-IT"
     ],
@@ -6443,8 +6443,8 @@
   },
   {
     "provider": "azure",
-    "voice_id": "it-IT-GiuseppeMultilingualNeural",
-    "display_name": "Giuseppe Multilingual (Neural)",
+    "voice_id": "it-IT-GiuseppeNeural",
+    "display_name": "Giuseppe (Neural)",
     "languages": [
       "it-IT"
     ],
@@ -6473,16 +6473,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "it-IT-IsabellaNeural",
-    "display_name": "Isabella (Neural)",
-    "languages": [
-      "it-IT"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "it-IT-Isabella:DragonHDLatestNeural",
     "display_name": "Isabella Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -6497,6 +6487,16 @@
     "provider": "azure",
     "voice_id": "it-IT-IsabellaMultilingualNeural",
     "display_name": "Isabella Multilingual (Neural)",
+    "languages": [
+      "it-IT"
+    ],
+    "gender": "female",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "it-IT-IsabellaNeural",
+    "display_name": "Isabella (Neural)",
     "languages": [
       "it-IT"
     ],
@@ -6891,16 +6891,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "ko-KR-SunHiNeural",
-    "display_name": "Sun-Hi 선히 (Neural)",
-    "languages": [
-      "ko-KR"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "ko-KR-SunHi:DragonHDLatestNeural",
     "display_name": "SunHi Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -6910,6 +6900,16 @@
     "tags": [
       "dragon-hd"
     ]
+  },
+  {
+    "provider": "azure",
+    "voice_id": "ko-KR-SunHiNeural",
+    "display_name": "Sun-Hi 선히 (Neural)",
+    "languages": [
+      "ko-KR"
+    ],
+    "gender": "female",
+    "tags": []
   },
   {
     "provider": "azure",
@@ -7073,16 +7073,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "ms-MY-YasminNeural",
-    "display_name": "Yasmin (Neural)",
-    "languages": [
-      "ms-MY"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "ms-MY-Yasmin:DragonHDLatestNeural",
     "display_name": "Yasmin Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -7092,6 +7082,16 @@
     "tags": [
       "dragon-hd"
     ]
+  },
+  {
+    "provider": "azure",
+    "voice_id": "ms-MY-YasminNeural",
+    "display_name": "Yasmin (Neural)",
+    "languages": [
+      "ms-MY"
+    ],
+    "gender": "female",
+    "tags": []
   },
   {
     "provider": "azure",
@@ -7477,16 +7477,6 @@
   },
   {
     "provider": "azure",
-    "voice_id": "pt-BR-ThalitaNeural",
-    "display_name": "Thalita (Neural)",
-    "languages": [
-      "pt-BR"
-    ],
-    "gender": "female",
-    "tags": []
-  },
-  {
-    "provider": "azure",
     "voice_id": "pt-BR-Thalita:DragonHDLatestNeural",
     "display_name": "Thalita Dragon HD Latest (NeuralHD)",
     "languages": [
@@ -7501,6 +7491,16 @@
     "provider": "azure",
     "voice_id": "pt-BR-ThalitaMultilingualNeural",
     "display_name": "Thalita Multilingual Thalita multilíngue (Neural)",
+    "languages": [
+      "pt-BR"
+    ],
+    "gender": "female",
+    "tags": []
+  },
+  {
+    "provider": "azure",
+    "voice_id": "pt-BR-ThalitaNeural",
+    "display_name": "Thalita (Neural)",
     "languages": [
       "pt-BR"
     ],
@@ -8289,13 +8289,15 @@
   },
   {
     "provider": "azure",
-    "voice_id": "zh-CN-XiaoxiaoDialectsNeural",
-    "display_name": "Xiaoxiao Dialects 晓晓 方言 (Neural)",
+    "voice_id": "zh-CN-Xiaoxiao2:DragonHDFlashLatestNeural",
+    "display_name": "Xiaoxiao2 Dragon HD Flash Latest (Neural)",
     "languages": [
       "zh-CN"
     ],
     "gender": "female",
-    "tags": []
+    "tags": [
+      "dragon-hd"
+    ]
   },
   {
     "provider": "azure",
@@ -8308,6 +8310,16 @@
     "tags": [
       "dragon-hd"
     ]
+  },
+  {
+    "provider": "azure",
+    "voice_id": "zh-CN-XiaoxiaoDialectsNeural",
+    "display_name": "Xiaoxiao Dialects 晓晓 方言 (Neural)",
+    "languages": [
+      "zh-CN"
+    ],
+    "gender": "female",
+    "tags": []
   },
   {
     "provider": "azure",
@@ -8328,18 +8340,6 @@
     ],
     "gender": "female",
     "tags": []
-  },
-  {
-    "provider": "azure",
-    "voice_id": "zh-CN-Xiaoxiao2:DragonHDFlashLatestNeural",
-    "display_name": "Xiaoxiao2 Dragon HD Flash Latest (Neural)",
-    "languages": [
-      "zh-CN"
-    ],
-    "gender": "female",
-    "tags": [
-      "dragon-hd"
-    ]
   },
   {
     "provider": "azure",
@@ -8814,6 +8814,5502 @@
     ],
     "gender": "male",
     "tags": []
+  },
+  {
+    "provider": "edge",
+    "voice_id": "af-ZA-AdriNeural",
+    "display_name": "Adri",
+    "languages": [
+      "af-ZA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "af-ZA-WillemNeural",
+    "display_name": "Willem",
+    "languages": [
+      "af-ZA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "am-ET-AmehaNeural",
+    "display_name": "Ameha",
+    "languages": [
+      "am-ET"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "am-ET-MekdesNeural",
+    "display_name": "Mekdes",
+    "languages": [
+      "am-ET"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-AE-FatimaNeural",
+    "display_name": "Fatima",
+    "languages": [
+      "ar-AE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-AE-HamdanNeural",
+    "display_name": "Hamdan",
+    "languages": [
+      "ar-AE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-BH-AliNeural",
+    "display_name": "Ali",
+    "languages": [
+      "ar-BH"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-BH-LailaNeural",
+    "display_name": "Laila",
+    "languages": [
+      "ar-BH"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-DZ-AminaNeural",
+    "display_name": "Amina",
+    "languages": [
+      "ar-DZ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-DZ-IsmaelNeural",
+    "display_name": "Ismael",
+    "languages": [
+      "ar-DZ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-EG-SalmaNeural",
+    "display_name": "Salma",
+    "languages": [
+      "ar-EG"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-EG-ShakirNeural",
+    "display_name": "Shakir",
+    "languages": [
+      "ar-EG"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-IQ-BasselNeural",
+    "display_name": "Bassel",
+    "languages": [
+      "ar-IQ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-IQ-RanaNeural",
+    "display_name": "Rana",
+    "languages": [
+      "ar-IQ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-JO-SanaNeural",
+    "display_name": "Sana",
+    "languages": [
+      "ar-JO"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-JO-TaimNeural",
+    "display_name": "Taim",
+    "languages": [
+      "ar-JO"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-KW-FahedNeural",
+    "display_name": "Fahed",
+    "languages": [
+      "ar-KW"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-KW-NouraNeural",
+    "display_name": "Noura",
+    "languages": [
+      "ar-KW"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-LB-LaylaNeural",
+    "display_name": "Layla",
+    "languages": [
+      "ar-LB"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-LB-RamiNeural",
+    "display_name": "Rami",
+    "languages": [
+      "ar-LB"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-LY-ImanNeural",
+    "display_name": "Iman",
+    "languages": [
+      "ar-LY"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-LY-OmarNeural",
+    "display_name": "Omar",
+    "languages": [
+      "ar-LY"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-MA-JamalNeural",
+    "display_name": "Jamal",
+    "languages": [
+      "ar-MA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-MA-MounaNeural",
+    "display_name": "Mouna",
+    "languages": [
+      "ar-MA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-OM-AbdullahNeural",
+    "display_name": "Abdullah",
+    "languages": [
+      "ar-OM"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-OM-AyshaNeural",
+    "display_name": "Aysha",
+    "languages": [
+      "ar-OM"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-QA-AmalNeural",
+    "display_name": "Amal",
+    "languages": [
+      "ar-QA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-QA-MoazNeural",
+    "display_name": "Moaz",
+    "languages": [
+      "ar-QA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-SA-HamedNeural",
+    "display_name": "Hamed",
+    "languages": [
+      "ar-SA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-SA-ZariyahNeural",
+    "display_name": "Zariyah",
+    "languages": [
+      "ar-SA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-SY-AmanyNeural",
+    "display_name": "Amany",
+    "languages": [
+      "ar-SY"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-SY-LaithNeural",
+    "display_name": "Laith",
+    "languages": [
+      "ar-SY"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-TN-HediNeural",
+    "display_name": "Hedi",
+    "languages": [
+      "ar-TN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-TN-ReemNeural",
+    "display_name": "Reem",
+    "languages": [
+      "ar-TN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-YE-MaryamNeural",
+    "display_name": "Maryam",
+    "languages": [
+      "ar-YE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ar-YE-SalehNeural",
+    "display_name": "Saleh",
+    "languages": [
+      "ar-YE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "az-AZ-BabekNeural",
+    "display_name": "Babek",
+    "languages": [
+      "az-AZ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "az-AZ-BanuNeural",
+    "display_name": "Banu",
+    "languages": [
+      "az-AZ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "bg-BG-BorislavNeural",
+    "display_name": "Borislav",
+    "languages": [
+      "bg-BG"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "bg-BG-KalinaNeural",
+    "display_name": "Kalina",
+    "languages": [
+      "bg-BG"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "bn-BD-NabanitaNeural",
+    "display_name": "Nabanita",
+    "languages": [
+      "bn-BD"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "bn-BD-PradeepNeural",
+    "display_name": "Pradeep",
+    "languages": [
+      "bn-BD"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "bn-IN-BashkarNeural",
+    "display_name": "Bashkar",
+    "languages": [
+      "bn-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "bn-IN-TanishaaNeural",
+    "display_name": "Tanishaa",
+    "languages": [
+      "bn-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "bs-BA-GoranNeural",
+    "display_name": "Goran",
+    "languages": [
+      "bs-BA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "bs-BA-VesnaNeural",
+    "display_name": "Vesna",
+    "languages": [
+      "bs-BA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ca-ES-EnricNeural",
+    "display_name": "Enric",
+    "languages": [
+      "ca-ES"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ca-ES-JoanaNeural",
+    "display_name": "Joana",
+    "languages": [
+      "ca-ES"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "cs-CZ-AntoninNeural",
+    "display_name": "Antonin",
+    "languages": [
+      "cs-CZ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "cs-CZ-VlastaNeural",
+    "display_name": "Vlasta",
+    "languages": [
+      "cs-CZ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "cy-GB-AledNeural",
+    "display_name": "Aled",
+    "languages": [
+      "cy-GB"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "cy-GB-NiaNeural",
+    "display_name": "Nia",
+    "languages": [
+      "cy-GB"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "da-DK-ChristelNeural",
+    "display_name": "Christel",
+    "languages": [
+      "da-DK"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "da-DK-JeppeNeural",
+    "display_name": "Jeppe",
+    "languages": [
+      "da-DK"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-AT-IngridNeural",
+    "display_name": "Ingrid",
+    "languages": [
+      "de-AT"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-AT-JonasNeural",
+    "display_name": "Jonas",
+    "languages": [
+      "de-AT"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-CH-JanNeural",
+    "display_name": "Jan",
+    "languages": [
+      "de-CH"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-CH-LeniNeural",
+    "display_name": "Leni",
+    "languages": [
+      "de-CH"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-DE-AmalaNeural",
+    "display_name": "Amala",
+    "languages": [
+      "de-DE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-DE-ConradNeural",
+    "display_name": "Conrad",
+    "languages": [
+      "de-DE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-DE-FlorianMultilingualNeural",
+    "display_name": "FlorianMultilingual",
+    "languages": [
+      "de-DE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-DE-KatjaNeural",
+    "display_name": "Katja",
+    "languages": [
+      "de-DE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-DE-KillianNeural",
+    "display_name": "Killian",
+    "languages": [
+      "de-DE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "de-DE-SeraphinaMultilingualNeural",
+    "display_name": "SeraphinaMultilingual",
+    "languages": [
+      "de-DE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "el-GR-AthinaNeural",
+    "display_name": "Athina",
+    "languages": [
+      "el-GR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "el-GR-NestorasNeural",
+    "display_name": "Nestoras",
+    "languages": [
+      "el-GR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-AU-NatashaNeural",
+    "display_name": "Natasha",
+    "languages": [
+      "en-AU"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-AU-WilliamMultilingualNeural",
+    "display_name": "WilliamMultilingual",
+    "languages": [
+      "en-AU"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-CA-ClaraNeural",
+    "display_name": "Clara",
+    "languages": [
+      "en-CA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-CA-LiamNeural",
+    "display_name": "Liam",
+    "languages": [
+      "en-CA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-GB-LibbyNeural",
+    "display_name": "Libby",
+    "languages": [
+      "en-GB"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-GB-MaisieNeural",
+    "display_name": "Maisie",
+    "languages": [
+      "en-GB"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-GB-RyanNeural",
+    "display_name": "Ryan",
+    "languages": [
+      "en-GB"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-GB-SoniaNeural",
+    "display_name": "Sonia",
+    "languages": [
+      "en-GB"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-GB-ThomasNeural",
+    "display_name": "Thomas",
+    "languages": [
+      "en-GB"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-HK-SamNeural",
+    "display_name": "Sam",
+    "languages": [
+      "en-HK"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-HK-YanNeural",
+    "display_name": "Yan",
+    "languages": [
+      "en-HK"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-IE-ConnorNeural",
+    "display_name": "Connor",
+    "languages": [
+      "en-IE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-IE-EmilyNeural",
+    "display_name": "Emily",
+    "languages": [
+      "en-IE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-IN-NeerjaExpressiveNeural",
+    "display_name": "Neerja",
+    "languages": [
+      "en-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-IN-NeerjaNeural",
+    "display_name": "Neerja",
+    "languages": [
+      "en-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-IN-PrabhatNeural",
+    "display_name": "Prabhat",
+    "languages": [
+      "en-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-KE-AsiliaNeural",
+    "display_name": "Asilia",
+    "languages": [
+      "en-KE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-KE-ChilembaNeural",
+    "display_name": "Chilemba",
+    "languages": [
+      "en-KE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-NG-AbeoNeural",
+    "display_name": "Abeo",
+    "languages": [
+      "en-NG"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-NG-EzinneNeural",
+    "display_name": "Ezinne",
+    "languages": [
+      "en-NG"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-NZ-MitchellNeural",
+    "display_name": "Mitchell",
+    "languages": [
+      "en-NZ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-NZ-MollyNeural",
+    "display_name": "Molly",
+    "languages": [
+      "en-NZ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-PH-JamesNeural",
+    "display_name": "James",
+    "languages": [
+      "en-PH"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-PH-RosaNeural",
+    "display_name": "Rosa",
+    "languages": [
+      "en-PH"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-SG-LunaNeural",
+    "display_name": "Luna",
+    "languages": [
+      "en-SG"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-SG-WayneNeural",
+    "display_name": "Wayne",
+    "languages": [
+      "en-SG"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-TZ-ElimuNeural",
+    "display_name": "Elimu",
+    "languages": [
+      "en-TZ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-TZ-ImaniNeural",
+    "display_name": "Imani",
+    "languages": [
+      "en-TZ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-AnaNeural",
+    "display_name": "Ana",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "cartoon",
+      "conversation",
+      "cute",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "display_name": "AndrewMultilingual",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "conversation",
+      "copilot",
+      "warm",
+      "confident",
+      "authentic",
+      "honest",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-AndrewNeural",
+    "display_name": "Andrew",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "conversation",
+      "copilot",
+      "warm",
+      "confident",
+      "authentic",
+      "honest",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-AriaNeural",
+    "display_name": "Aria",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "news",
+      "novel",
+      "positive",
+      "confident",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-AvaMultilingualNeural",
+    "display_name": "AvaMultilingual",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "conversation",
+      "copilot",
+      "expressive",
+      "caring",
+      "pleasant",
+      "friendly",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-AvaNeural",
+    "display_name": "Ava",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "conversation",
+      "copilot",
+      "expressive",
+      "caring",
+      "pleasant",
+      "friendly",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-BrianMultilingualNeural",
+    "display_name": "BrianMultilingual",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "conversation",
+      "copilot",
+      "approachable",
+      "casual",
+      "sincere",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-BrianNeural",
+    "display_name": "Brian",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "conversation",
+      "copilot",
+      "approachable",
+      "casual",
+      "sincere",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-ChristopherNeural",
+    "display_name": "Christopher",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "news",
+      "novel",
+      "reliable",
+      "authority",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-EmmaMultilingualNeural",
+    "display_name": "EmmaMultilingual",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "conversation",
+      "copilot",
+      "cheerful",
+      "clear",
+      "conversational",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-EmmaNeural",
+    "display_name": "Emma",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "conversation",
+      "copilot",
+      "cheerful",
+      "clear",
+      "conversational",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-EricNeural",
+    "display_name": "Eric",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "news",
+      "novel",
+      "rational",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-GuyNeural",
+    "display_name": "Guy",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "news",
+      "novel",
+      "passion",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-JennyNeural",
+    "display_name": "Jenny",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "considerate",
+      "comfort",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-MichelleNeural",
+    "display_name": "Michelle",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "news",
+      "novel",
+      "friendly",
+      "pleasant",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-RogerNeural",
+    "display_name": "Roger",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "news",
+      "novel",
+      "lively",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-US-SteffanNeural",
+    "display_name": "Steffan",
+    "languages": [
+      "en-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "news",
+      "novel",
+      "rational",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-ZA-LeahNeural",
+    "display_name": "Leah",
+    "languages": [
+      "en-ZA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "en-ZA-LukeNeural",
+    "display_name": "Luke",
+    "languages": [
+      "en-ZA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-AR-ElenaNeural",
+    "display_name": "Elena",
+    "languages": [
+      "es-AR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-AR-TomasNeural",
+    "display_name": "Tomas",
+    "languages": [
+      "es-AR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-BO-MarceloNeural",
+    "display_name": "Marcelo",
+    "languages": [
+      "es-BO"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-BO-SofiaNeural",
+    "display_name": "Sofia",
+    "languages": [
+      "es-BO"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-CL-CatalinaNeural",
+    "display_name": "Catalina",
+    "languages": [
+      "es-CL"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-CL-LorenzoNeural",
+    "display_name": "Lorenzo",
+    "languages": [
+      "es-CL"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-CO-GonzaloNeural",
+    "display_name": "Gonzalo",
+    "languages": [
+      "es-CO"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-CO-SalomeNeural",
+    "display_name": "Salome",
+    "languages": [
+      "es-CO"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-CR-JuanNeural",
+    "display_name": "Juan",
+    "languages": [
+      "es-CR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-CR-MariaNeural",
+    "display_name": "Maria",
+    "languages": [
+      "es-CR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-CU-BelkysNeural",
+    "display_name": "Belkys",
+    "languages": [
+      "es-CU"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-CU-ManuelNeural",
+    "display_name": "Manuel",
+    "languages": [
+      "es-CU"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-DO-EmilioNeural",
+    "display_name": "Emilio",
+    "languages": [
+      "es-DO"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-DO-RamonaNeural",
+    "display_name": "Ramona",
+    "languages": [
+      "es-DO"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-EC-AndreaNeural",
+    "display_name": "Andrea",
+    "languages": [
+      "es-EC"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-EC-LuisNeural",
+    "display_name": "Luis",
+    "languages": [
+      "es-EC"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-ES-AlvaroNeural",
+    "display_name": "Alvaro",
+    "languages": [
+      "es-ES"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-ES-ElviraNeural",
+    "display_name": "Elvira",
+    "languages": [
+      "es-ES"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-ES-XimenaNeural",
+    "display_name": "Ximena",
+    "languages": [
+      "es-ES"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-GQ-JavierNeural",
+    "display_name": "Javier",
+    "languages": [
+      "es-GQ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-GQ-TeresaNeural",
+    "display_name": "Teresa",
+    "languages": [
+      "es-GQ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-GT-AndresNeural",
+    "display_name": "Andres",
+    "languages": [
+      "es-GT"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-GT-MartaNeural",
+    "display_name": "Marta",
+    "languages": [
+      "es-GT"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-HN-CarlosNeural",
+    "display_name": "Carlos",
+    "languages": [
+      "es-HN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-HN-KarlaNeural",
+    "display_name": "Karla",
+    "languages": [
+      "es-HN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-MX-DaliaNeural",
+    "display_name": "Dalia",
+    "languages": [
+      "es-MX"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-MX-JorgeNeural",
+    "display_name": "Jorge",
+    "languages": [
+      "es-MX"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-NI-FedericoNeural",
+    "display_name": "Federico",
+    "languages": [
+      "es-NI"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-NI-YolandaNeural",
+    "display_name": "Yolanda",
+    "languages": [
+      "es-NI"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-PA-MargaritaNeural",
+    "display_name": "Margarita",
+    "languages": [
+      "es-PA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-PA-RobertoNeural",
+    "display_name": "Roberto",
+    "languages": [
+      "es-PA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-PE-AlexNeural",
+    "display_name": "Alex",
+    "languages": [
+      "es-PE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-PE-CamilaNeural",
+    "display_name": "Camila",
+    "languages": [
+      "es-PE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-PR-KarinaNeural",
+    "display_name": "Karina",
+    "languages": [
+      "es-PR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-PR-VictorNeural",
+    "display_name": "Victor",
+    "languages": [
+      "es-PR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-PY-MarioNeural",
+    "display_name": "Mario",
+    "languages": [
+      "es-PY"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-PY-TaniaNeural",
+    "display_name": "Tania",
+    "languages": [
+      "es-PY"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-SV-LorenaNeural",
+    "display_name": "Lorena",
+    "languages": [
+      "es-SV"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-SV-RodrigoNeural",
+    "display_name": "Rodrigo",
+    "languages": [
+      "es-SV"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-US-AlonsoNeural",
+    "display_name": "Alonso",
+    "languages": [
+      "es-US"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-US-PalomaNeural",
+    "display_name": "Paloma",
+    "languages": [
+      "es-US"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-UY-MateoNeural",
+    "display_name": "Mateo",
+    "languages": [
+      "es-UY"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-UY-ValentinaNeural",
+    "display_name": "Valentina",
+    "languages": [
+      "es-UY"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-VE-PaolaNeural",
+    "display_name": "Paola",
+    "languages": [
+      "es-VE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "es-VE-SebastianNeural",
+    "display_name": "Sebastian",
+    "languages": [
+      "es-VE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "et-EE-AnuNeural",
+    "display_name": "Anu",
+    "languages": [
+      "et-EE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "et-EE-KertNeural",
+    "display_name": "Kert",
+    "languages": [
+      "et-EE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fa-IR-DilaraNeural",
+    "display_name": "Dilara",
+    "languages": [
+      "fa-IR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fa-IR-FaridNeural",
+    "display_name": "Farid",
+    "languages": [
+      "fa-IR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fi-FI-HarriNeural",
+    "display_name": "Harri",
+    "languages": [
+      "fi-FI"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fi-FI-NooraNeural",
+    "display_name": "Noora",
+    "languages": [
+      "fi-FI"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fil-PH-AngeloNeural",
+    "display_name": "Angelo",
+    "languages": [
+      "fil-PH"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fil-PH-BlessicaNeural",
+    "display_name": "Blessica",
+    "languages": [
+      "fil-PH"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-BE-CharlineNeural",
+    "display_name": "Charline",
+    "languages": [
+      "fr-BE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-BE-GerardNeural",
+    "display_name": "Gerard",
+    "languages": [
+      "fr-BE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-CA-AntoineNeural",
+    "display_name": "Antoine",
+    "languages": [
+      "fr-CA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-CA-JeanNeural",
+    "display_name": "Jean",
+    "languages": [
+      "fr-CA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-CA-SylvieNeural",
+    "display_name": "Sylvie",
+    "languages": [
+      "fr-CA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-CA-ThierryNeural",
+    "display_name": "Thierry",
+    "languages": [
+      "fr-CA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-CH-ArianeNeural",
+    "display_name": "Ariane",
+    "languages": [
+      "fr-CH"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-CH-FabriceNeural",
+    "display_name": "Fabrice",
+    "languages": [
+      "fr-CH"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-FR-DeniseNeural",
+    "display_name": "Denise",
+    "languages": [
+      "fr-FR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-FR-EloiseNeural",
+    "display_name": "Eloise",
+    "languages": [
+      "fr-FR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-FR-HenriNeural",
+    "display_name": "Henri",
+    "languages": [
+      "fr-FR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-FR-RemyMultilingualNeural",
+    "display_name": "RemyMultilingual",
+    "languages": [
+      "fr-FR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "fr-FR-VivienneMultilingualNeural",
+    "display_name": "VivienneMultilingual",
+    "languages": [
+      "fr-FR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ga-IE-ColmNeural",
+    "display_name": "Colm",
+    "languages": [
+      "ga-IE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ga-IE-OrlaNeural",
+    "display_name": "Orla",
+    "languages": [
+      "ga-IE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "gl-ES-RoiNeural",
+    "display_name": "Roi",
+    "languages": [
+      "gl-ES"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "gl-ES-SabelaNeural",
+    "display_name": "Sabela",
+    "languages": [
+      "gl-ES"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "gu-IN-DhwaniNeural",
+    "display_name": "Dhwani",
+    "languages": [
+      "gu-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "gu-IN-NiranjanNeural",
+    "display_name": "Niranjan",
+    "languages": [
+      "gu-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "he-IL-AvriNeural",
+    "display_name": "Avri",
+    "languages": [
+      "he-IL"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "he-IL-HilaNeural",
+    "display_name": "Hila",
+    "languages": [
+      "he-IL"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "hi-IN-MadhurNeural",
+    "display_name": "Madhur",
+    "languages": [
+      "hi-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "hi-IN-SwaraNeural",
+    "display_name": "Swara",
+    "languages": [
+      "hi-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "hr-HR-GabrijelaNeural",
+    "display_name": "Gabrijela",
+    "languages": [
+      "hr-HR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "hr-HR-SreckoNeural",
+    "display_name": "Srecko",
+    "languages": [
+      "hr-HR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "hu-HU-NoemiNeural",
+    "display_name": "Noemi",
+    "languages": [
+      "hu-HU"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "hu-HU-TamasNeural",
+    "display_name": "Tamas",
+    "languages": [
+      "hu-HU"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "id-ID-ArdiNeural",
+    "display_name": "Ardi",
+    "languages": [
+      "id-ID"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "id-ID-GadisNeural",
+    "display_name": "Gadis",
+    "languages": [
+      "id-ID"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "is-IS-GudrunNeural",
+    "display_name": "Gudrun",
+    "languages": [
+      "is-IS"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "is-IS-GunnarNeural",
+    "display_name": "Gunnar",
+    "languages": [
+      "is-IS"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "it-IT-DiegoNeural",
+    "display_name": "Diego",
+    "languages": [
+      "it-IT"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "it-IT-ElsaNeural",
+    "display_name": "Elsa",
+    "languages": [
+      "it-IT"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "it-IT-GiuseppeMultilingualNeural",
+    "display_name": "GiuseppeMultilingual",
+    "languages": [
+      "it-IT"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "it-IT-IsabellaNeural",
+    "display_name": "Isabella",
+    "languages": [
+      "it-IT"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "iu-Cans-CA-SiqiniqNeural",
+    "display_name": "Siqiniq",
+    "languages": [
+      "iu-Cans-CA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "iu-Cans-CA-TaqqiqNeural",
+    "display_name": "Taqqiq",
+    "languages": [
+      "iu-Cans-CA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "iu-Latn-CA-SiqiniqNeural",
+    "display_name": "Siqiniq",
+    "languages": [
+      "iu-Latn-CA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "iu-Latn-CA-TaqqiqNeural",
+    "display_name": "Taqqiq",
+    "languages": [
+      "iu-Latn-CA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ja-JP-KeitaNeural",
+    "display_name": "Keita",
+    "languages": [
+      "ja-JP"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ja-JP-NanamiNeural",
+    "display_name": "Nanami",
+    "languages": [
+      "ja-JP"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "jv-ID-DimasNeural",
+    "display_name": "Dimas",
+    "languages": [
+      "jv-ID"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "jv-ID-SitiNeural",
+    "display_name": "Siti",
+    "languages": [
+      "jv-ID"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ka-GE-EkaNeural",
+    "display_name": "Eka",
+    "languages": [
+      "ka-GE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ka-GE-GiorgiNeural",
+    "display_name": "Giorgi",
+    "languages": [
+      "ka-GE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "kk-KZ-AigulNeural",
+    "display_name": "Aigul",
+    "languages": [
+      "kk-KZ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "kk-KZ-DauletNeural",
+    "display_name": "Daulet",
+    "languages": [
+      "kk-KZ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "km-KH-PisethNeural",
+    "display_name": "Piseth",
+    "languages": [
+      "km-KH"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "km-KH-SreymomNeural",
+    "display_name": "Sreymom",
+    "languages": [
+      "km-KH"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "kn-IN-GaganNeural",
+    "display_name": "Gagan",
+    "languages": [
+      "kn-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "kn-IN-SapnaNeural",
+    "display_name": "Sapna",
+    "languages": [
+      "kn-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ko-KR-HyunsuMultilingualNeural",
+    "display_name": "HyunsuMultilingual",
+    "languages": [
+      "ko-KR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ko-KR-InJoonNeural",
+    "display_name": "InJoon",
+    "languages": [
+      "ko-KR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ko-KR-SunHiNeural",
+    "display_name": "SunHi",
+    "languages": [
+      "ko-KR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "lo-LA-ChanthavongNeural",
+    "display_name": "Chanthavong",
+    "languages": [
+      "lo-LA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "lo-LA-KeomanyNeural",
+    "display_name": "Keomany",
+    "languages": [
+      "lo-LA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "lt-LT-LeonasNeural",
+    "display_name": "Leonas",
+    "languages": [
+      "lt-LT"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "lt-LT-OnaNeural",
+    "display_name": "Ona",
+    "languages": [
+      "lt-LT"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "lv-LV-EveritaNeural",
+    "display_name": "Everita",
+    "languages": [
+      "lv-LV"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "lv-LV-NilsNeural",
+    "display_name": "Nils",
+    "languages": [
+      "lv-LV"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "mk-MK-AleksandarNeural",
+    "display_name": "Aleksandar",
+    "languages": [
+      "mk-MK"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "mk-MK-MarijaNeural",
+    "display_name": "Marija",
+    "languages": [
+      "mk-MK"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ml-IN-MidhunNeural",
+    "display_name": "Midhun",
+    "languages": [
+      "ml-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ml-IN-SobhanaNeural",
+    "display_name": "Sobhana",
+    "languages": [
+      "ml-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "mn-MN-BataaNeural",
+    "display_name": "Bataa",
+    "languages": [
+      "mn-MN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "mn-MN-YesuiNeural",
+    "display_name": "Yesui",
+    "languages": [
+      "mn-MN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "mr-IN-AarohiNeural",
+    "display_name": "Aarohi",
+    "languages": [
+      "mr-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "mr-IN-ManoharNeural",
+    "display_name": "Manohar",
+    "languages": [
+      "mr-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ms-MY-OsmanNeural",
+    "display_name": "Osman",
+    "languages": [
+      "ms-MY"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ms-MY-YasminNeural",
+    "display_name": "Yasmin",
+    "languages": [
+      "ms-MY"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "mt-MT-GraceNeural",
+    "display_name": "Grace",
+    "languages": [
+      "mt-MT"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "mt-MT-JosephNeural",
+    "display_name": "Joseph",
+    "languages": [
+      "mt-MT"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "my-MM-NilarNeural",
+    "display_name": "Nilar",
+    "languages": [
+      "my-MM"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "my-MM-ThihaNeural",
+    "display_name": "Thiha",
+    "languages": [
+      "my-MM"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "nb-NO-FinnNeural",
+    "display_name": "Finn",
+    "languages": [
+      "nb-NO"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "nb-NO-PernilleNeural",
+    "display_name": "Pernille",
+    "languages": [
+      "nb-NO"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ne-NP-HemkalaNeural",
+    "display_name": "Hemkala",
+    "languages": [
+      "ne-NP"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ne-NP-SagarNeural",
+    "display_name": "Sagar",
+    "languages": [
+      "ne-NP"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "nl-BE-ArnaudNeural",
+    "display_name": "Arnaud",
+    "languages": [
+      "nl-BE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "nl-BE-DenaNeural",
+    "display_name": "Dena",
+    "languages": [
+      "nl-BE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "nl-NL-ColetteNeural",
+    "display_name": "Colette",
+    "languages": [
+      "nl-NL"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "nl-NL-FennaNeural",
+    "display_name": "Fenna",
+    "languages": [
+      "nl-NL"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "nl-NL-MaartenNeural",
+    "display_name": "Maarten",
+    "languages": [
+      "nl-NL"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "pl-PL-MarekNeural",
+    "display_name": "Marek",
+    "languages": [
+      "pl-PL"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "pl-PL-ZofiaNeural",
+    "display_name": "Zofia",
+    "languages": [
+      "pl-PL"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ps-AF-GulNawazNeural",
+    "display_name": "GulNawaz",
+    "languages": [
+      "ps-AF"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ps-AF-LatifaNeural",
+    "display_name": "Latifa",
+    "languages": [
+      "ps-AF"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "pt-BR-AntonioNeural",
+    "display_name": "Antonio",
+    "languages": [
+      "pt-BR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "pt-BR-FranciscaNeural",
+    "display_name": "Francisca",
+    "languages": [
+      "pt-BR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "pt-BR-ThalitaMultilingualNeural",
+    "display_name": "ThalitaMultilingual",
+    "languages": [
+      "pt-BR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "pt-PT-DuarteNeural",
+    "display_name": "Duarte",
+    "languages": [
+      "pt-PT"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "pt-PT-RaquelNeural",
+    "display_name": "Raquel",
+    "languages": [
+      "pt-PT"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ro-RO-AlinaNeural",
+    "display_name": "Alina",
+    "languages": [
+      "ro-RO"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ro-RO-EmilNeural",
+    "display_name": "Emil",
+    "languages": [
+      "ro-RO"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ru-RU-DmitryNeural",
+    "display_name": "Dmitry",
+    "languages": [
+      "ru-RU"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ru-RU-SvetlanaNeural",
+    "display_name": "Svetlana",
+    "languages": [
+      "ru-RU"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "si-LK-SameeraNeural",
+    "display_name": "Sameera",
+    "languages": [
+      "si-LK"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "si-LK-ThiliniNeural",
+    "display_name": "Thilini",
+    "languages": [
+      "si-LK"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sk-SK-LukasNeural",
+    "display_name": "Lukas",
+    "languages": [
+      "sk-SK"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sk-SK-ViktoriaNeural",
+    "display_name": "Viktoria",
+    "languages": [
+      "sk-SK"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sl-SI-PetraNeural",
+    "display_name": "Petra",
+    "languages": [
+      "sl-SI"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sl-SI-RokNeural",
+    "display_name": "Rok",
+    "languages": [
+      "sl-SI"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "so-SO-MuuseNeural",
+    "display_name": "Muuse",
+    "languages": [
+      "so-SO"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "so-SO-UbaxNeural",
+    "display_name": "Ubax",
+    "languages": [
+      "so-SO"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sq-AL-AnilaNeural",
+    "display_name": "Anila",
+    "languages": [
+      "sq-AL"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sq-AL-IlirNeural",
+    "display_name": "Ilir",
+    "languages": [
+      "sq-AL"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sr-RS-NicholasNeural",
+    "display_name": "Nicholas",
+    "languages": [
+      "sr-RS"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sr-RS-SophieNeural",
+    "display_name": "Sophie",
+    "languages": [
+      "sr-RS"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "su-ID-JajangNeural",
+    "display_name": "Jajang",
+    "languages": [
+      "su-ID"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "su-ID-TutiNeural",
+    "display_name": "Tuti",
+    "languages": [
+      "su-ID"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sv-SE-MattiasNeural",
+    "display_name": "Mattias",
+    "languages": [
+      "sv-SE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sv-SE-SofieNeural",
+    "display_name": "Sofie",
+    "languages": [
+      "sv-SE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sw-KE-RafikiNeural",
+    "display_name": "Rafiki",
+    "languages": [
+      "sw-KE"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sw-KE-ZuriNeural",
+    "display_name": "Zuri",
+    "languages": [
+      "sw-KE"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sw-TZ-DaudiNeural",
+    "display_name": "Daudi",
+    "languages": [
+      "sw-TZ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "sw-TZ-RehemaNeural",
+    "display_name": "Rehema",
+    "languages": [
+      "sw-TZ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ta-IN-PallaviNeural",
+    "display_name": "Pallavi",
+    "languages": [
+      "ta-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ta-IN-ValluvarNeural",
+    "display_name": "Valluvar",
+    "languages": [
+      "ta-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ta-LK-KumarNeural",
+    "display_name": "Kumar",
+    "languages": [
+      "ta-LK"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ta-LK-SaranyaNeural",
+    "display_name": "Saranya",
+    "languages": [
+      "ta-LK"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ta-MY-KaniNeural",
+    "display_name": "Kani",
+    "languages": [
+      "ta-MY"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ta-MY-SuryaNeural",
+    "display_name": "Surya",
+    "languages": [
+      "ta-MY"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ta-SG-AnbuNeural",
+    "display_name": "Anbu",
+    "languages": [
+      "ta-SG"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ta-SG-VenbaNeural",
+    "display_name": "Venba",
+    "languages": [
+      "ta-SG"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "te-IN-MohanNeural",
+    "display_name": "Mohan",
+    "languages": [
+      "te-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "te-IN-ShrutiNeural",
+    "display_name": "Shruti",
+    "languages": [
+      "te-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "th-TH-NiwatNeural",
+    "display_name": "Niwat",
+    "languages": [
+      "th-TH"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "th-TH-PremwadeeNeural",
+    "display_name": "Premwadee",
+    "languages": [
+      "th-TH"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "tr-TR-AhmetNeural",
+    "display_name": "Ahmet",
+    "languages": [
+      "tr-TR"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "tr-TR-EmelNeural",
+    "display_name": "Emel",
+    "languages": [
+      "tr-TR"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "uk-UA-OstapNeural",
+    "display_name": "Ostap",
+    "languages": [
+      "uk-UA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "uk-UA-PolinaNeural",
+    "display_name": "Polina",
+    "languages": [
+      "uk-UA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ur-IN-GulNeural",
+    "display_name": "Gul",
+    "languages": [
+      "ur-IN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ur-IN-SalmanNeural",
+    "display_name": "Salman",
+    "languages": [
+      "ur-IN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ur-PK-AsadNeural",
+    "display_name": "Asad",
+    "languages": [
+      "ur-PK"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "ur-PK-UzmaNeural",
+    "display_name": "Uzma",
+    "languages": [
+      "ur-PK"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "uz-UZ-MadinaNeural",
+    "display_name": "Madina",
+    "languages": [
+      "uz-UZ"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "uz-UZ-SardorNeural",
+    "display_name": "Sardor",
+    "languages": [
+      "uz-UZ"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "vi-VN-HoaiMyNeural",
+    "display_name": "HoaiMy",
+    "languages": [
+      "vi-VN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "vi-VN-NamMinhNeural",
+    "display_name": "NamMinh",
+    "languages": [
+      "vi-VN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-CN-XiaoxiaoNeural",
+    "display_name": "Xiaoxiao",
+    "languages": [
+      "zh-CN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "news",
+      "novel",
+      "warm",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-CN-XiaoyiNeural",
+    "display_name": "Xiaoyi",
+    "languages": [
+      "zh-CN"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "cartoon",
+      "novel",
+      "lively",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-CN-YunjianNeural",
+    "display_name": "Yunjian",
+    "languages": [
+      "zh-CN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "sports",
+      "novel",
+      "passion",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-CN-YunxiNeural",
+    "display_name": "Yunxi",
+    "languages": [
+      "zh-CN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "novel",
+      "lively",
+      "sunshine",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-CN-YunxiaNeural",
+    "display_name": "Yunxia",
+    "languages": [
+      "zh-CN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "cartoon",
+      "novel",
+      "cute",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-CN-YunyangNeural",
+    "display_name": "Yunyang",
+    "languages": [
+      "zh-CN"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "news",
+      "professional",
+      "reliable",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-CN-liaoning-XiaobeiNeural",
+    "display_name": "Xiaobei",
+    "languages": [
+      "zh-CN-liaoning"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "dialect",
+      "humorous",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-CN-shaanxi-XiaoniNeural",
+    "display_name": "Xiaoni",
+    "languages": [
+      "zh-CN-shaanxi"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "dialect",
+      "bright",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-HK-HiuGaaiNeural",
+    "display_name": "HiuGaai",
+    "languages": [
+      "zh-HK"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-HK-HiuMaanNeural",
+    "display_name": "HiuMaan",
+    "languages": [
+      "zh-HK"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-HK-WanLungNeural",
+    "display_name": "WanLung",
+    "languages": [
+      "zh-HK"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-TW-HsiaoChenNeural",
+    "display_name": "HsiaoChen",
+    "languages": [
+      "zh-TW"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-TW-HsiaoYuNeural",
+    "display_name": "HsiaoYu",
+    "languages": [
+      "zh-TW"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zh-TW-YunJheNeural",
+    "display_name": "YunJhe",
+    "languages": [
+      "zh-TW"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zu-ZA-ThandoNeural",
+    "display_name": "Thando",
+    "languages": [
+      "zu-ZA"
+    ],
+    "gender": "female",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
+  },
+  {
+    "provider": "edge",
+    "voice_id": "zu-ZA-ThembaNeural",
+    "display_name": "Themba",
+    "languages": [
+      "zu-ZA"
+    ],
+    "gender": "male",
+    "tags": [
+      "neural",
+      "24khz-48kbitrate-mono-mp3",
+      "general",
+      "friendly",
+      "positive",
+      "ga"
+    ]
   },
   {
     "provider": "google",

@@ -144,6 +144,7 @@ pub fn build_tts_runtime(args: TtsRuntimeArgs) -> Result<TtsRuntime> {
 
             ResolvedProvider::Google { api_key }
         }
+        "edge" => ResolvedProvider::Edge,
         "amazon" => {
             let access_key_id = args
                 .aws_access_key_id
@@ -211,7 +212,9 @@ pub fn build_tts_runtime(args: TtsRuntimeArgs) -> Result<TtsRuntime> {
             }
         }
         other => {
-            bail!("unknown TTS provider '{other}' (expected: openai, azure, google, or amazon)")
+            bail!(
+                "unknown TTS provider '{other}' (expected: openai, azure, google, amazon, or edge)"
+            )
         }
     };
 
@@ -223,6 +226,7 @@ pub fn build_tts_runtime(args: TtsRuntimeArgs) -> Result<TtsRuntime> {
         ResolvedProvider::Azure { .. } => (None, None),
         ResolvedProvider::Google { .. } => (None, args.speed),
         ResolvedProvider::Amazon { .. } => (tts_model, None),
+        ResolvedProvider::Edge => (None, args.speed),
         ResolvedProvider::OpenAi { .. } => (tts_model, args.speed),
     };
 
@@ -237,4 +241,34 @@ pub fn build_tts_runtime(args: TtsRuntimeArgs) -> Result<TtsRuntime> {
         force: args.force,
         dry_run: args.dry_run,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edge_resolves_without_credentials_and_preserves_speed() {
+        let runtime = build_tts_runtime(TtsRuntimeArgs {
+            provider: Some("edge"),
+            voice: Some("ja-JP-NanamiNeural"),
+            tts_model: Some("ignored"),
+            format: Some("mp3"),
+            speed: Some(1.25),
+            api_key: None,
+            api_base_url: None,
+            azure_region: None,
+            aws_access_key_id: None,
+            aws_secret_access_key: None,
+            aws_region: None,
+            batch_size: 5,
+            retries: 3,
+            force: false,
+            dry_run: false,
+        })
+        .unwrap();
+        assert_eq!(runtime.provider.id(), "edge");
+        assert!(runtime.model.is_none());
+        assert_eq!(runtime.speed, Some(1.25));
+    }
 }

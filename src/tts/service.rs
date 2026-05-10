@@ -15,9 +15,9 @@ use super::error::TtsError;
 use super::ir::parse_furigana;
 use super::media::AnkiMediaStore;
 use super::provider::{
-    AudioFormat, SynthesisRequest, TextFormat, TtsProvider, build as build_provider,
+    AudioFormat, RenderProfile, SynthesisRequest, TtsProvider, build as build_provider,
 };
-use super::render::{render_plain_text, render_ssml};
+use super::render::{render_edge_ssml, render_plain_text, render_ssml};
 use super::spec::{CliOverrides, resolve as resolve_tts_spec};
 use super::template::TemplateSource;
 use super::text::strip_annotations;
@@ -129,11 +129,9 @@ impl TtsService {
             bail!("source text has no renderable content");
         }
 
-        let text_format = self.provider.text_format();
-        let payload = match text_format {
-            TextFormat::PlainText => render_plain_text(&utterance),
-            TextFormat::Ssml => render_ssml(&utterance, &self.voice),
-        };
+        let render_profile = self.provider.render_profile();
+        let text_format = render_profile.text_format();
+        let payload = render_payload(render_profile, &utterance, &self.voice, self.speed);
         let spoken_chars = render_plain_text(&utterance).chars().count() as u64;
 
         let request = SynthesisRequest {
@@ -334,7 +332,20 @@ pub fn build_bundle(
     Ok(TtsBundle { service, media })
 }
 
-/// Project an Anki-keyed row (or field map) through `field_map` into an
+pub fn render_payload(
+    render_profile: RenderProfile,
+    utterance: &super::ir::Utterance,
+    voice: &str,
+    speed: Option<f32>,
+) -> String {
+    match render_profile {
+        RenderProfile::PlainText => render_plain_text(utterance),
+        RenderProfile::AzureSsml => render_ssml(utterance, voice),
+        RenderProfile::EdgeSsml => render_edge_ssml(utterance, voice, speed),
+    }
+}
+
+/// Project an Anki-keyed row (or field map) through `field_map` into the
 /// LLM-keyed `Row` that `TemplateSource::expand` can operate on.
 ///
 /// The generate pipeline uses `IndexMap<String, String>` for `anki_fields`
@@ -361,21 +372,21 @@ mod tests {
     use crate::anki::client::AnkiClient;
     use crate::tts::cache::TtsCache;
     use crate::tts::error::TtsError;
-    use crate::tts::provider::{AudioFormat, SynthesisRequest, TextFormat, TtsProvider};
+    use crate::tts::provider::{AudioFormat, RenderProfile, SynthesisRequest, TtsProvider};
     use crate::tts::template::TemplateSource;
     use std::sync::{Arc, Mutex};
 
     struct MockProvider {
         id: &'static str,
-        text_format: TextFormat,
+        render_profile: RenderProfile,
         calls: Mutex<Vec<SynthesisRequest>>,
     }
 
     impl MockProvider {
-        fn new(id: &'static str, text_format: TextFormat) -> Self {
+        fn new(id: &'static str, render_profile: RenderProfile) -> Self {
             Self {
                 id,
-                text_format,
+                render_profile,
                 calls: Mutex::new(Vec::new()),
             }
         }
@@ -390,8 +401,8 @@ mod tests {
             self.id
         }
 
-        fn text_format(&self) -> TextFormat {
-            self.text_format
+        fn render_profile(&self) -> RenderProfile {
+            self.render_profile
         }
 
         fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {
@@ -419,6 +430,26 @@ mod tests {
         })
     }
 
+    fn mk_service_with_voice_and_speed(
+        provider: Arc<dyn TtsProvider>,
+        cache: Arc<TtsCache>,
+        source: TemplateSource,
+        voice: &str,
+        speed: Option<f32>,
+    ) -> TtsService {
+        TtsService::new(TtsServiceConfig {
+            provider,
+            cache,
+            source: Arc::new(source),
+            target_field: "Audio".to_string(),
+            voice: voice.to_string(),
+            model: None,
+            format: AudioFormat::Mp3,
+            speed,
+            endpoint: None,
+        })
+    }
+
     fn map(pairs: &[(&str, &str)]) -> IndexMap<String, String> {
         pairs
             .iter()
@@ -431,7 +462,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
         let provider: Arc<dyn TtsProvider> =
-            Arc::new(MockProvider::new("mock", TextFormat::PlainText));
+            Arc::new(MockProvider::new("mock", RenderProfile::PlainText));
         let svc = mk_service(
             provider,
             cache,
@@ -456,7 +487,8 @@ mod tests {
     fn prepare_from_row_ssml_flow() {
         let tmp = tempfile::tempdir().unwrap();
         let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
-        let provider: Arc<dyn TtsProvider> = Arc::new(MockProvider::new("mock", TextFormat::Ssml));
+        let provider: Arc<dyn TtsProvider> =
+            Arc::new(MockProvider::new("mock", RenderProfile::AzureSsml));
         let svc = mk_service(
             provider,
             cache,
@@ -480,10 +512,59 @@ mod tests {
     }
 
     #[test]
+    fn render_payload_dispatches_edge_ssml() {
+        let utterance = parse_furigana("日本語[にほんご]を").unwrap();
+        let payload = render_payload(
+            RenderProfile::EdgeSsml,
+            &utterance,
+            "ja-JP-NanamiNeural",
+            Some(1.25),
+        );
+        assert!(payload.contains("<prosody pitch=\"medium\" rate=\"+25%\""));
+        assert!(payload.contains("name=\"ja-JP-NanamiNeural\""));
+        assert!(payload.contains(">にほんごを</prosody>"));
+    }
+
+    #[test]
+    fn prepare_from_row_edge_ssml_flow() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let provider: Arc<dyn TtsProvider> =
+            Arc::new(MockProvider::new("mock", RenderProfile::EdgeSsml));
+        let svc = mk_service_with_voice_and_speed(
+            provider,
+            cache,
+            TemplateSource::field("front".into()),
+            "ja-JP-NanamiNeural",
+            Some(1.25),
+        );
+
+        let anki_fields = map(&[("Front", "日本語[にほんご]")]);
+        let field_map = map(&[("front", "Front")]);
+        let prepared = svc
+            .prepare_from_anki_fields(&anki_fields, &field_map)
+            .unwrap();
+
+        assert!(
+            prepared
+                .request
+                .payload
+                .contains("name=\"ja-JP-NanamiNeural\"")
+        );
+        assert!(prepared.request.payload.contains("rate=\"+25%\""));
+        assert!(prepared.request.payload.contains(">にほんご</prosody>"));
+        assert_eq!(
+            prepared.request.text_format,
+            crate::tts::provider::TextFormat::Ssml
+        );
+        assert_eq!(prepared.request.speed, Some(1.25));
+    }
+
+    #[test]
     fn ensure_cached_hits_cache_on_second_call() {
         let tmp = tempfile::tempdir().unwrap();
         let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
-        let mock = Arc::new(MockProvider::new("mock", TextFormat::PlainText));
+        let mock = Arc::new(MockProvider::new("mock", RenderProfile::PlainText));
         let provider: Arc<dyn TtsProvider> = mock.clone();
         let svc = mk_service(
             provider,
@@ -510,7 +591,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
         let provider: Arc<dyn TtsProvider> =
-            Arc::new(MockProvider::new("mock", TextFormat::PlainText));
+            Arc::new(MockProvider::new("mock", RenderProfile::PlainText));
         let svc = mk_service(
             provider,
             cache,
@@ -531,7 +612,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
         let provider: Arc<dyn TtsProvider> =
-            Arc::new(MockProvider::new("mock", TextFormat::PlainText));
+            Arc::new(MockProvider::new("mock", RenderProfile::PlainText));
         let svc = mk_service(
             provider,
             cache,
@@ -578,11 +659,7 @@ mod tests {
 
     use crate::template::frontmatter::{TtsSource, TtsSpec};
 
-    fn bad_spec() -> TtsSpec {
-        // `unknown-provider` fails deterministically inside
-        // `spec::resolve` without depending on any env vars, so the
-        // test is hermetic regardless of whether the developer has
-        // AZURE_TTS_KEY / OPENAI_API_KEY set in their shell.
+    fn tts_spec(provider: &str) -> TtsSpec {
         TtsSpec {
             target: "Audio".into(),
             source: TtsSource {
@@ -590,12 +667,31 @@ mod tests {
                 template: None,
             },
             voice: "alloy".into(),
-            provider: Some("unknown-provider".into()),
+            provider: Some(provider.into()),
             region: None,
             model: None,
             format: None,
             speed: None,
         }
+    }
+
+    fn bad_spec() -> TtsSpec {
+        // `unknown-provider` fails deterministically inside
+        // `spec::resolve` without depending on any env vars, so the
+        // test is hermetic regardless of whether the developer has
+        // AZURE_TTS_KEY / OPENAI_API_KEY set in their shell.
+        tts_spec("unknown-provider")
+    }
+
+    #[test]
+    fn build_bundle_resolves_edge_without_credentials() {
+        let bundle = build_bundle(
+            &tts_spec("edge"),
+            anki_client(),
+            TtsBundleOptions { azure_region: None },
+        )
+        .unwrap();
+        assert_eq!(bundle.service.provider_id(), "edge");
     }
 
     #[test]
@@ -637,7 +733,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
         let provider: Arc<dyn TtsProvider> =
-            Arc::new(MockProvider::new("mock", TextFormat::PlainText));
+            Arc::new(MockProvider::new("mock", RenderProfile::PlainText));
         let service = Arc::new(mk_service(
             provider,
             cache,

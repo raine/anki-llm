@@ -14,6 +14,7 @@ pub enum ProviderId {
     Azure,
     Google,
     Amazon,
+    Edge,
 }
 
 impl ProviderId {
@@ -23,6 +24,7 @@ impl ProviderId {
             ProviderId::Azure => "azure",
             ProviderId::Google => "google",
             ProviderId::Amazon => "amazon",
+            ProviderId::Edge => "edge",
         }
     }
 
@@ -32,6 +34,7 @@ impl ProviderId {
             "azure" => Some(Self::Azure),
             "google" => Some(Self::Google),
             "amazon" => Some(Self::Amazon),
+            "edge" => Some(Self::Edge),
             _ => None,
         }
     }
@@ -251,6 +254,7 @@ mod tests {
         assert!(seen.contains(&ProviderId::Azure));
         assert!(seen.contains(&ProviderId::Google));
         assert!(seen.contains(&ProviderId::Amazon));
+        assert!(seen.contains(&ProviderId::Edge));
     }
 
     #[test]
@@ -312,7 +316,7 @@ mod tests {
     fn build_facets_collects_sorted_values() {
         let entries = load();
         let facets = build_facets(&entries);
-        assert_eq!(facets.providers.len(), 4);
+        assert_eq!(facets.providers.len(), 5);
         assert!(
             facets
                 .providers
@@ -330,6 +334,7 @@ mod tests {
             ProviderId::Azure,
             ProviderId::Google,
             ProviderId::Amazon,
+            ProviderId::Edge,
         ] {
             assert_eq!(ProviderId::parse(id.as_str()), Some(id));
         }

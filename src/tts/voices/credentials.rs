@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use crate::config::store::{AppConfig, read_config};
-use crate::tts::provider::{ProviderSelection, amazon, azure, google};
+use crate::tts::provider::{ProviderSelection, amazon, azure, edge, google};
 
 use super::catalog::ProviderId;
 
@@ -32,6 +32,7 @@ pub fn probe_all() -> HashMap<ProviderId, ProviderPreviewState> {
     out.insert(ProviderId::Azure, probe_azure(config.as_ref()));
     out.insert(ProviderId::Google, probe_google(config.as_ref()));
     out.insert(ProviderId::Amazon, probe_amazon(config.as_ref()));
+    out.insert(ProviderId::Edge, probe_edge());
     out
 }
 
@@ -96,6 +97,13 @@ fn probe_google(config: Option<&AppConfig>) -> ProviderPreviewState {
     ProviderPreviewState::Ready {
         selection: ProviderSelection::Google { api_key },
         endpoint_identity: Some(google::endpoint_identity()),
+    }
+}
+
+fn probe_edge() -> ProviderPreviewState {
+    ProviderPreviewState::Ready {
+        selection: ProviderSelection::Edge,
+        endpoint_identity: Some(edge::endpoint_identity()),
     }
 }
 

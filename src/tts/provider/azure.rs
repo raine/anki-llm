@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::time::Duration;
 
-use super::{SynthesisRequest, TextFormat, TtsProvider};
+use super::{RenderProfile, SynthesisRequest, TtsProvider};
 use crate::tts::error::TtsError;
 
 const TIMEOUT_SECS: u64 = 120;
@@ -45,8 +45,8 @@ impl TtsProvider for AzureTtsProvider {
         "azure"
     }
 
-    fn text_format(&self) -> TextFormat {
-        TextFormat::Ssml
+    fn render_profile(&self) -> RenderProfile {
+        RenderProfile::AzureSsml
     }
 
     fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {
@@ -135,7 +135,7 @@ mod tests {
     fn id_and_text_format() {
         let p = AzureTtsProvider::new("k".into(), "eastus".into());
         assert_eq!(p.id(), "azure");
-        assert_eq!(p.text_format(), TextFormat::Ssml);
+        assert_eq!(p.render_profile(), RenderProfile::AzureSsml);
     }
 
     #[test]

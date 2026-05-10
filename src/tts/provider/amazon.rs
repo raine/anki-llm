@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use super::{AudioFormat, SynthesisRequest, TextFormat, TtsProvider};
+use super::{AudioFormat, RenderProfile, SynthesisRequest, TtsProvider};
 use crate::tts::error::TtsError;
 
 const TIMEOUT_SECS: u64 = 120;
@@ -83,8 +83,8 @@ impl TtsProvider for AmazonTtsProvider {
         "amazon"
     }
 
-    fn text_format(&self) -> TextFormat {
-        TextFormat::PlainText
+    fn render_profile(&self) -> RenderProfile {
+        RenderProfile::PlainText
     }
 
     fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {
@@ -369,7 +369,7 @@ mod tests {
             None,
         );
         assert_eq!(p.id(), "amazon");
-        assert_eq!(p.text_format(), TextFormat::PlainText);
+        assert_eq!(p.render_profile(), RenderProfile::PlainText);
     }
 
     #[test]

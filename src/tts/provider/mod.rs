@@ -1,5 +1,6 @@
 pub mod amazon;
 pub mod azure;
+pub mod edge;
 pub mod google;
 pub mod openai;
 
@@ -44,6 +45,22 @@ impl TextFormat {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderProfile {
+    PlainText,
+    AzureSsml,
+    EdgeSsml,
+}
+
+impl RenderProfile {
+    pub fn text_format(self) -> TextFormat {
+        match self {
+            Self::PlainText => TextFormat::PlainText,
+            Self::AzureSsml | Self::EdgeSsml => TextFormat::Ssml,
+        }
+    }
+}
+
 /// A prepared synthesis job: the payload has already been rendered from
 /// the semantic IR into whatever string format the provider wants. The
 /// provider POSTs `payload` verbatim; the cache hashes the exact bytes
@@ -76,7 +93,7 @@ pub struct SynthesisRequest {
 
 pub trait TtsProvider: Send + Sync {
     fn id(&self) -> &'static str;
-    fn text_format(&self) -> TextFormat;
+    fn render_profile(&self) -> RenderProfile;
     fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError>;
 }
 
@@ -103,6 +120,7 @@ pub enum ProviderSelection {
         region: String,
         session_token: Option<String>,
     },
+    Edge,
 }
 
 pub fn build(selection: ProviderSelection) -> Arc<dyn TtsProvider> {
@@ -127,5 +145,6 @@ pub fn build(selection: ProviderSelection) -> Arc<dyn TtsProvider> {
             region,
             session_token,
         )),
+        ProviderSelection::Edge => Arc::new(edge::EdgeTtsProvider::new()),
     }
 }

@@ -178,7 +178,7 @@ mod tests {
     use crate::template::frontmatter::{TtsSource, TtsSpec};
     use crate::tts::cache::TtsCache;
     use crate::tts::error::TtsError;
-    use crate::tts::provider::{AudioFormat, SynthesisRequest, TextFormat, TtsProvider};
+    use crate::tts::provider::{AudioFormat, RenderProfile, SynthesisRequest, TtsProvider};
     use crate::tts::service::{TtsService, TtsServiceConfig};
     use crate::tts::template::TemplateSource;
     use indexmap::IndexMap;
@@ -201,8 +201,8 @@ mod tests {
             "mock"
         }
 
-        fn text_format(&self) -> TextFormat {
-            TextFormat::PlainText
+        fn render_profile(&self) -> RenderProfile {
+            RenderProfile::PlainText
         }
 
         fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {

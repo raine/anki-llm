@@ -77,7 +77,7 @@ pub struct VoicesArgs {
     #[arg(long)]
     pub lang: Option<String>,
 
-    /// Pre-filter by provider id (openai, azure, google, amazon).
+    /// Pre-filter by provider id (openai, azure, google, amazon, edge).
     #[arg(long)]
     pub provider: Option<String>,
 

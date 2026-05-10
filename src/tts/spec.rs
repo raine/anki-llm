@@ -3,7 +3,7 @@ use anyhow::{Context, Result, bail};
 use crate::config::store::read_config;
 use crate::template::frontmatter::{TtsSource, TtsSpec};
 
-use super::provider::{AudioFormat, ProviderSelection};
+use super::provider::{AudioFormat, ProviderSelection, RenderProfile};
 use super::template::TemplateSource;
 
 /// Typed provider identity for a resolved spec. Carries provider-specific
@@ -29,6 +29,7 @@ pub enum ResolvedProvider {
         region: String,
         session_token: Option<String>,
     },
+    Edge,
 }
 
 impl ResolvedProvider {
@@ -38,6 +39,7 @@ impl ResolvedProvider {
             Self::Azure { .. } => "azure",
             Self::Google { .. } => "google",
             Self::Amazon { .. } => "amazon",
+            Self::Edge => "edge",
         }
     }
 
@@ -51,6 +53,17 @@ impl ResolvedProvider {
             Self::Azure { region, .. } => Some(super::provider::azure::endpoint_identity(region)),
             Self::Google { .. } => Some(super::provider::google::endpoint_identity()),
             Self::Amazon { region, .. } => Some(super::provider::amazon::endpoint_identity(region)),
+            Self::Edge => Some(super::provider::edge::endpoint_identity()),
+        }
+    }
+
+    pub fn render_profile(&self) -> RenderProfile {
+        match self {
+            Self::OpenAi { .. } | Self::Google { .. } | Self::Amazon { .. } => {
+                RenderProfile::PlainText
+            }
+            Self::Azure { .. } => RenderProfile::AzureSsml,
+            Self::Edge => RenderProfile::EdgeSsml,
         }
     }
 
@@ -82,6 +95,7 @@ impl ResolvedProvider {
                 region,
                 session_token,
             },
+            Self::Edge => ProviderSelection::Edge,
         }
     }
 }
@@ -223,6 +237,7 @@ pub fn resolve(spec: &TtsSpec, overrides: &CliOverrides) -> Result<ResolvedTtsSp
 
             ResolvedProvider::Google { api_key }
         }
+        "edge" => ResolvedProvider::Edge,
         "amazon" => {
             // CLI > env > config for each of access key id, secret,
             // and region. Session token is env-only (standard AWS env).
@@ -297,7 +312,9 @@ pub fn resolve(spec: &TtsSpec, overrides: &CliOverrides) -> Result<ResolvedTtsSp
             }
         }
         other => {
-            bail!("unknown TTS provider '{other}' (expected: openai, azure, google, or amazon)")
+            bail!(
+                "unknown TTS provider '{other}' (expected: openai, azure, google, amazon, or edge)"
+            )
         }
     };
 
@@ -310,6 +327,7 @@ pub fn resolve(spec: &TtsSpec, overrides: &CliOverrides) -> Result<ResolvedTtsSp
         ResolvedProvider::Azure { .. } => (None, None),
         ResolvedProvider::Google { .. } => (None, spec.speed),
         ResolvedProvider::Amazon { .. } => (spec.model.clone(), None),
+        ResolvedProvider::Edge => (None, spec.speed),
         ResolvedProvider::OpenAi { .. } => (spec.model.clone(), spec.speed),
     };
 
@@ -471,6 +489,36 @@ mod tests {
         // Azure drops model/speed unconditionally.
         assert!(r.model.is_none());
         assert!(r.speed.is_none());
+    }
+
+    #[test]
+    fn edge_resolves_without_credentials_and_preserves_speed() {
+        let mut s = spec(Some("front"), None);
+        s.provider = Some("edge".into());
+        s.voice = "ja-JP-NanamiNeural".into();
+        s.model = Some("ignored".into());
+        s.speed = Some(1.25);
+        let ov = CliOverrides {
+            api_key: None,
+            api_base_url: None,
+            azure_region: None,
+            aws_access_key_id: None,
+            aws_secret_access_key: None,
+            aws_region: None,
+            batch_size: 5,
+            retries: 3,
+            force: false,
+            dry_run: false,
+        };
+        let r = resolve(&s, &ov).unwrap();
+        assert_eq!(r.provider.id(), "edge");
+        assert_eq!(r.provider.render_profile(), RenderProfile::EdgeSsml);
+        assert_eq!(
+            r.provider.endpoint_identity().as_deref(),
+            Some("wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1")
+        );
+        assert!(r.model.is_none());
+        assert_eq!(r.speed, Some(1.25));
     }
 
     #[test]
