@@ -23,9 +23,7 @@
 
             src = ./.;
 
-            cargoLock = {
-              lockFile = ./Cargo.lock;
-            };
+            cargoHash = pkgs.lib.fakeHash;
 
             doCheck = false;
 
