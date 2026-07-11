@@ -17,15 +17,29 @@
           pkgs = nixpkgs.legacyPackages.${system};
         in
         {
-          default = pkgs.rustPlatform.buildRustPackage {
+          default = pkgs.stdenv.mkDerivation {
             pname = cargoToml.package.name;
             version = cargoToml.package.version;
 
             src = ./.;
 
-            cargoHash = pkgs.lib.fakeHash;
+            nativeBuildInputs = with pkgs; [
+              cargo
+              rustc
+            ];
 
-            doCheck = false;
+            buildPhase = ''
+              runHook preBuild
+              export CARGO_HOME="$TMPDIR/cargo-home"
+              cargo build --release --locked
+              runHook postBuild
+            '';
+
+            installPhase = ''
+              runHook preInstall
+              install -Dm755 target/release/anki-llm "$out/bin/anki-llm"
+              runHook postInstall
+            '';
 
             meta = with pkgs.lib; {
               description = "A command-line interface for bulk-processing Anki flashcards with LLMs";
