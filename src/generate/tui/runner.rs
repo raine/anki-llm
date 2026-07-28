@@ -314,6 +314,7 @@ pub fn run_tui(mut args: GenerateArgs) -> anyhow::Result<()> {
             model: args.model.clone(),
             api_base_url: args.api_base_url.clone(),
             api_key: args.api_key.clone(),
+            reasoning_effort: args.reasoning_effort.clone(),
             dry_run: args.dry_run,
             retries: args.retries,
             max_tokens: args.max_tokens,

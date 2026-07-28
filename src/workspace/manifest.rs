@@ -9,6 +9,8 @@ pub const MANIFEST_FILE_NAME: &str = "anki-llm.yaml";
 pub struct WorkspaceManifest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
 }
 
 pub fn read_manifest(path: &Path) -> Result<WorkspaceManifest> {
@@ -36,10 +38,12 @@ mod tests {
         let path = dir.path().join("anki-llm.yaml");
         let manifest = WorkspaceManifest {
             default_model: Some("gpt-5".into()),
+            reasoning_effort: Some("low".into()),
         };
         write_manifest(&path, &manifest).unwrap();
         let loaded = read_manifest(&path).unwrap();
         assert_eq!(loaded.default_model, Some("gpt-5".into()));
+        assert_eq!(loaded.reasoning_effort, Some("low".into()));
     }
 
     #[test]

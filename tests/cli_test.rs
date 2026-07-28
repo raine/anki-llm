@@ -80,6 +80,95 @@ fn config_set_and_get_round_trip() {
 }
 
 #[test]
+fn config_reasoning_effort_set_get_and_unset() {
+    let tmp = tempfile::tempdir().unwrap();
+    Command::cargo_bin("anki-llm")
+        .unwrap()
+        .env("HOME", tmp.path())
+        .args(["config", "set", "reasoning_effort", " low "])
+        .assert()
+        .success();
+    Command::cargo_bin("anki-llm")
+        .unwrap()
+        .env("HOME", tmp.path())
+        .args(["config", "get", "reasoning_effort"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("low"));
+    Command::cargo_bin("anki-llm")
+        .unwrap()
+        .env("HOME", tmp.path())
+        .args(["config", "unset", "reasoning_effort"])
+        .assert()
+        .success();
+    Command::cargo_bin("anki-llm")
+        .unwrap()
+        .env("HOME", tmp.path())
+        .args(["config", "get", "reasoning_effort"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Not set"));
+}
+
+#[test]
+fn config_rejects_empty_reasoning_effort() {
+    let tmp = tempfile::tempdir().unwrap();
+    Command::cargo_bin("anki-llm")
+        .unwrap()
+        .env("HOME", tmp.path())
+        .args(["config", "set", "reasoning_effort", "  "])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("must not be empty"));
+}
+
+#[test]
+fn llm_commands_accept_reasoning_effort() {
+    let process_file = Cli::parse_from([
+        "anki-llm",
+        "process-file",
+        "input.csv",
+        "--prompt",
+        "prompt.md",
+        "--output",
+        "output.csv",
+        "--reasoning-effort",
+        "low",
+    ]);
+    let Commands::ProcessFile(args) = process_file.command else {
+        panic!("expected ProcessFile");
+    };
+    assert_eq!(args.reasoning_effort.as_deref(), Some("low"));
+
+    let process_deck = Cli::parse_from([
+        "anki-llm",
+        "process-deck",
+        "Deck",
+        "--prompt",
+        "prompt.md",
+        "--reasoning-effort",
+        "medium",
+    ]);
+    let Commands::ProcessDeck(args) = process_deck.command else {
+        panic!("expected ProcessDeck");
+    };
+    assert_eq!(args.reasoning_effort.as_deref(), Some("medium"));
+
+    let generate = Cli::parse_from(["anki-llm", "generate", "term", "--reasoning-effort", "high"]);
+    let Commands::Generate(args) = generate.command else {
+        panic!("expected Generate");
+    };
+    assert_eq!(args.reasoning_effort.as_deref(), Some("high"));
+
+    let generate_init =
+        Cli::parse_from(["anki-llm", "generate-init", "--reasoning-effort", "xhigh"]);
+    let Commands::GenerateInit(args) = generate_init.command else {
+        panic!("expected GenerateInit");
+    };
+    assert_eq!(args.reasoning_effort.as_deref(), Some("xhigh"));
+}
+
+#[test]
 fn query_docs_prints_documentation() {
     Command::cargo_bin("anki-llm")
         .unwrap()

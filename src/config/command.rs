@@ -6,8 +6,17 @@ use crate::config::store::{self, read_config, write_config};
 pub fn run(action: ConfigAction) -> Result<()> {
     match action {
         ConfigAction::Set { key, value } => {
+            let value = if key == "reasoning_effort" {
+                let value = value.trim();
+                if value.is_empty() {
+                    anyhow::bail!("reasoning effort must not be empty");
+                }
+                value
+            } else {
+                &value
+            };
             let mut config = read_config()?;
-            if !config.set(&key, &value) {
+            if !config.set(&key, value) {
                 anyhow::bail!("Unknown config key: {key}");
             }
             write_config(&config)?;
@@ -25,6 +34,18 @@ pub fn run(action: ConfigAction) -> Result<()> {
                     println!("\x1b[33mNot set\x1b[0m");
                 }
             }
+        }
+        ConfigAction::Unset { key } => {
+            let mut config = read_config()?;
+            if !config.unset(&key) {
+                anyhow::bail!("Unknown config key: {key}");
+            }
+            write_config(&config)?;
+            println!("\x1b[32m✓\x1b[0m Unset \"{key}\"");
+            println!(
+                "\x1b[2m  Config file: {}\x1b[0m",
+                store::config_path()?.display()
+            );
         }
         ConfigAction::List => {
             let config = read_config()?;

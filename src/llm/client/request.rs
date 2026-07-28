@@ -20,6 +20,7 @@ pub(super) fn structured_chat_request<'a>(
     model: &'a str,
     system_prompt: Option<&'a str>,
     user_prompt: &'a str,
+    reasoning_effort: Option<&'a str>,
     temperature: Option<f64>,
     max_tokens: Option<u64>,
     response_format: Option<&'a ResponseFormat>,
@@ -39,6 +40,7 @@ pub(super) fn structured_chat_request<'a>(
     ChatRequest {
         model,
         messages,
+        reasoning_effort,
         temperature,
         max_tokens,
         response_format,
@@ -51,6 +53,7 @@ pub(super) fn structured_chat_request<'a>(
 pub(super) fn thinking_stream_chat_request<'a>(
     model: &'a str,
     prompt: &'a str,
+    reasoning_effort: Option<&'a str>,
     temperature: Option<f64>,
     max_tokens: Option<u64>,
     format: ThinkingFormat,
@@ -61,6 +64,7 @@ pub(super) fn thinking_stream_chat_request<'a>(
             role: "user",
             content: prompt,
         }],
+        reasoning_effort,
         temperature,
         max_tokens,
         response_format: None,
@@ -86,6 +90,8 @@ pub(super) fn thinking_stream_chat_request<'a>(
 pub(super) struct ChatRequest<'a> {
     model: &'a str,
     messages: Vec<ChatMessage<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,6 +140,7 @@ mod tests {
             "gpt-5",
             Some("system prompt"),
             "user prompt",
+            Some("low"),
             Some(0.2),
             Some(512),
             Some(&response_format),
@@ -147,6 +154,7 @@ mod tests {
                     { "role": "system", "content": "system prompt" },
                     { "role": "user", "content": "user prompt" }
                 ],
+                "reasoning_effort": "low",
                 "temperature": 0.2,
                 "max_tokens": 512,
                 "response_format": {
@@ -163,7 +171,7 @@ mod tests {
 
     #[test]
     fn structured_request_omits_optional_fields_when_absent() {
-        let request = structured_chat_request("gpt-5", None, "user prompt", None, None, None);
+        let request = structured_chat_request("gpt-5", None, "user prompt", None, None, None, None);
 
         assert_eq!(
             serde_json::to_value(request).unwrap(),
@@ -181,6 +189,7 @@ mod tests {
         let request = thinking_stream_chat_request(
             "gemini-2.5-flash",
             "think aloud",
+            Some("low"),
             Some(0.4),
             Some(256),
             ThinkingFormat::GeminiThoughtTags,
@@ -193,6 +202,7 @@ mod tests {
                 "messages": [
                     { "role": "user", "content": "think aloud" }
                 ],
+                "reasoning_effort": "low",
                 "temperature": 0.4,
                 "max_tokens": 256,
                 "stream": true,
@@ -214,6 +224,7 @@ mod tests {
         let request = thinking_stream_chat_request(
             "deepseek-v4-pro",
             "think aloud",
+            None,
             None,
             None,
             ThinkingFormat::ReasoningContent,

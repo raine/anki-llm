@@ -395,6 +395,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         model: args.model.as_deref(),
         api_base_url: args.api_base_url.as_deref(),
         api_key: args.api_key.as_deref(),
+        reasoning_effort: args.reasoning_effort.as_deref(),
         batch_size: Some(args.batch_size),
         max_tokens: args.max_tokens,
         temperature: args.temperature,

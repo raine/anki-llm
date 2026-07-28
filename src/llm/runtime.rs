@@ -8,6 +8,7 @@ pub struct RuntimeConfig {
     pub model: String,
     pub api_key: Option<String>,
     pub api_base_url: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u64>,
     pub batch_size: u32,
@@ -19,6 +20,7 @@ pub struct RuntimeConfigArgs<'a> {
     pub model: Option<&'a str>,
     pub api_base_url: Option<&'a str>,
     pub api_key: Option<&'a str>,
+    pub reasoning_effort: Option<&'a str>,
     pub batch_size: Option<u32>,
     pub max_tokens: Option<u64>,
     pub temperature: Option<f64>,
@@ -33,6 +35,45 @@ pub fn build_runtime_config(args: RuntimeConfigArgs<'_>) -> Result<RuntimeConfig
     build_runtime_config_with_app_config(args, crate::config::store::read_config().ok())
 }
 
+pub fn resolve_reasoning_effort(cli_value: Option<&str>) -> Result<Option<String>> {
+    let app_config = crate::config::store::read_config().ok();
+    resolve_reasoning_effort_with_app_config(cli_value, app_config.as_ref())
+}
+
+fn resolve_reasoning_effort_with_app_config(
+    cli_value: Option<&str>,
+    app_config: Option<&crate::config::store::AppConfig>,
+) -> Result<Option<String>> {
+    let workspace_value = crate::workspace::context::Workspace::effective()
+        .and_then(|workspace| workspace.manifest.reasoning_effort);
+    resolve_reasoning_effort_from_sources(
+        cli_value.map(str::to_owned),
+        std::env::var("ANKI_LLM_REASONING_EFFORT").ok(),
+        workspace_value,
+        app_config.and_then(|config| config.reasoning_effort.clone()),
+    )
+}
+
+fn resolve_reasoning_effort_from_sources(
+    cli_value: Option<String>,
+    env_value: Option<String>,
+    workspace_value: Option<String>,
+    global_value: Option<String>,
+) -> Result<Option<String>> {
+    cli_value
+        .or(env_value)
+        .or(workspace_value)
+        .or(global_value)
+        .map(|value| {
+            let value = value.trim();
+            if value.is_empty() {
+                bail!("reasoning effort must not be empty");
+            }
+            Ok(value.to_string())
+        })
+        .transpose()
+}
+
 fn build_runtime_config_with_app_config(
     args: RuntimeConfigArgs<'_>,
     app_config: Option<crate::config::store::AppConfig>,
@@ -44,6 +85,8 @@ fn build_runtime_config_with_app_config(
     {
         bail!("temperature must be between 0 and 2, got {t}");
     }
+    let reasoning_effort =
+        resolve_reasoning_effort_with_app_config(args.reasoning_effort, app_config.as_ref())?;
 
     // Resolve base URL: CLI flag > ANKI_LLM_API_BASE_URL env > config file > provider auto-detect
     // Track whether the user explicitly configured a custom endpoint, because
@@ -108,6 +151,7 @@ fn build_runtime_config_with_app_config(
         model,
         api_key,
         api_base_url,
+        reasoning_effort,
         temperature,
         max_tokens: args.max_tokens,
         batch_size: args.batch_size.unwrap_or(5),
@@ -120,6 +164,61 @@ fn build_runtime_config_with_app_config(
 mod tests {
     use super::*;
 
+    fn effort_sources(
+        cli: Option<&str>,
+        env: Option<&str>,
+        workspace: Option<&str>,
+        global: Option<&str>,
+    ) -> Result<Option<String>> {
+        resolve_reasoning_effort_from_sources(
+            cli.map(str::to_owned),
+            env.map(str::to_owned),
+            workspace.map(str::to_owned),
+            global.map(str::to_owned),
+        )
+    }
+
+    #[test]
+    fn reasoning_effort_uses_source_precedence() {
+        assert_eq!(
+            effort_sources(Some("max"), Some("high"), Some("medium"), Some("low"))
+                .unwrap()
+                .as_deref(),
+            Some("max")
+        );
+        assert_eq!(
+            effort_sources(None, Some("high"), Some("medium"), Some("low"))
+                .unwrap()
+                .as_deref(),
+            Some("high")
+        );
+        assert_eq!(
+            effort_sources(None, None, Some("medium"), Some("low"))
+                .unwrap()
+                .as_deref(),
+            Some("medium")
+        );
+        assert_eq!(
+            effort_sources(None, None, None, Some("low"))
+                .unwrap()
+                .as_deref(),
+            Some("low")
+        );
+        assert_eq!(effort_sources(None, None, None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn reasoning_effort_trims_and_rejects_empty_values() {
+        assert_eq!(
+            effort_sources(Some("  xhigh  "), None, None, None)
+                .unwrap()
+                .as_deref(),
+            Some("xhigh")
+        );
+        assert!(effort_sources(Some(" \t "), None, None, None).is_err());
+        assert!(effort_sources(None, Some(""), Some("low"), None).is_err());
+    }
+
     #[test]
     fn rejects_temperature_out_of_range() {
         for bad in [-0.1, 2.1, -1.0, 100.0] {
@@ -127,6 +226,7 @@ mod tests {
                 model: Some("gpt-5-mini"),
                 api_base_url: None,
                 api_key: None,
+                reasoning_effort: None,
                 batch_size: None,
                 max_tokens: None,
                 temperature: Some(bad),
@@ -145,6 +245,7 @@ mod tests {
                 model: Some("gpt-5-mini"),
                 api_base_url: None,
                 api_key: None,
+                reasoning_effort: None,
                 batch_size: None,
                 max_tokens: None,
                 temperature: Some(ok),
@@ -162,6 +263,7 @@ mod tests {
             model: Some("meta-llama/llama-3-8b-instruct"),
             api_base_url: Some("http://localhost:11434/v1"),
             api_key: None,
+            reasoning_effort: None,
             batch_size: None,
             max_tokens: None,
             temperature: None,
@@ -183,6 +285,7 @@ mod tests {
             model: Some("gpt-5-mini"),
             api_base_url: None,
             api_key: None,
+            reasoning_effort: None,
             batch_size: None,
             max_tokens: None,
             temperature: Some(0.7),
@@ -201,6 +304,7 @@ mod tests {
                 model: Some("gemini-2.5-flash"),
                 api_base_url: None,
                 api_key: None,
+                reasoning_effort: None,
                 batch_size: None,
                 max_tokens: None,
                 temperature: None,
@@ -220,6 +324,7 @@ mod tests {
                 model: Some("gemini-2.5-flash"),
                 api_base_url: None,
                 api_key: None,
+                reasoning_effort: None,
                 batch_size: None,
                 max_tokens: None,
                 temperature: None,
@@ -241,6 +346,7 @@ mod tests {
             model: Some("gpt-5"),
             api_base_url: None,
             api_key: None,
+            reasoning_effort: None,
             batch_size: None,
             max_tokens: None,
             temperature: Some(0.7),
@@ -257,6 +363,7 @@ mod tests {
             model: Some("gemini-2.5-flash"),
             api_base_url: None,
             api_key: None,
+            reasoning_effort: None,
             batch_size: None,
             max_tokens: None,
             temperature: Some(0.7),
@@ -273,6 +380,7 @@ mod tests {
             model: Some("gpt-5-mini"),
             api_base_url: None,
             api_key: None,
+            reasoning_effort: None,
             batch_size: None,
             max_tokens: None,
             temperature: None,
@@ -292,6 +400,7 @@ mod tests {
             model: Some("llama3"),
             api_base_url: Some("http://my-server.lan:8080/v1"),
             api_key: None,
+            reasoning_effort: None,
             batch_size: None,
             max_tokens: None,
             temperature: None,
@@ -313,6 +422,7 @@ mod tests {
             model: Some("custom-model"),
             api_base_url: Some("https://openrouter.ai/api/v1"),
             api_key: Some("sk-test-key"),
+            reasoning_effort: None,
             batch_size: None,
             max_tokens: None,
             temperature: None,

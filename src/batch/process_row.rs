@@ -153,6 +153,13 @@ mod tests {
     use std::sync::mpsc;
 
     fn client_with_response(content: &str) -> (Arc<LlmClient>, mpsc::Receiver<Value>) {
+        client_with_response_and_effort(content, None)
+    }
+
+    fn client_with_response_and_effort(
+        content: &str,
+        reasoning_effort: Option<&str>,
+    ) -> (Arc<LlmClient>, mpsc::Receiver<Value>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let content = content.to_string();
@@ -204,6 +211,7 @@ mod tests {
             model: "test-model".into(),
             api_key: None,
             api_base_url: Some(format!("http://{address}")),
+            reasoning_effort: reasoning_effort.map(str::to_owned),
             temperature: None,
             max_tokens: None,
             batch_size: 1,
@@ -261,6 +269,24 @@ mod tests {
             request["response_format"]["json_schema"]["schema"]["required"],
             json!(["Reading", "Explanation"])
         );
+    }
+
+    #[test]
+    fn custom_endpoint_receives_reasoning_effort_with_structured_output() {
+        let (client, request_rx) =
+            client_with_response_and_effort(r#"{"Reading":"read"}"#, Some("low"));
+        let process = build_process_fn(process_config(client, &["Reading"], true));
+        let row = Row::from([
+            ("Kanji".into(), json!("漢字")),
+            ("Reading".into(), json!("")),
+            ("SourceOnly".into(), json!("metadata")),
+        ]);
+
+        process(&row).unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert_eq!(request["reasoning_effort"], "low");
+        assert_eq!(request["response_format"]["type"], "json_schema");
     }
 
     #[test]

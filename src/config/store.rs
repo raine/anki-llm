@@ -22,6 +22,8 @@ pub struct AppConfig {
     /// Custom API base URL (e.g. OpenRouter, Ollama, or any OpenAI-compatible endpoint).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
     /// Default TTS provider identifier (e.g. "openai").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tts_provider: Option<String>,
@@ -69,6 +71,7 @@ impl AppConfig {
                 .as_ref()
                 .map(|p| p.display().to_string()),
             "api_base_url" => self.api_base_url.clone(),
+            "reasoning_effort" => self.reasoning_effort.clone(),
             "tts_provider" => self.tts_provider.clone(),
             "tts_voice" => self.tts_voice.clone(),
             "tts_model" => self.tts_model.clone(),
@@ -105,6 +108,10 @@ impl AppConfig {
             }
             "api_base_url" => {
                 self.api_base_url = Some(value.to_string());
+                true
+            }
+            "reasoning_effort" => {
+                self.reasoning_effort = Some(value.to_string());
                 true
             }
             "tts_provider" => {
@@ -155,6 +162,31 @@ impl AppConfig {
         }
     }
 
+    /// Unset a config value by key name. Returns true if the key is known.
+    pub fn unset(&mut self, key: &str) -> bool {
+        match key {
+            "model" => self.model = None,
+            "nerd_font" => self.nerd_font = None,
+            "gemini_thinking_enabled" => self.gemini_thinking_enabled = None,
+            "default_workspace" => self.default_workspace = None,
+            "api_base_url" => self.api_base_url = None,
+            "reasoning_effort" => self.reasoning_effort = None,
+            "tts_provider" => self.tts_provider = None,
+            "tts_voice" => self.tts_voice = None,
+            "tts_model" => self.tts_model = None,
+            "tts_format" => self.tts_format = None,
+            "azure_tts_key" => self.azure_tts_key = None,
+            "azure_tts_region" => self.azure_tts_region = None,
+            "anki_connect_url" => self.anki_connect_url = None,
+            "google_tts_key" => self.google_tts_key = None,
+            "aws_tts_access_key_id" => self.aws_tts_access_key_id = None,
+            "aws_tts_secret_access_key" => self.aws_tts_secret_access_key = None,
+            "aws_tts_region" => self.aws_tts_region = None,
+            _ => return false,
+        }
+        true
+    }
+
     /// List all set key-value pairs (for `config list`).
     pub fn entries(&self) -> Vec<(String, String)> {
         let mut out = Vec::new();
@@ -172,6 +204,9 @@ impl AppConfig {
         }
         if let Some(ref v) = self.api_base_url {
             out.push(("api_base_url".into(), v.clone()));
+        }
+        if let Some(ref v) = self.reasoning_effort {
+            out.push(("reasoning_effort".into(), v.clone()));
         }
         if let Some(ref v) = self.tts_provider {
             out.push(("tts_provider".into(), v.clone()));
@@ -407,6 +442,11 @@ mod tests {
         assert_eq!(config.gemini_thinking_enabled, Some(false));
         assert!(config.set("gemini_thinking_enabled", "true"));
         assert_eq!(config.gemini_thinking_enabled, Some(true));
+        assert!(config.set("reasoning_effort", "low"));
+        assert_eq!(config.get("reasoning_effort"), Some("low".into()));
+        assert!(config.unset("reasoning_effort"));
+        assert_eq!(config.get("reasoning_effort"), None);
+        assert!(!config.unset("unknown_key"));
         assert!(config.set("default_workspace", "/tmp/ws"));
         assert_eq!(config.get("default_workspace"), Some("/tmp/ws".into()));
         assert!(!config.set("unknown_key", "value"));

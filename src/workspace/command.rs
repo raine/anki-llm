@@ -107,6 +107,9 @@ fn print_workspace(workspace: &Workspace) {
     if let Some(ref model) = workspace.manifest.default_model {
         println!("  Default model: {}", model);
     }
+    if let Some(ref reasoning_effort) = workspace.manifest.reasoning_effort {
+        println!("  Reasoning effort: {}", reasoning_effort);
+    }
     println!("  Prompts: {}/", workspace.prompts_dir().display());
     if workspace.note_types_dir().exists() {
         println!("  Note-types: {}/", workspace.note_types_dir().display());

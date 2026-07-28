@@ -197,14 +197,73 @@ anki-llm process-file input.yaml -o output.yaml -p prompt.md \
 
 ### Provider configuration options
 
-| Setting                 | CLI flag         | Environment variable    | Config key                |
-| ----------------------- | ---------------- | ----------------------- | ------------------------- |
-| API base URL            | `--api-base-url` | `ANKI_LLM_API_BASE_URL` | `api_base_url`            |
-| API key                 | `--api-key`      | `ANKI_LLM_API_KEY`      | -                         |
-| Model                   | `--model` / `-m` | -                       | `model`                   |
-| Gemini thinking         | -                | -                       | `gemini_thinking_enabled` |
+| Setting | CLI flag | Environment variable | Global key | Workspace key |
+| --- | --- | --- | --- | --- |
+| API base URL | `--api-base-url` | `ANKI_LLM_API_BASE_URL` | `api_base_url` | - |
+| API key | `--api-key` | `ANKI_LLM_API_KEY` | - | - |
+| Model | `--model` / `-m` | - | `model` | `default_model` |
+| Reasoning effort | `--reasoning-effort` | `ANKI_LLM_REASONING_EFFORT` | `reasoning_effort` | `reasoning_effort` |
+| Gemini thinking | - | - | `gemini_thinking_enabled` | - |
 
-**Precedence:** CLI flag > environment variable > config file > auto-detect.
+API base URL and API key use this precedence: CLI flag, environment variable,
+global config, then provider auto-detection. Model resolution also checks the
+workspace before global configuration.
+
+### Reasoning effort
+
+Reasoning effort is optional execution configuration for OpenAI-compatible Chat
+Completions endpoints. Set it globally:
+
+```bash
+anki-llm config set reasoning_effort low
+```
+
+Set it for one shell or workspace:
+
+```bash
+export ANKI_LLM_REASONING_EFFORT=low
+```
+
+```yaml
+# anki-llm.yaml
+default_model: gpt-5.6-sol
+reasoning_effort: low
+```
+
+Override it for one LLM command:
+
+```bash
+anki-llm process-file input.csv \
+  --output output.csv \
+  --prompt prompt.md \
+  --reasoning-effort high
+```
+
+The resolution order is command-line flag, environment variable, workspace,
+global configuration, then unset. An unset value omits `reasoning_effort` from
+the request so the provider chooses its default. Values are trimmed and must be
+non-empty. Accepted values depend on the provider and model. Common values
+include `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`.
+
+The field stays provider-neutral and top-level in the standard
+`POST /v1/chat/completions` request. For example, a local compatible endpoint
+can receive it without provider-specific transport configuration:
+
+```bash
+anki-llm process-file input.csv \
+  --output output.csv \
+  --prompt prompt.md \
+  --model gpt-5.6-sol \
+  --reasoning-effort low \
+  --api-base-url http://127.0.0.1:18765/v1 \
+  --api-key unused
+```
+
+Remove the global setting with:
+
+```bash
+anki-llm config unset reasoning_effort
+```
 
 For built-in providers (OpenAI, Gemini, DeepSeek, xAI), the provider-specific
 environment variables (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`,
@@ -263,6 +322,10 @@ URL) so you don't have to repeat flags on every command.
 # Set or override defaults
 anki-llm config set model gpt-4o-mini
 anki-llm config set api_base_url https://openrouter.ai/api/v1
+anki-llm config set reasoning_effort low
+
+# Remove a stored default
+anki-llm config unset reasoning_effort
 
 # WSL or remote Anki: point at a non-default AnkiConnect host
 anki-llm config set anki_connect_url http://192.168.1.100:8765
@@ -300,8 +363,8 @@ anki-llm config set default_workspace ~/anki
 ```
 
 This single setting provides the workspace's `prompts/`, `note-types/`, and
-`anki-llm.yaml` (default model) as fallbacks whenever you run anki-llm outside
-a workspace.
+`anki-llm.yaml` settings as fallbacks whenever you run anki-llm outside a
+workspace.
 
 ### Workspaces (recommended for version control)
 
@@ -320,15 +383,16 @@ mkdir prompts
 anki-llm workspace info
 ```
 
-`anki-llm.yaml` is optional; use it for per-directory settings like a default
-model:
+`anki-llm.yaml` is optional; use it for per-directory settings such as the
+default model and reasoning effort:
 
 ```yaml
 default_model: gemini-2.5-flash
+reasoning_effort: low
 ```
 
-This takes precedence over the config file model but yields to `--model` on the
-CLI.
+Workspace settings take precedence over global configuration. Command-line flags
+and environment variables take precedence over the workspace reasoning effort.
 
 Workspaces are especially useful if you want to keep prompts in git alongside
 your deck data.

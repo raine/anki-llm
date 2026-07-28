@@ -246,6 +246,10 @@ pub struct ProcessFileArgs {
     #[arg(long)]
     pub api_key: Option<String>,
 
+    /// Reasoning effort passed to the model provider
+    #[arg(long)]
+    pub reasoning_effort: Option<String>,
+
     /// Number of concurrent requests
     #[arg(long, short = 'b', default_value_t = DEFAULT_BATCH_SIZE, value_parser = clap::value_parser!(u32).range(1..))]
     pub batch_size: u32,
@@ -326,6 +330,10 @@ pub struct ProcessDeckArgs {
     #[arg(long)]
     pub api_key: Option<String>,
 
+    /// Reasoning effort passed to the model provider
+    #[arg(long)]
+    pub reasoning_effort: Option<String>,
+
     /// Number of concurrent requests
     #[arg(long, short = 'b', default_value_t = DEFAULT_BATCH_SIZE, value_parser = clap::value_parser!(u32).range(1..))]
     pub batch_size: u32,
@@ -399,6 +407,11 @@ pub enum ConfigAction {
         /// Config value
         value: String,
     },
+    /// Unset a configuration value
+    Unset {
+        /// Config key
+        key: String,
+    },
     /// List all configuration settings
     List,
     /// Show the config file path
@@ -429,6 +442,10 @@ pub struct GenerateArgs {
     /// API key (overrides environment variables)
     #[arg(long)]
     pub api_key: Option<String>,
+
+    /// Reasoning effort passed to the model provider
+    #[arg(long)]
+    pub reasoning_effort: Option<String>,
 
     /// Preview without importing to Anki
     #[arg(long, short = 'd')]
@@ -479,6 +496,10 @@ pub struct GenerateInitArgs {
     /// API key (overrides environment variables)
     #[arg(long)]
     pub api_key: Option<String>,
+
+    /// Reasoning effort passed to the model provider
+    #[arg(long)]
+    pub reasoning_effort: Option<String>,
 
     /// LLM temperature (0-2)
     #[arg(long, short = 't')]

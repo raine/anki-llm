@@ -23,6 +23,7 @@ const STREAM_READ_TIMEOUT_SECS: u64 = 30;
 pub struct LlmClient {
     base_url: String,
     api_key: Option<String>,
+    reasoning_effort: Option<String>,
     agent: ureq::Agent,
     gemini_thinking_enabled: bool,
 }
@@ -48,6 +49,7 @@ impl LlmClient {
         Self {
             base_url,
             api_key: config.api_key.clone(),
+            reasoning_effort: config.reasoning_effort.clone(),
             agent,
             gemini_thinking_enabled: config.gemini_thinking_enabled,
         }
@@ -92,7 +94,14 @@ impl LlmClient {
         };
         on_reset();
 
-        let body = thinking_stream_chat_request(model, prompt, temperature, max_tokens, format);
+        let body = thinking_stream_chat_request(
+            model,
+            prompt,
+            self.reasoning_effort.as_deref(),
+            temperature,
+            max_tokens,
+            format,
+        );
         let response = self.send_chat_request(body, true)?;
         let result = read_stream_completion_with_idle_timeout(
             response.into_parts().1.into_reader(),
@@ -121,6 +130,7 @@ impl LlmClient {
             model,
             system_prompt,
             user_prompt,
+            self.reasoning_effort.as_deref(),
             temperature,
             max_tokens,
             response_format,
@@ -154,6 +164,7 @@ mod tests {
         LlmClient {
             base_url: base_url.to_string(),
             api_key: None,
+            reasoning_effort: None,
             agent: ureq::Agent::new_with_defaults(),
             gemini_thinking_enabled,
         }

@@ -9,6 +9,7 @@ use crate::config::store::{config_path, read_config};
 use crate::doctor::render::{print_check, print_header, print_section_title};
 use crate::doctor::report::{CheckResult, mask};
 use crate::llm::provider::resolve_model;
+use crate::llm::runtime::resolve_reasoning_effort;
 use crate::spinner::llm_spinner;
 use crate::workspace::context::Workspace;
 
@@ -158,6 +159,18 @@ const LLM_PROVIDERS: &[LlmProvider] = &[
 fn print_llm_section(check: bool) -> bool {
     print_section_title("LLM Providers");
     let mut failed = false;
+
+    match resolve_reasoning_effort(None) {
+        Ok(Some(value)) => emit(CheckResult::ok("Reasoning effort", value), &mut failed),
+        Ok(None) => emit(
+            CheckResult::ok("Reasoning effort", "provider default"),
+            &mut failed,
+        ),
+        Err(error) => emit(
+            CheckResult::fail("Reasoning effort", error.to_string()),
+            &mut failed,
+        ),
+    }
 
     for p in LLM_PROVIDERS {
         match env_value(p.env_var) {
