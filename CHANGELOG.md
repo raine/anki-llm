@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.0.19 (2026-07-28)
+
+- Generate multiple fields in one `process-file` or `process-deck` request, with validation and all-or-nothing updates that preserve existing data when a response fails.
+- Build or run `anki-llm` reproducibly on Linux and macOS with the new Nix flake.
+
 ## v2.0.18 (2026-05-10)
 
 - Add Microsoft Edge TTS support, including bundled Edge voices and no required API key. ([#6](https://github.com/raine/anki-llm/issues/6))
