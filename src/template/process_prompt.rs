@@ -4,9 +4,8 @@ use super::error::TemplateError;
 
 /// Frontmatter schema for `process-deck` / `process-file` prompts.
 ///
-/// Distinct from generate's `Frontmatter` — process prompts have no
-/// `field_map`, no tts, and only produce text output written to a
-/// single Anki field. Templates reference raw Anki field names.
+/// Distinct from generate's `Frontmatter`: process prompts have no
+/// `field_map` or tts configuration. Templates reference raw field names.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProcessPrompt {
@@ -23,13 +22,31 @@ pub struct ProcessPrompt {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProcessOutputBlock {
-    /// Anki field name that receives the LLM response text.
-    pub field: String,
+    /// Anki field name that receives an unstructured text response.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    /// Field names received together in a structured JSON response.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<String>,
     /// When true, only the content inside the last `<result>...</result>`
-    /// pair in the response is written to the field. If no tags are
+    /// pair in a single-field response is written to the field. If no tags are
     /// present, the row fails.
     #[serde(default)]
     pub require_result_tag: bool,
+}
+
+impl ProcessOutputBlock {
+    pub fn field_names(&self) -> Vec<String> {
+        self.field
+            .iter()
+            .cloned()
+            .chain(self.fields.iter().cloned())
+            .collect()
+    }
+
+    pub fn is_structured(&self) -> bool {
+        !self.fields.is_empty()
+    }
 }
 
 #[derive(Debug)]
@@ -44,7 +61,7 @@ pub fn parse(content: &str) -> Result<ParsedProcessPrompt, TemplateError> {
     let caps = re.captures(content).ok_or_else(|| {
         TemplateError::InvalidFrontmatter(
             "process-* prompts require a YAML frontmatter block enclosed by --- markers. \
-             Declare `output.field` (and optionally `output.require_result_tag`) there."
+             Declare `output.field` or `output.fields` there."
                 .into(),
         )
     })?;
@@ -56,9 +73,57 @@ pub fn parse(content: &str) -> Result<ParsedProcessPrompt, TemplateError> {
         TemplateError::InvalidFrontmatter(format!("Failed to parse frontmatter: {e}"))
     })?;
 
-    if frontmatter.output.field.trim().is_empty() {
+    let has_field = frontmatter.output.field.is_some();
+    let has_fields = !frontmatter.output.fields.is_empty();
+    if has_field == has_fields {
         return Err(TemplateError::InvalidFrontmatter(
-            "output.field is required and must be non-empty".into(),
+            "declare exactly one of output.field or output.fields".into(),
+        ));
+    }
+
+    if frontmatter
+        .output
+        .field
+        .as_ref()
+        .is_some_and(|field| field.trim().is_empty())
+    {
+        return Err(TemplateError::InvalidFrontmatter(
+            "output.field must be non-empty".into(),
+        ));
+    }
+
+    if has_fields && frontmatter.output.fields.len() < 2 {
+        return Err(TemplateError::InvalidFrontmatter(
+            "output.fields must contain at least two fields; use output.field for one field".into(),
+        ));
+    }
+
+    if frontmatter
+        .output
+        .fields
+        .iter()
+        .any(|field| field.trim().is_empty())
+    {
+        return Err(TemplateError::InvalidFrontmatter(
+            "output.fields entries must be non-empty".into(),
+        ));
+    }
+
+    let mut unique_fields = std::collections::HashSet::new();
+    if frontmatter
+        .output
+        .field_names()
+        .iter()
+        .any(|field| !unique_fields.insert(field))
+    {
+        return Err(TemplateError::InvalidFrontmatter(
+            "output fields must be unique".into(),
+        ));
+    }
+
+    if has_fields && frontmatter.output.require_result_tag {
+        return Err(TemplateError::InvalidFrontmatter(
+            "output.require_result_tag is only supported with output.field".into(),
         ));
     }
 
@@ -81,7 +146,7 @@ field: Hint\n\
 ---\n\n\
 body here";
         let parsed = parse(content).unwrap();
-        assert_eq!(parsed.frontmatter.output.field, "Hint");
+        assert_eq!(parsed.frontmatter.output.field.as_deref(), Some("Hint"));
         assert!(!parsed.frontmatter.output.require_result_tag);
         assert_eq!(parsed.body, "body here");
     }
@@ -100,6 +165,63 @@ English: {English}";
         assert_eq!(parsed.frontmatter.title.as_deref(), Some("Hint generator"));
         assert!(parsed.frontmatter.output.require_result_tag);
         assert_eq!(parsed.body, "English: {English}");
+    }
+
+    #[test]
+    fn parses_multi_field_prompt() {
+        let content = "---\n\
+output:\n  \
+fields:\n    - Reading\n    - Explanation\n    - KanjiBreakdown\n\
+---\n\n\
+Japanese: {Kanji}";
+        let parsed = parse(content).unwrap();
+        assert_eq!(
+            parsed.frontmatter.output.field_names(),
+            ["Reading", "Explanation", "KanjiBreakdown"]
+        );
+        assert!(parsed.frontmatter.output.is_structured());
+    }
+
+    #[test]
+    fn rejects_field_and_fields_together() {
+        let content = "---\n\
+output:\n  \
+field: Reading\n  \
+fields:\n    - Explanation\n\
+---\n\n\
+body";
+        assert!(parse(content).is_err());
+    }
+
+    #[test]
+    fn rejects_single_entry_fields_list() {
+        let content = "---\n\
+output:\n  \
+fields:\n    - Reading\n\
+---\n\n\
+body";
+        assert!(parse(content).is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_multi_fields() {
+        let content = "---\n\
+output:\n  \
+fields:\n    - Reading\n    - Reading\n\
+---\n\n\
+body";
+        assert!(parse(content).is_err());
+    }
+
+    #[test]
+    fn rejects_result_tags_for_multi_field_prompt() {
+        let content = "---\n\
+output:\n  \
+fields:\n    - Reading\n    - Explanation\n  \
+require_result_tag: true\n\
+---\n\n\
+body";
+        assert!(parse(content).is_err());
     }
 
     #[test]

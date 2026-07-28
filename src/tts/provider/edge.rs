@@ -77,7 +77,7 @@ fn connect_request(muid: &str) -> Result<tungstenite::handshake::client::Request
     let url = format!(
         "{SYNTH_URL}{TRUSTED_CLIENT_TOKEN}&ConnectionId={connection_id}&Sec-MS-GEC={gec}&Sec-MS-GEC-Version={SEC_MS_GEC_VERSION}",
         connection_id = random_request_id(),
-        gec = generate_sec_ms_gec(now_unix_secs()? as u64),
+        gec = generate_sec_ms_gec(now_unix_secs()?),
     );
     let mut request = url
         .into_client_request()

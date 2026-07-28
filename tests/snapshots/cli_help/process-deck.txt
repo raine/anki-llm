@@ -7,7 +7,7 @@ Arguments:
 
 Options:
   -q, --query <QUERY>                  Anki search query (e.g. "tag:leech", "prop:lapses>3", "deck:Japanese prop:lapses>5")
-  -p, --prompt <PROMPT>                Path to prompt template file (YAML frontmatter declares output.field)
+  -p, --prompt <PROMPT>                Path to prompt template file (frontmatter declares output.field or output.fields)
   -n, --note-type <NOTE_TYPE>          Filter by note type (required if deck contains multiple note types)
   -m, --model <MODEL>                  Model name
       --api-base-url <API_BASE_URL>    Custom API base URL (e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1)

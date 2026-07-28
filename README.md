@@ -438,7 +438,7 @@ output is piped.
 
 - `-o, --output`: Output file path (CSV or YAML).
 - `-p, --prompt`: Path to the prompt file. The prompt file **must** begin with a
-  YAML frontmatter block that declares the output field; see
+  YAML frontmatter block that declares one or more output fields; see
   [Prompt file format](#prompt-file-format).
 
 **Common options:**
@@ -483,10 +483,53 @@ Existing translation for reference: {English}
 Wrap your final answer in <result></result> tags.
 ```
 
-- `output.field`: the Anki field name that receives the LLM's response.
+- `output.field`: one field that receives the LLM's plain-text response. Existing
+  single-field prompts continue to use this form.
+- `output.fields`: two or more fields that receive one structured JSON response.
+  Every listed field must be returned as a non-empty string. Missing, empty,
+  non-string, or undeclared response fields fail the row.
 - `output.require_result_tag`: when `true`, only the content inside the last
-  `<result>...</result>` pair in the response is written; without tags, the row
-  fails. Lets the model "think out loud" before committing to an answer.
+  `<result>...</result>` pair in a single-field response is written; without
+  tags, the row fails. This option is valid with `output.field` only.
+
+A multi-field prompt uses this frontmatter shape:
+
+```markdown
+---
+output:
+  fields:
+    - Reading
+    - Explanation
+    - KanjiBreakdown
+---
+
+Japanese sentence: {Kanji}
+English translation: {Front}
+Grammar: {BunproGrammar}
+Meaning: {BunproMeaning}
+
+Generate all three requested fields.
+```
+
+Each row or note produces one LLM request. The response is a JSON object with
+exactly the declared keys:
+
+```json
+{
+  "Reading": "誰[だれ]もがお 寿司[すし]が 好[す]きだとは 限[かぎ]らない。",
+  "Explanation": "- とは限らない: 'is not necessarily.'\n- It rejects an absolute assumption.",
+  "KanjiBreakdown": "<div class=\"kanji-breakdown\">...</div>"
+}
+```
+
+The declared fields are validated before any update is applied. A failed request
+or invalid response leaves every declared field unchanged and follows the normal
+retry behavior. A successful response updates the declared fields together.
+Every undeclared field is preserved, and preview and progress output list each
+changed field. Retries, raw request logging, token accounting, and cost reporting
+apply to the single request for the complete field set. Prompts can reference
+source-only staging fields. Those fields remain in `process-file` output and
+`anki-llm import` ignores fields absent from the destination note type.
 
 The body uses `{field_name}` placeholders referring to raw Anki field names
 (case-insensitive). Unknown placeholders cause a per-row error.
@@ -522,7 +565,9 @@ anki-llm process-file notes.yaml -o output.yaml -p prompt.md --force -m gpt-4o-m
 ```
 
 Use `process-file` when you want a reviewable staging file, resume support for
-large runs, or when Anki isn't running. Use `process-deck` when you want to
+large runs, or when Anki isn't running. For multi-field prompts, resume treats a
+row as complete when every declared output field is populated. Failed and
+partially populated rows remain eligible for processing. Use `process-deck` when you want to
 update notes directly in-place.
 
 ---
@@ -542,7 +587,7 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 **Required options:**
 
 - `-p, --prompt`: Path to the prompt file. Must begin with a YAML frontmatter
-  block declaring the output field; see
+  block declaring one or more output fields; see
   [Prompt file format](#prompt-file-format).
 
 **Common options:**
@@ -558,9 +603,10 @@ One of `<deck>` or `--query` is required (mutually exclusive).
 - `--preview-count`: Number of cards to process in preview mode (default: `3`).
 - `--limit`: Limit the number of notes to process (useful for testing prompts on
   a small sample before processing entire deck).
-- `-f, --force`: Re-process notes even if the target field already has content.
-  By default, `process-deck` skips notes where the output field is populated to
-  avoid overwriting existing data.
+- `-f, --force`: Re-process notes even if a target field has content. By default,
+  `process-deck` processes a note only when every declared output field is empty.
+  A partially populated target set is skipped to protect existing data. Use
+  `--force` to regenerate and atomically overwrite the complete declared set.
 - `--log <PATH>`: Append raw LLM prompts and responses to a log file at `<PATH>`
   for debugging.
 - `--very-verbose`: Also print raw LLM prompts and responses to stderr. Useful

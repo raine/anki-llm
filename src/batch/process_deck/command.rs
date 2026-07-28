@@ -27,6 +27,16 @@ use super::super::process_row::{ProcessRowConfig, build_process_fn};
 use super::super::report::RowOutcome;
 use super::super::session::{BatchSession, SharedSession};
 
+fn output_fields_are_empty(row: &Row, fields: &[String]) -> bool {
+    fields.iter().all(|field| {
+        row.get(field).is_none_or(|value| match value {
+            Value::String(text) => text.trim().is_empty(),
+            Value::Null => true,
+            _ => false,
+        })
+    })
+}
+
 fn deck_row_id(row: &Row) -> String {
     row.get(ANKI_NOTE_ID_KEY)
         .and_then(|v| match v {
@@ -206,7 +216,8 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         .with_context(|| format!("failed to read prompt file: {}", prompt_path.display()))?;
     let parsed = process_prompt::parse(&prompt_raw)?;
     let prompt_template = parsed.body;
-    let output_field = parsed.frontmatter.output.field;
+    let output_fields = parsed.frontmatter.output.field_names();
+    let structured_output = parsed.frontmatter.output.is_structured();
     let require_result_tag = parsed.frontmatter.output.require_result_tag;
 
     // Build query from either deck name or raw query
@@ -298,33 +309,41 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         })
         .collect();
 
-    // Skip notes where the target field already has content unless --force
+    let missing_output_fields: Vec<_> = output_fields
+        .iter()
+        .filter(|field| rows.iter().any(|row| !row.contains_key(*field)))
+        .cloned()
+        .collect();
+    if !missing_output_fields.is_empty() {
+        bail!(
+            "output field(s) not found on the selected note type: {}",
+            missing_output_fields.join(", ")
+        );
+    }
+
+    // Protect populated target fields by default. A partially populated target
+    // set is processed only with --force because one response replaces the
+    // complete declared set atomically.
     let mut skipped_populated = 0;
     if !args.force {
         rows.retain(|row| {
-            let is_empty = row
-                .get(&output_field)
-                .map(|v| match v {
-                    Value::String(s) => s.trim().is_empty(),
-                    Value::Null => true,
-                    _ => false,
-                })
-                .unwrap_or(true); // field missing = empty
-            if !is_empty {
+            let all_empty = output_fields_are_empty(row, &output_fields);
+            if !all_empty {
                 skipped_populated += 1;
             }
-            is_empty
+            all_empty
         });
         if skipped_populated > 0 {
             eprintln!(
-                "Skipping {} note(s) where '{}' already has content (use --force to overwrite)",
-                skipped_populated, output_field
+                "Skipping {} note(s) where one or more output fields already have content \
+                 (use --force to overwrite all declared fields)",
+                skipped_populated
             );
         }
         if rows.is_empty() {
             eprintln!(
-                "All notes already have '{}' populated. Use --force to re-process.",
-                output_field
+                "All notes have content in one or more output fields. \
+                 Use --force to re-process."
             );
             return Ok(());
         }
@@ -388,8 +407,9 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         eprintln!("\n--- DRY RUN MODE ---");
         if skipped_populated > 0 {
             eprintln!(
-                "Would skip {} note(s) where '{}' already has content (use --force to overwrite)",
-                skipped_populated, output_field
+                "Would skip {} note(s) where one or more output fields have content \
+                 (use --force to overwrite all declared fields)",
+                skipped_populated
             );
         }
         eprintln!("\nPrompt template:");
@@ -420,7 +440,8 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         client: Arc::new(LlmClient::from_config(&runtime)),
         model: runtime.model.clone(),
         template: prompt_template.clone(),
-        field: output_field.clone(),
+        fields: output_fields.clone(),
+        structured: structured_output,
         temperature: runtime.temperature,
         max_tokens: runtime.max_tokens,
         require_result_tag,
@@ -469,7 +490,7 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
         run_total: rows.len(),
         model: Some(runtime.model.clone()),
         prompt_path: Some(prompt_path.display().to_string()),
-        output_field: Some(output_field.clone()),
+        output_field: Some(output_fields.join(", ")),
         batch_size: runtime.batch_size,
         retries: runtime.retries,
         sample_prompt,
@@ -521,4 +542,33 @@ pub fn run(args: ProcessDeckArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn default_multi_field_selection_skips_partially_populated_notes() {
+        let fields = vec!["Reading".into(), "Explanation".into()];
+        let empty = Row::from([
+            ("Reading".into(), json!("")),
+            ("Explanation".into(), Value::Null),
+        ]);
+        let partial = Row::from([
+            ("Reading".into(), json!("generated")),
+            ("Explanation".into(), json!("")),
+        ]);
+
+        assert!(output_fields_are_empty(&empty, &fields));
+        assert!(!output_fields_are_empty(&partial, &fields));
+    }
+
+    #[test]
+    fn single_field_selection_keeps_empty_target() {
+        let fields = vec!["Hint".into()];
+        let row = Row::from([("Hint".into(), json!("  "))]);
+        assert!(output_fields_are_empty(&row, &fields));
+    }
 }

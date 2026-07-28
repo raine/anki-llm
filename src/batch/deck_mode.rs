@@ -77,7 +77,9 @@ impl DeckWriter {
         }
 
         if let RowOutcome::Success(row) = outcome
-            && let Some(action) = build_update_action(row)
+            && let Some(note_id) = Self::extract_note_id(row)
+            && let Some(before) = self.before_fields.get(&note_id)
+            && let Some(action) = build_update_action(row, before)
         {
             self.record_revision(row);
 
@@ -243,9 +245,9 @@ impl DeckWriter {
     }
 }
 
-/// Build an `updateNoteFields` action for the `multi` endpoint.
-/// Returns None if the row has no internal note ID key.
-fn build_update_action(row: &Row) -> Option<Value> {
+/// Build an `updateNoteFields` action containing only changed fields.
+/// Returns None if the row has no internal note ID or no field changed.
+fn build_update_action(row: &Row, before: &IndexMap<String, String>) -> Option<Value> {
     let id: i64 = row.get(ANKI_NOTE_ID_KEY).and_then(|v| match v {
         Value::Number(n) => n.as_i64(),
         Value::String(s) => s.parse().ok(),
@@ -264,7 +266,14 @@ fn build_update_action(row: &Row) -> Option<Value> {
             Value::Null => String::new(),
             other => other.to_string(),
         };
+        if before.get(key).is_some_and(|original| original == &s) {
+            continue;
+        }
         fields.insert(key.clone(), Value::String(s));
+    }
+
+    if fields.is_empty() {
+        return None;
     }
 
     Some(json!({
@@ -290,7 +299,7 @@ mod tests {
         row.insert("Front".into(), Value::from("hello"));
         row.insert("Back".into(), Value::from("world"));
 
-        let action = build_update_action(&row).unwrap();
+        let action = build_update_action(&row, &IndexMap::new()).unwrap();
         let params = &action["params"]["note"];
         assert_eq!(params["id"], 12345);
         assert_eq!(params["fields"]["Front"], "hello");
@@ -305,8 +314,27 @@ mod tests {
         row.insert("_error".into(), Value::from("oops"));
         row.insert("Front".into(), Value::from("x"));
 
-        let action = build_update_action(&row).unwrap();
+        let action = build_update_action(&row, &IndexMap::new()).unwrap();
         assert!(action["params"]["note"]["fields"].get("_error").is_none());
+    }
+
+    #[test]
+    fn build_update_action_omits_unchanged_fields() {
+        let mut row: Row = IndexMap::new();
+        row.insert(ANKI_NOTE_ID_KEY.into(), Value::from(1_i64));
+        row.insert("Front".into(), Value::from("authoritative"));
+        row.insert("Reading".into(), Value::from("generated"));
+
+        let before = IndexMap::from([
+            ("Front".into(), "authoritative".into()),
+            ("Reading".into(), String::new()),
+        ]);
+        let action = build_update_action(&row, &before).unwrap();
+        let fields = action["params"]["note"]["fields"].as_object().unwrap();
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields["Reading"], "generated");
+        assert!(!fields.contains_key("Front"));
     }
 
     #[test]
@@ -316,7 +344,7 @@ mod tests {
         row.insert(ANKI_NOTE_ID_KEY.into(), Value::from(42_i64));
         row.insert("id".into(), Value::from("some-value"));
 
-        let action = build_update_action(&row).unwrap();
+        let action = build_update_action(&row, &IndexMap::new()).unwrap();
         assert_eq!(action["params"]["note"]["fields"]["id"], "some-value");
     }
 }

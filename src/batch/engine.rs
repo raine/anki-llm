@@ -219,6 +219,9 @@ fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> Option<Row
 
         match (ctx.process)(row) {
             Ok((updated_row, usage)) => {
+                for message in changed_field_logs(row, &updated_row, &id) {
+                    ctx.event_tx.send(BatchEvent::Log(message)).ok();
+                }
                 if let Some((input, output)) = usage {
                     let mut t = ctx.usage.lock().unwrap();
                     t.add(input, output);
@@ -269,6 +272,29 @@ fn process_with_retry(row: &Row, index: usize, ctx: &RetryCtx<'_>) -> Option<Row
         .ok();
 
     Some(make_failure(row, last_error))
+}
+
+fn display_value(value: Option<&serde_json::Value>) -> String {
+    match value {
+        Some(serde_json::Value::String(text)) if text.is_empty() => "(empty)".into(),
+        Some(serde_json::Value::String(text)) => text.replace('\n', "\\n"),
+        Some(serde_json::Value::Null) | None => "(empty)".into(),
+        Some(value) => value.to_string(),
+    }
+}
+
+fn changed_field_logs(original: &Row, updated: &Row, id: &str) -> Vec<String> {
+    updated
+        .iter()
+        .filter(|(field, value)| !field.starts_with('_') && original.get(*field) != Some(*value))
+        .map(|(field, value)| {
+            format!(
+                "Card {id} [{field}]: {} -> {}",
+                display_value(original.get(field)),
+                display_value(Some(value))
+            )
+        })
+        .collect()
 }
 
 fn make_failure(row: &Row, error: String) -> RowOutcome {
@@ -417,6 +443,24 @@ mod tests {
         } else {
             panic!("expected failure");
         }
+    }
+
+    #[test]
+    fn progress_lists_each_changed_field() {
+        let mut original = make_row(1);
+        original.insert("Reading".into(), json!(""));
+        original.insert("Explanation".into(), json!("old"));
+        original.insert("SourceOnly".into(), json!("preserved"));
+        let mut updated = original.clone();
+        updated.insert("Reading".into(), json!("read"));
+        updated.insert("Explanation".into(), json!("explanation"));
+
+        let logs = changed_field_logs(&original, &updated, "1");
+
+        assert_eq!(logs.len(), 2);
+        assert!(logs[0].contains("[Reading]"));
+        assert!(logs[1].contains("[Explanation]"));
+        assert!(!logs.iter().any(|line| line.contains("SourceOnly")));
     }
 
     #[test]

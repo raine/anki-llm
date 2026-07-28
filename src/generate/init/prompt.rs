@@ -171,7 +171,7 @@ pub fn create_prompt_content(
         })
         .collect();
 
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
+    scored.sort_by_key(|entry| std::cmp::Reverse(entry.1));
     let top_indices: Vec<usize> = scored.into_iter().take(5).map(|(idx, _)| idx).collect();
 
     eprintln!(

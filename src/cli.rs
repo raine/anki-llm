@@ -226,7 +226,7 @@ pub struct ProcessFileArgs {
     /// Input file path (CSV or YAML)
     pub input: PathBuf,
 
-    /// Path to prompt template file (YAML frontmatter declares output.field)
+    /// Path to prompt template file (frontmatter declares output.field or output.fields)
     #[arg(long, short = 'p')]
     pub prompt: PathBuf,
 
@@ -306,7 +306,7 @@ pub struct ProcessDeckArgs {
     #[arg(long, short = 'q')]
     pub query: Option<String>,
 
-    /// Path to prompt template file (YAML frontmatter declares output.field)
+    /// Path to prompt template file (frontmatter declares output.field or output.fields)
     #[arg(long, short = 'p')]
     pub prompt: PathBuf,
 

@@ -234,8 +234,7 @@ fn run_app(
         // Drain pending player events (spawn failures etc.) and surface
         // them as toasts. Otherwise a failed `binary.spawn` leaves the
         // user staring at "♪ Audio ready" with nothing playing.
-        loop {
-            let Some(player) = &runtime.player else { break };
+        while let Some(player) = &runtime.player {
             match player.try_recv_event() {
                 Ok(ev) => app.handle_player_event(ev),
                 Err(_) => break,

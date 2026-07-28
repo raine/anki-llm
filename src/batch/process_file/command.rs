@@ -23,6 +23,20 @@ use super::super::process_row::{ProcessRowConfig, build_process_fn};
 use super::super::report::{ERROR_FIELD, RowOutcome};
 use super::super::session::{BatchSession, SharedSession};
 
+fn output_is_complete(row: &Row, fields: &[String], structured: bool) -> bool {
+    if !structured {
+        return row.contains_key(&fields[0]);
+    }
+
+    fields.iter().all(|field| {
+        row.get(field).is_some_and(|value| match value {
+            serde_json::Value::String(text) => !text.trim().is_empty(),
+            serde_json::Value::Null => false,
+            _ => true,
+        })
+    })
+}
+
 fn file_row_descriptors(rows: &[Row]) -> Vec<RowDescriptor> {
     rows.iter()
         .enumerate()
@@ -151,7 +165,8 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         .with_context(|| format!("failed to read prompt file: {}", prompt_path.display()))?;
     let parsed = process_prompt::parse(&prompt_raw)?;
     let prompt_template = parsed.body;
-    let output_field = parsed.frontmatter.output.field;
+    let output_fields = parsed.frontmatter.output.field_names();
+    let structured_output = parsed.frontmatter.output.is_structured();
     let require_result_tag = parsed.frontmatter.output.require_result_tag;
 
     // Build runtime config
@@ -177,18 +192,19 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     };
     let resume_skipped = existing.len();
 
-    // Filter rows to process: skip rows already completed successfully,
-    // and re-process rows that are missing the target field.
-    let target_field = output_field.as_str();
+    // Single-field rows are complete when the target key exists. Multi-field
+    // rows are complete when every target is populated.
     let rows_to_process: Vec<Row> = rows
         .into_iter()
         .filter(|row| {
             let Some(id) = get_note_id(row) else {
-                return true; // unreachable after validation above
+                return true;
             };
             match existing.get(&id) {
                 Some(existing_row) if existing_row.contains_key(ERROR_FIELD) => true,
-                Some(existing_row) => !existing_row.contains_key(target_field),
+                Some(existing_row) => {
+                    !output_is_complete(existing_row, &output_fields, structured_output)
+                }
                 None => true,
             }
         })
@@ -237,7 +253,8 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         client: Arc::new(LlmClient::from_config(&runtime)),
         model: runtime.model.clone(),
         template: prompt_template.clone(),
-        field: output_field.clone(),
+        fields: output_fields.clone(),
+        structured: structured_output,
         temperature: runtime.temperature,
         max_tokens: runtime.max_tokens,
         require_result_tag,
@@ -291,7 +308,7 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
         run_total: rows_to_process.len(),
         model: Some(runtime.model.clone()),
         prompt_path: Some(prompt_path.display().to_string()),
-        output_field: Some(output_field.clone()),
+        output_field: Some(output_fields.join(", ")),
         batch_size: runtime.batch_size,
         retries: runtime.retries,
         sample_prompt,
@@ -330,4 +347,33 @@ pub fn run(args: ProcessFileArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn multi_field_resume_requires_every_populated_target() {
+        let fields = vec!["Reading".into(), "Explanation".into()];
+        let complete = Row::from([
+            ("Reading".into(), json!("read")),
+            ("Explanation".into(), json!("explain")),
+        ]);
+        let partial = Row::from([
+            ("Reading".into(), json!("read")),
+            ("Explanation".into(), json!("")),
+        ]);
+
+        assert!(output_is_complete(&complete, &fields, true));
+        assert!(!output_is_complete(&partial, &fields, true));
+    }
+
+    #[test]
+    fn single_field_resume_uses_target_presence() {
+        let fields = vec!["Hint".into()];
+        let row = Row::from([("Hint".into(), json!(""))]);
+        assert!(output_is_complete(&row, &fields, false));
+    }
 }

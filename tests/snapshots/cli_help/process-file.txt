@@ -6,7 +6,7 @@ Arguments:
   <INPUT>  Input file path (CSV or YAML)
 
 Options:
-  -p, --prompt <PROMPT>                Path to prompt template file (YAML frontmatter declares output.field)
+  -p, --prompt <PROMPT>                Path to prompt template file (frontmatter declares output.field or output.fields)
   -o, --output <OUTPUT>                Output file path (CSV or YAML)
   -m, --model <MODEL>                  Model name
       --api-base-url <API_BASE_URL>    Custom API base URL (e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1)
