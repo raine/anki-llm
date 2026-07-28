@@ -7,16 +7,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default:
     @just --list
 
-# Run all checks
-check: _fix _verify
-
-# Phase 1: auto-fix (parallel)
-[parallel]
-_fix: format clippy-fix
-
-# Phase 2: verify (parallel)
-[parallel]
-_verify: clippy test
+# Run all read-only project checks
+check:
+    @checkle run all
 
 # Run check and fail if there are uncommitted changes (for CI)
 check-ci: check
@@ -29,17 +22,25 @@ check-ci: check
         exit 1
     fi
 
+# Install local tools used by quality gates
+install-quality-tools:
+    cargo install checkle --locked
+
 # Format Rust files
 format:
     @cargo fmt --all
 
+# Check Rust formatting without changing files
+format-check:
+    @checkle run format-check
+
 # Run clippy and fail on any warnings
 clippy:
-    @cargo clippy --quiet --color always -- -D clippy::all && echo "clippy: ok"
+    @checkle run clippy
 
 # Auto-fix clippy warnings
 clippy-fix:
-    @cargo clippy --quiet --color always --fix --allow-dirty -- -W clippy::all
+    @cargo clippy --fix --allow-dirty --target-dir target/clippy --all-targets -- -D warnings -W clippy::all
 
 # Build the project
 build:
@@ -47,11 +48,7 @@ build:
 
 # Run tests
 test:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    output=$(cargo test --quiet --color always 2>&1) || { echo "$output"; exit 1; }
-    passed=$(grep -oE '[0-9]+ passed' <<< "$output" | awk '{s+=$1} END{print s}')
-    echo "test: ok. ${passed} passed"
+    @checkle run test
 
 # Run integration tests against a disposable Anki Docker container
 test-integration *ARGS:

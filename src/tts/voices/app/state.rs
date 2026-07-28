@@ -540,6 +540,7 @@ mod tests {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn rich_voice(
         provider: ProviderId,
         voice_id: &str,

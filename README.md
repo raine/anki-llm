@@ -1965,6 +1965,19 @@ card includes a generated sound tag, <kbd>n</kbd> to start a new term,
 <kbd>r</kbd> to retry, or <kbd>q</kbd> to quit. Session cost is tracked in the
 sidebar throughout.
 
+## Development
+
+Install the local quality-check runner and run the full read-only check group:
+
+```bash
+just install-quality-tools
+just check
+```
+
+`just check` uses the checks declared in `checkle.toml` and keeps full command
+output in `target/check-logs`. Run `just format` or `just clippy-fix` explicitly
+when source files should be modified.
+
 ## FAQ
 
 ### Why AnkiConnect?

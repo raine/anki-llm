@@ -272,7 +272,7 @@ mod tests {
         script_path
     }
 
-    fn fake_binary(script: &PathBuf) -> PlayerBinary {
+    fn fake_binary(script: &std::path::Path) -> PlayerBinary {
         PlayerBinary {
             command: script.to_string_lossy().into_owned(),
             args: Vec::new(),

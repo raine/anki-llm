@@ -365,8 +365,10 @@ mod tests {
     fn write_and_read_round_trip() {
         let tmp = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("HOME", tmp.path()) };
-        let mut config = AppConfig::default();
-        config.model = Some("gpt-5".into());
+        let config = AppConfig {
+            model: Some("gpt-5".into()),
+            ..AppConfig::default()
+        };
         write_config(&config).unwrap();
         let loaded = read_config().unwrap();
         assert_eq!(loaded.model.as_deref(), Some("gpt-5"));
@@ -416,8 +418,9 @@ mod tests {
     fn state_round_trip() {
         let tmp = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("HOME", tmp.path()) };
-        let mut state = AppState::default();
-        state.last_prompt = Some(PathBuf::from("/tmp/test.md"));
+        let state = AppState {
+            last_prompt: Some(PathBuf::from("/tmp/test.md")),
+        };
         write_state(&state).unwrap();
         let loaded = read_state().unwrap();
         assert_eq!(
