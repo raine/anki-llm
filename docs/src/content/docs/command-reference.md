@@ -522,7 +522,7 @@ Usage: anki-llm update
 
 ## `anki-llm docs`
 
-Show bundled documentation
+Show the complete documentation bundle offline
 
 **Usage**
 

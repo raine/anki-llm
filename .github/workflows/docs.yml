@@ -5,12 +5,16 @@ on:
     branches: [main]
     paths:
       - 'ANKI_CONNECT.md'
+      - 'CHANGELOG.md'
       - 'docs/**'
+      - 'justfile'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'ANKI_CONNECT.md'
+      - 'CHANGELOG.md'
       - 'docs/**'
+      - 'justfile'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -38,6 +42,14 @@ jobs:
       - name: Build
         working-directory: docs
         run: bun run build
+
+      - name: Verify embedded bundle
+        run: |
+          if ! cmp -s docs/dist/llms-full.txt docs/generated/llms-full.txt; then
+            echo "Error: docs/generated/llms-full.txt is stale." >&2
+            echo "Run 'just docs-bundle' and commit the updated bundle." >&2
+            exit 1
+          fi
 
       - name: Upload artifact
         if: github.event_name != 'pull_request'

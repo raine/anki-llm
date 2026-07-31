@@ -16,7 +16,7 @@ Commands:
   tts            Generate text-to-speech audio for notes and upload to Anki's media store
   tts-voices     Browse and audition TTS voices across OpenAI / Azure / Google / Polly
   update         Update anki-llm to the latest version
-  docs           Show bundled documentation
+  docs           Show the complete documentation bundle offline
   workspace      Manage anki-llm workspaces
   note-type      Manage Anki note type templates and CSS
   doctor         Diagnose configuration and provider connectivity

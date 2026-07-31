@@ -53,7 +53,7 @@ pub enum Commands {
     TtsVoices(VoicesArgs),
     /// Update anki-llm to the latest version
     Update,
-    /// Show bundled documentation
+    /// Show the complete documentation bundle offline
     Docs,
     /// Manage anki-llm workspaces
     Workspace(WorkspaceArgs),

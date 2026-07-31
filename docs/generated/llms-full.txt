@@ -1,0 +1,4289 @@
+<SYSTEM>This is the full developer documentation for anki-llm</SYSTEM>
+
+# anki-llm
+
+> A CLI and terminal UI for repeatable, reviewable AI workflows over your Anki collection.
+
+`anki-llm` connects Anki Desktop to OpenAI-compatible language models. Use it to transform many existing notes, generate candidate cards for review, add audio, or maintain card templates as files. It is designed for collection-scale work where repeatability and inspection matter more than one-off chat interactions.
+
+## What can you do with it?
+
+[Section titled “What can you do with it?”](#what-can-you-do-with-it)
+
+* **Improve existing notes:** verify translations, add grammar explanations, create hints, or fill structured fields across a deck.
+* **Generate cards:** request several contextual examples for a term, inspect them in the terminal UI, and import only the cards you select.
+* **Add speech:** fill audio fields with text-to-speech from OpenAI, Azure, Google Cloud, Amazon Polly, or Microsoft Edge.
+* **Maintain note types:** pull card template HTML and CSS into ordinary files, edit them with your normal tools, and safely push them back to Anki.
+* **Automate collection tasks:** expose AnkiConnect as clean JSON through `anki-llm query`, including workflows driven by coding agents.
+
+## Choose a workflow
+
+[Section titled “Choose a workflow”](#choose-a-workflow)
+
+| Goal                                               | Start with                        | Why                                                                               |
+| -------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------- |
+| Review changes in a file before touching Anki      | [Process a file](/process-file/)  | Export, transform, diff, then import. Large jobs can resume.                      |
+| Update matching notes directly                     | [Process a deck](/process-deck/)  | One command, small previews, automatic snapshots, and rollback.                   |
+| Create cards from a word or concept                | [Generate cards](/generate/)      | Review and edit candidate cards in an interactive terminal UI.                    |
+| Add pronunciation audio                            | [Text-to-speech](/tts/)           | Fill audio fields while preserving existing audio by default.                     |
+| Redesign card templates with an editor or agent    | [Manage note types](/note-types/) | Keep HTML and CSS in files with diffs and version control.                        |
+| Describe an outcome instead of assembling commands | [Work with agents](/agents/)      | Let an agent inspect the collection, prepare files, and begin with a safe sample. |
+
+Unsure where to begin?
+
+Use the [file-based workflow](/process-file/) when you want a reviewable staging file or expect interruptions. Use [direct processing](/process-deck/) for a shorter workflow with automatic snapshots and rollback.
+
+## Built for controlled bulk work
+
+[Section titled “Built for controlled bulk work”](#built-for-controlled-bulk-work)
+
+`anki-llm` combines:
+
+* CSV and YAML export and import
+* custom prompt files with explicit output fields
+* direct-to-Anki and file-based batch processing
+* concurrency, retries, incremental progress, and file-mode resume
+* preview, dry-run, and limit controls
+* direct-processing snapshots, history, and conflict-aware rollback
+* model selection for OpenAI, Gemini, DeepSeek, xAI, OpenRouter, Ollama, and other OpenAI-compatible endpoints
+* token accounting and estimated costs for known models
+* a generation TUI with duplicate detection, editing, regeneration, and model switching
+* optional manual copy mode for browser-based LLMs
+* integrated text-to-speech and note-type file workflows
+
+## Why files and explicit review steps?
+
+[Section titled “Why files and explicit review steps?”](#why-files-and-explicit-review-steps)
+
+An Anki collection is valuable, stateful data. Prompt files make transformations repeatable and reviewable. Small previews expose prompt mistakes before they reach a whole deck. Exported files create a diffable boundary, while direct runs create rollback snapshots. These choices let you use probabilistic models without treating their output as automatically correct.
+
+Ready to try it? [Install `anki-llm` and run a safe first generation](/getting-started/).
+
+# Getting started
+
+> Install anki-llm, connect it to Anki, and run a safe first workflow.
+
+This guide installs `anki-llm`, connects it to an OpenAI model, creates a workspace, and generates one candidate card without changing your collection.
+
+## 1. Install `anki-llm`
+
+[Section titled “1. Install anki-llm”](#1-install-anki-llm)
+
+Choose one installation path.
+
+### Install script
+
+[Section titled “Install script”](#install-script)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/raine/anki-llm/main/scripts/install.sh | bash
+```
+
+### Homebrew on macOS or Linux
+
+[Section titled “Homebrew on macOS or Linux”](#homebrew-on-macos-or-linux)
+
+```sh
+brew install raine/anki-llm/anki-llm
+```
+
+### Cargo
+
+[Section titled “Cargo”](#cargo)
+
+```sh
+cargo install anki-llm
+```
+
+Confirm that the command is available:
+
+```sh
+anki-llm --version
+```
+
+## 2. Connect Anki Desktop
+
+[Section titled “2. Connect Anki Desktop”](#2-connect-anki-desktop)
+
+Install the [AnkiConnect add-on](https://ankiweb.net/shared/info/2055492159) in Anki Desktop, then restart Anki. Keep Anki running while a command reads or modifies your collection.
+
+`anki-llm` uses AnkiConnect’s local HTTP API to discover decks and note types, export and update notes, add generated cards, upload media, and manage card templates. `process-file` can run with Anki closed once you have exported the input file.
+
+Test the connection:
+
+```sh
+anki-llm query version
+```
+
+A JSON version number means the connection works. See [AnkiConnect](/ankiconnect/) for connection settings and troubleshooting.
+
+Caution
+
+Commands that access your collection use the Anki profile that is open in Anki Desktop. Confirm the active profile before a bulk operation.
+
+## 3. Configure one LLM provider
+
+[Section titled “3. Configure one LLM provider”](#3-configure-one-llm-provider)
+
+Create an [OpenAI API key](https://platform.openai.com/api-keys), then expose it to `anki-llm` in your shell:
+
+```sh
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+OpenAI models are detected from their names, so this provider needs no base URL. Store a default model if you do not want to pass `--model` on each command:
+
+```sh
+anki-llm config set model gpt-5-mini
+```
+
+Run the environment diagnostic:
+
+```sh
+anki-llm doctor
+```
+
+`doctor` reports the detected key, resolved model, active workspace, and AnkiConnect status. Provider keys are secrets. Keep them in environment variables or a secret manager rather than prompt files or version control.
+
+For Gemini, OpenRouter, Ollama, and other compatible endpoints, see [Models](/models/) and [Configuration](/configuration/).
+
+## 4. Create a workspace
+
+[Section titled “4. Create a workspace”](#4-create-a-workspace)
+
+A [workspace](/workspaces/) keeps prompts, note-type files, and model settings together. Create one in a directory you can put under version control:
+
+```sh
+mkdir my-anki-workspace
+cd my-anki-workspace
+anki-llm workspace init
+```
+
+This creates:
+
+```text
+my-anki-workspace/
+├── anki-llm.yaml
+└── prompts/
+```
+
+Check what `anki-llm` resolved:
+
+```sh
+anki-llm workspace info
+```
+
+## 5. Create a prompt for your deck
+
+[Section titled “5. Create a prompt for your deck”](#5-create-a-prompt-for-your-deck)
+
+Run the prompt wizard:
+
+```sh
+anki-llm generate-init
+```
+
+Choose a deck and note type. The wizard samples your existing cards, asks the LLM to infer their shape and style, and saves a generated prompt under `prompts/`. Review that file before using it. Its frontmatter identifies the Anki deck, note type, and field mapping, while its body controls generated content.
+
+## 6. Run one safe candidate
+
+[Section titled “6. Run one safe candidate”](#6-run-one-safe-candidate)
+
+Generate one card without importing it:
+
+```sh
+anki-llm generate "a term from your subject" --count 1 --dry-run
+```
+
+This command calls the model and prints the generated card, but `--dry-run` prevents the normal selection and import flow. Inspect the content, field mapping, and formatting. Edit the prompt and repeat until the result fits your deck.
+
+Cost of this step
+
+The wizard and generation request call the configured provider. A single candidate keeps the trial small, and `anki-llm` reports token use and an estimated cost when pricing is known. See [Cost awareness](/concepts/#cost-awareness).
+
+When the output is ready, remove `--dry-run` to open the selection interface:
+
+```sh
+anki-llm generate "a term from your subject" --count 3
+```
+
+Review each candidate and import only the cards you select.
+
+## Next steps
+
+[Section titled “Next steps”](#next-steps)
+
+* Learn the safety model and shared vocabulary in [Concepts](/concepts/).
+* Ask a coding agent to coordinate the workflow in [Work with agents](/agents/).
+* Transform exported notes with [Process a file](/process-file/).
+* Update notes in place with [Process a deck](/process-deck/).
+* Refine generation behavior in [Write prompts](/prompts/) and [Prompt reference](/prompt-reference/).
+* Keep project-specific defaults in [Use workspaces](/workspaces/).
+
+# Concepts
+
+> Understand Anki data, processing modes, prompt files, safety controls, rollback, and cost.
+
+These concepts apply across the guides. Read this page once, then use each task-specific guide for commands and options.
+
+## Notes, fields, note types, and cards
+
+[Section titled “Notes, fields, note types, and cards”](#notes-fields-note-types-and-cards)
+
+Anki stores **notes**, not just cards.
+
+* A **note** is one record of information, such as a word, its meaning, and an example sentence.
+* A **field** is one named value on that note, such as `Expression`, `Meaning`, `Translation`, or `Audio`.
+* A **note type**, also called a model in AnkiConnect, defines the fields a note has and the templates used to render cards.
+* A **card** is a review item generated from a note by one of its note type’s card templates. One note can produce multiple cards.
+* A **deck** contains cards. A search can select notes through their cards, so one note may appear in more than one matching context.
+
+Most `anki-llm` transformations operate on notes and fields. A processing prompt reads fields through placeholders such as `{Japanese}` and declares the field or fields it writes. Generation prompts map model output keys to fields on a target note type. The field names must match the collection.
+
+Use `anki-llm query modelNames`, then query fields with a real note type name, for example `anki-llm query modelFieldNames '{"modelName":"Basic"}'`. An agent can inspect the names before writing a prompt. See [Work with agents](/agents/) for more query examples.
+
+## File-based and direct processing
+
+[Section titled “File-based and direct processing”](#file-based-and-direct-processing)
+
+Both processing modes apply one prompt to many notes, but they place the review boundary in different locations.
+
+### File-based processing
+
+[Section titled “File-based processing”](#file-based-processing)
+
+The file workflow is:
+
+1. Export notes from Anki to CSV or YAML.
+2. Run `process-file` to produce a separate output file.
+3. Review the output or inspect it with `git diff`.
+4. Import the accepted file into Anki.
+
+Use [Process a file](/process-file/) when you want a durable staging artifact, need automatic resume for a large job, or want to process while Anki is closed. Completed output rows are saved incrementally. Re-running the same command skips complete rows unless you use `--force`.
+
+### Direct processing
+
+[Section titled “Direct processing”](#direct-processing)
+
+`process-deck` selects notes from a deck or Anki search and updates them through AnkiConnect. It has fewer steps and automatically snapshots each run.
+
+Use [Process a deck](/process-deck/) for focused updates where a preview and rollback provide enough review. Direct processing does not resume an interrupted run. Failed notes are written to an error log in the working directory.
+
+Existing field content
+
+Direct processing normally selects a note only when every declared output field is empty. A partially populated output set is skipped. `--force` regenerates and atomically overwrites the complete declared set, so preview the exact selection before using it.
+
+## Prompt files are durable configuration
+
+[Section titled “Prompt files are durable configuration”](#prompt-files-are-durable-configuration)
+
+A prompt file is executable project configuration for an LLM task. It has two parts:
+
+1. YAML frontmatter declares machine-readable settings and output fields.
+2. The body supplies instructions and `{FieldName}` placeholders.
+
+For example:
+
+```markdown
+---
+output:
+  field: Translation
+  require_result_tag: true
+---
+
+
+Translate {Japanese} into natural English.
+Return only the translation inside <result></result> tags.
+```
+
+Keeping prompts as files makes them reviewable, repeatable, and versionable. A small wording change can alter every generated value, so treat a prompt change like a code change: inspect the diff, test a sample, and record the version used for an important run.
+
+Processing and generation use different frontmatter shapes. See [Write prompts](/prompts/) for authoring guidance and [Prompt reference](/prompt-reference/) for every supported key.
+
+## Workspaces collect project files
+
+[Section titled “Workspaces collect project files”](#workspaces-collect-project-files)
+
+A **workspace** is a directory recognized by an `anki-llm.yaml` file or a `prompts/` directory. It gives commands a shared place to find:
+
+* prompt files under `prompts/`
+* note type HTML, CSS, and manifests under `note-types/`
+* a default model and reasoning effort in `anki-llm.yaml`
+
+The workspace in the current directory takes precedence. A configured `default_workspace` supplies the fallback when you run commands elsewhere. See [Use workspaces](/workspaces/) for setup and discovery rules.
+
+## Preview, dry-run, and limit
+
+[Section titled “Preview, dry-run, and limit”](#preview-dry-run-and-limit)
+
+These controls answer different safety questions.
+
+### `--dry-run`
+
+[Section titled “--dry-run”](#--dry-run)
+
+A dry run validates and displays an operation without applying its normal side effects. For `process-file` and `process-deck`, it does not call the LLM. For `generate`, it calls the LLM and displays generated cards but does not enter the selection or import flow. Command-specific guides document the exact behavior.
+
+Use it first to catch selection, placeholder, field, and configuration mistakes.
+
+### `--preview`
+
+[Section titled “--preview”](#--preview)
+
+Preview mode for `process-file` and `process-deck` sends a small sample to the LLM, shows a diff-like summary, and asks for confirmation before the full run. The default sample is three notes and `--preview-count` changes it.
+
+Use it after a dry run to evaluate actual model output.
+
+### `--limit`
+
+[Section titled “--limit”](#--limit)
+
+`--limit N` caps the number of new rows or notes processed. It controls scope, not whether model calls or writes occur. Combine it with dry-run or preview while tuning a prompt, and use a small limit for the first applied run.
+
+A safe progression is:
+
+1. dry-run a small selection
+2. preview a few real model responses
+3. apply a small limited run
+4. inspect the results in Anki or the output file
+5. scale to the full selection
+
+## Snapshots and rollback
+
+[Section titled “Snapshots and rollback”](#snapshots-and-rollback)
+
+Every `process-deck` run records the original note state under `~/.local/state/anki-llm/snapshots/`. The command prints a run ID when it finishes.
+
+List available runs:
+
+```sh
+anki-llm history
+```
+
+Preview a rollback:
+
+```sh
+anki-llm rollback <run-id> --dry-run
+```
+
+Apply it after reviewing the preview:
+
+```sh
+anki-llm rollback <run-id>
+```
+
+Rollback checks whether fields changed after the run and skips conflicting notes. `--force` overrides conflict detection and can overwrite later manual edits.
+
+Note-type pushes use their own snapshots under `~/.local/state/anki-llm/note-type-snapshots/` and also support a dry-run. An exported file is the recovery and review boundary for `process-file`; keep the original export until the import is verified.
+
+A snapshot reduces recovery time, but it does not validate model output. Review small samples before scaling and keep normal Anki backups.
+
+## Cost awareness
+
+[Section titled “Cost awareness”](#cost-awareness)
+
+Each processed note usually produces one LLM request. Longer source fields, longer instructions, multiple requested output fields, retries, and extra processing steps all increase token use. Model prices can differ by orders of magnitude.
+
+`anki-llm` tracks tokens and prints estimated cost for known models. Unknown models still work, but no estimate is shown. Provider prices can change, so use the displayed estimate as guidance rather than an invoice.
+
+To control cost:
+
+* test prompt structure with `--dry-run`, which makes no model request for batch processing
+* use `--preview` or `--limit` on a representative sample
+* inspect the sample’s token and cost totals, then extrapolate
+* choose a smaller model for mechanical transformations
+* reserve capable reasoning models for prompts that benefit from them
+* remember that generation processing steps add model calls for each candidate that reaches the step
+* avoid `--force` unless intentional, because it can repeat completed work
+
+Cost control and quality control use the same discipline: start with a small, representative sample and inspect it before scaling.
+
+# Work with agents
+
+> Let a coding agent inspect Anki, prepare repeatable workflows, and begin with safe previews.
+
+A coding agent can coordinate `anki-llm` from a natural-language goal. Instead of translating that goal into every CLI flag yourself, ask the agent to inspect the collection, write a prompt, run a small preview, and show you the result before scaling.
+
+For example:
+
+> Use `anki-llm` to add concise grammar breakdowns to my Japanese cards. Inspect the collection first, choose an existing empty field, and start with five cards. Show me the proposed prompt and preview before changing any notes.
+
+The CLI remains the execution and safety layer. The agent uses its JSON output, files, diffs, dry runs, previews, snapshots, and rollback commands.
+
+## Give the agent a safe workflow
+
+[Section titled “Give the agent a safe workflow”](#give-the-agent-a-safe-workflow)
+
+A useful request states:
+
+1. the desired outcome
+2. the deck or search scope
+3. fields that must be preserved
+4. the size of the first sample
+5. the review point that requires your approval
+
+Ask the agent to follow this sequence:
+
+1. Run `anki-llm doctor` and inspect the active workspace.
+2. Query deck, note type, and field names instead of guessing them.
+3. Write the prompt and any query parameters to files in the workspace.
+4. Run a dry run on a small selection.
+5. Run an LLM-backed preview and present the diff.
+6. Stop before the first applied mutation unless you already authorized it.
+7. Scale only after the sample is accepted.
+8. Report the direct-run snapshot ID or preserve the file-based inputs and outputs.
+
+Caution
+
+An agent can issue commands quickly, including `--force`. State the approval boundary explicitly and require small previews for collection changes. Keep Anki backups even when snapshots are available.
+
+See [Concepts](/concepts/#preview-dry-run-and-limit) for the exact distinction between dry-run, preview, and limit.
+
+## Inspect Anki with `anki-llm query`
+
+[Section titled “Inspect Anki with anki-llm query”](#inspect-anki-with-anki-llm-query)
+
+`anki-llm query <action> [params]` calls any supported AnkiConnect action and prints clean JSON. This gives an agent a scriptable way to discover your actual collection before it prepares a transformation.
+
+```sh
+# List decks
+anki-llm query deckNames
+
+
+# List note types
+anki-llm query modelNames
+
+
+# Find notes without loading every note body
+anki-llm query findNotes '{"query":"deck:Japanese tag:leech"}'
+
+
+# Read selected notes
+anki-llm query notesInfo '{"notes":[1498938915662]}'
+
+
+# Read deck statistics
+anki-llm query getDeckStats '{"decks":["Japanese"]}'
+```
+
+Parameters are a JSON object passed as one shell argument. Let the agent build that JSON rather than manually escaping a long request.
+
+### Give the agent the action reference
+
+[Section titled “Give the agent the action reference”](#give-the-agent-the-action-reference)
+
+Run this once when an agent needs to choose among AnkiConnect actions:
+
+```sh
+anki-llm query docs
+```
+
+`docs` and `help` return the complete bundled AnkiConnect action documentation. The same reference is available as [`ANKI_CONNECT.md`](https://github.com/raine/anki-llm/blob/main/ANKI_CONNECT.md).
+
+## Keep reusable queries as documents
+
+[Section titled “Keep reusable queries as documents”](#keep-reusable-queries-as-documents)
+
+A one-line query can stay in shell history. For analysis, migrations, or multi-step work, ask the agent to create a short query document in your workspace. Record:
+
+* the natural-language goal
+* the exact Anki search string
+* action names and JSON parameters
+* output filenames
+* assumptions about decks, note types, and fields
+* the preview and approval boundary
+
+This creates a reviewable specification for what the agent selected. It also makes a future rerun safer than reconstructing intent from terminal history. Query outputs can contain private study material, so decide whether they belong in version control.
+
+## Edit note types through files
+
+[Section titled “Edit note types through files”](#edit-note-types-through-files)
+
+Agents are especially effective at card template work because `anki-llm` can represent a note type as ordinary HTML, CSS, and YAML files.
+
+```sh
+anki-llm note-type pull "Japanese Vocabulary"
+anki-llm note-type status
+```
+
+Ask the agent to edit files under `note-types/<slug>/`, then inspect the diff. Preview the push without changing Anki:
+
+```sh
+anki-llm note-type push "Japanese Vocabulary" --dry-run
+```
+
+After approval, apply it:
+
+```sh
+anki-llm note-type push "Japanese Vocabulary"
+```
+
+A push snapshots the current Anki templates and refuses to overwrite remote changes that diverged from the last sync unless `--force` is supplied. Adding, removing, renaming, or reordering card templates remains an Anki GUI task. See [Manage note types](/note-types/) for layout and safety details.
+
+## Give agents LLM-readable documentation
+
+[Section titled “Give agents LLM-readable documentation”](#give-agents-llm-readable-documentation)
+
+The documentation site publishes text endpoints intended for language models:
+
+* [`/llms.txt`](/llms.txt) is the entry point and links the available sets.
+* [`/llms-small.txt`](/llms-small.txt) contains an abridged documentation set.
+* [`/llms-full.txt`](/llms-full.txt) contains the complete documentation set.
+
+Give an agent `https://anki-llm.raine.dev/llms.txt` when it needs product concepts, workflows, prompt formats, and command behavior. The generated text comes from the same source as this site.
+
+## Product docs and action docs serve different jobs
+
+[Section titled “Product docs and action docs serve different jobs”](#product-docs-and-action-docs-serve-different-jobs)
+
+Use the **product documentation** on this site to understand `anki-llm`: workflows, CLI commands, prompt formats, workspaces, safety behavior, and model configuration.
+
+Use the **AnkiConnect action documentation** from `anki-llm query docs` or [`ANKI_CONNECT.md`](https://github.com/raine/anki-llm/blob/main/ANKI_CONNECT.md) to choose low-level actions and construct their JSON parameters.
+
+An agent usually needs both. Product docs answer “How should this operation be performed safely with `anki-llm`?” Action docs answer “Which AnkiConnect action and parameter shape exposes this collection operation?”
+
+## Prompt examples for your agent
+
+[Section titled “Prompt examples for your agent”](#prompt-examples-for-your-agent)
+
+### Enrich existing notes
+
+[Section titled “Enrich existing notes”](#enrich-existing-notes)
+
+> Inspect my `Japanese` deck and its note types with `anki-llm query`. Propose a prompt that fills an existing empty `Grammar` field without changing any other fields. Dry-run five notes, then use `--preview` for three model responses. Show me the prompt and preview. Do not apply the full run.
+
+### Build a reviewable file pipeline
+
+[Section titled “Build a reviewable file pipeline”](#build-a-reviewable-file-pipeline)
+
+> Export notes matching `deck:Spanish tag:needs-review` to YAML. Create a prompt that verifies the `English` translation from the `Spanish` field. Process ten rows first and preserve the original export. Show me a diff of the output and estimate full-run cost. Do not import anything yet.
+
+### Analyze a collection
+
+[Section titled “Analyze a collection”](#analyze-a-collection)
+
+> Use `anki-llm query docs` to find the right actions, then report note counts by deck and note type. Save the query goal, exact actions, and parameters to a workspace document. Do not modify Anki.
+
+### Redesign a card template
+
+[Section titled “Redesign a card template”](#redesign-a-card-template)
+
+> Pull the `Japanese Vocabulary` note type with `anki-llm note-type`. Improve the back template’s reading hierarchy and mobile layout while preserving every field reference. Show the file diff and a dry-run push. Do not push until I approve it.
+
+### Generate cards
+
+[Section titled “Generate cards”](#generate-cards)
+
+> Inspect my vocabulary deck, run `generate-init` in the active workspace, and review the generated prompt for the correct field mapping. Generate one card for `会議` with `--dry-run`. Show me the card and estimated cost before opening the import flow.
+
+For complete prompt files you can adapt, point the agent at the [`examples/` directory](https://github.com/raine/anki-llm/tree/main/examples).
+
+# Process a file
+
+> Export notes, process them with an LLM, and review the results before importing them.
+
+Use the file workflow when you want a reviewable artifact between Anki and the LLM. It is a good fit for large jobs because progress is saved incrementally and the same command resumes an interrupted run.
+
+The workflow has three stages:
+
+1. Export notes from Anki to CSV or YAML.
+2. Process the exported rows into a separate output file.
+3. Review the output and import it into Anki.
+
+Tip
+
+YAML preserves multiline fields cleanly and produces readable diffs. CSV is convenient for spreadsheets. Input and output files may use `.csv`, `.yaml`, or `.yml` extensions.
+
+## 1. Export the notes
+
+[Section titled “1. Export the notes”](#1-export-the-notes)
+
+Anki must be open with AnkiConnect installed while exporting:
+
+```sh
+anki-llm export "Japanese Core 1k" --output notes.yaml
+```
+
+You can export a deck or select notes with an Anki search query. Each exported row includes a note ID, which `process-file` uses to match input rows with saved output and `import` uses to update the original note.
+
+See [`export` in the command reference](/command-reference/#export) for deck, query, note type, and output options.
+
+## 2. Write a processing prompt
+
+[Section titled “2. Write a processing prompt”](#2-write-a-processing-prompt)
+
+A batch prompt declares its destination field in YAML frontmatter and refers to source fields with placeholders:
+
+```markdown
+---
+output:
+  field: Translation
+  require_result_tag: true
+---
+
+
+Translate this Japanese sentence into natural English: {Japanese}
+
+
+Return the final translation inside <result></result> tags.
+```
+
+See [Write batch prompts](/prompts/) for single-field and multi-field prompts, validation rules, result tags, and staging fields.
+
+## 3. Preview the operation
+
+[Section titled “3. Preview the operation”](#3-preview-the-operation)
+
+Start with a dry run. It prints the prompt template, a sample row, and the filled sample prompt without calling the model or writing output:
+
+```sh
+anki-llm process-file notes.yaml \
+  --output notes-processed.yaml \
+  --prompt prompt.md \
+  --dry-run
+```
+
+Then process a small sample with the model:
+
+```sh
+anki-llm process-file notes.yaml \
+  --output notes-processed.yaml \
+  --prompt prompt.md \
+  --preview \
+  --preview-count 3
+```
+
+Preview mode shows a field-by-field summary and asks whether to continue. If you cancel, it makes no changes. Use `--limit 20` when you want to produce a small output file, inspect it in full, and estimate quality and cost before scaling up.
+
+Caution
+
+A dry run validates template expansion but cannot judge model output. Use a model-backed preview or a limited run before processing a large collection.
+
+## 4. Process the file
+
+[Section titled “4. Process the file”](#4-process-the-file)
+
+Run the full job after the sample looks right:
+
+```sh
+anki-llm process-file notes.yaml \
+  --output notes-processed.yaml \
+  --prompt prompt.md \
+  --model gemini-2.5-flash \
+  --batch-size 10
+```
+
+Each row becomes one model request. Requests run concurrently according to the batch size, and transient failures use the configured retry count. The terminal UI shows progress, token use, and estimated cost. When output is piped, the command uses plain progress output instead.
+
+For the complete option list, including runtime, model, retry, and diagnostic settings, see [`process-file` in the command reference](/command-reference/#process-file).
+
+### Resume an interrupted run
+
+[Section titled “Resume an interrupted run”](#resume-an-interrupted-run)
+
+`process-file` writes successful rows to the output file incrementally. Rerun the same command with the same output path to resume:
+
+```sh
+anki-llm process-file notes.yaml \
+  --output notes-processed.yaml \
+  --prompt prompt.md
+```
+
+Rows are matched by `noteId`, `id`, or `Id`. Input IDs must be present and unique. A corrupt output file or duplicate output ID stops the run rather than silently discarding saved progress.
+
+Completion depends on the prompt shape:
+
+* For `output.field`, a row is complete when the output contains that field.
+* For `output.fields`, a row is complete only when every declared field has a populated value.
+* Rows carrying a processing error, and partially populated multi-field rows, remain eligible for retry.
+
+Use `--force` only when you intend to ignore saved output and process every input row again.
+
+### Understand multi-field writes
+
+[Section titled “Understand multi-field writes”](#understand-multi-field-writes)
+
+A multi-field prompt makes one request per row and expects one structured JSON object containing every declared field. Validation happens before the row is saved. If a response is missing a field, contains an empty value, uses a non-string value, or includes an undeclared field, the whole row fails and none of its declared fields are applied.
+
+This all-or-nothing behavior prevents related fields such as `Reading`, `Explanation`, and `KanjiBreakdown` from getting out of sync. Source and undeclared fields are preserved in the output.
+
+### Capture raw model traffic
+
+[Section titled “Capture raw model traffic”](#capture-raw-model-traffic)
+
+When a prompt behaves unexpectedly, append raw prompts, responses, and errors to a log file:
+
+```sh
+anki-llm process-file notes.yaml \
+  --output notes-processed.yaml \
+  --prompt prompt.md \
+  --log process.log
+```
+
+The command reference documents the additional terminal logging mode. Logs can contain complete card fields and model output, so store and share them with the same care as your collection.
+
+## 5. Review and import
+
+[Section titled “5. Review and import”](#5-review-and-import)
+
+Inspect the output before updating Anki. For YAML tracked in Git, a direct diff is useful:
+
+```sh
+git diff --no-index notes.yaml notes-processed.yaml
+```
+
+When the changes look right, open Anki and import them:
+
+```sh
+anki-llm import notes-processed.yaml --deck "Japanese Core 1k"
+```
+
+The importer uses the note ID when present, preserves destination note fields that are absent from the file, and ignores file fields that do not exist on the destination note type. See [`import` in the command reference](/command-reference/#import) for key-field and note-type behavior.
+
+## When Anki can be closed
+
+[Section titled “When Anki can be closed”](#when-anki-can-be-closed)
+
+Anki and AnkiConnect are required for `export` and `import`. The middle `process-file` stage reads and writes local files only, so Anki can remain closed for the entire LLM run. This makes file mode suitable for long or remote processing sessions.
+
+# Process a deck
+
+> Run an LLM over selected notes and update them directly in Anki.
+
+`process-deck` sends selected notes to an LLM and writes validated results back to Anki without an intermediate data file. Use it for focused jobs where direct updates and automatic rollback snapshots are more convenient than an export-review-import cycle.
+
+Caution
+
+Anki Desktop must stay open with AnkiConnect installed for the entire run. `process-deck` updates the collection as successful batches finish and does not support resume. Use [the file workflow](/process-file/) for a long run where an interruption is likely.
+
+## Prepare the prompt
+
+[Section titled “Prepare the prompt”](#prepare-the-prompt)
+
+Batch prompts declare one or more Anki fields to write. This example fills an empty `Hint` field:
+
+```markdown
+---
+output:
+  field: Hint
+---
+
+
+Write a short hint for this card without giving away the answer.
+
+
+Question: {Front}
+Answer: {Back}
+```
+
+See [Write batch prompts](/prompts/) for placeholders, structured multi-field output, validation, and result tags.
+
+## Select notes
+
+[Section titled “Select notes”](#select-notes)
+
+Pass either a deck name or an Anki search query:
+
+```sh
+anki-llm process-deck "Japanese Core 1k" --prompt hint.md
+```
+
+```sh
+anki-llm process-deck \
+  --query 'deck:Japanese prop:lapses>5' \
+  --prompt explanation.md
+```
+
+Queries let you target useful subsets, for example `tag:leech` or `rated:7:1`. If the selection contains more than one note type, filter it with the note-type option so every selected note has the same fields.
+
+See [`process-deck` in the command reference](/command-reference/#process-deck) for the exact selection syntax and complete option list.
+
+## Preview safely
+
+[Section titled “Preview safely”](#preview-safely)
+
+First inspect template expansion without making an API request or changing Anki:
+
+```sh
+anki-llm process-deck "Japanese Core 1k" \
+  --prompt hint.md \
+  --limit 10 \
+  --dry-run
+```
+
+Then ask the model to process a small sample and review the proposed changes:
+
+```sh
+anki-llm process-deck "Japanese Core 1k" \
+  --prompt hint.md \
+  --preview \
+  --preview-count 3
+```
+
+Preview mode displays each changed field and asks for confirmation before the full run. Cancelling the preview leaves Anki unchanged. A small `--limit` run is also useful for checking real cards, cost, and formatting before broadening the selection.
+
+## Protect existing fields
+
+[Section titled “Protect existing fields”](#protect-existing-fields)
+
+By default, a note is processed only when every declared output field is empty. If any target already contains content, the note is skipped.
+
+This rule is especially important for multi-field prompts. Suppose a prompt declares:
+
+```yaml
+output:
+  fields:
+    - Reading
+    - Explanation
+    - KanjiBreakdown
+```
+
+A note with content in any one of those fields is skipped. Passing `--force` regenerates and atomically overwrites the complete declared set:
+
+```sh
+anki-llm process-deck "Japanese Core 1k" \
+  --prompt enrich.md \
+  --preview \
+  --force
+```
+
+The model response must validate for every field before any field on that note is updated. A failed or invalid response leaves the complete target set unchanged.
+
+Danger
+
+`--force` authorizes replacement of existing target content. Always combine it with a narrow query, a limit, or `--preview` until you have verified the prompt.
+
+## Run the update
+
+[Section titled “Run the update”](#run-the-update)
+
+After the preview looks right, run the selected scope:
+
+```sh
+anki-llm process-deck \
+  --query 'deck:Japanese tag:needs-hint' \
+  --prompt hint.md \
+  --model gemini-2.5-flash
+```
+
+Successful batches are written directly to Anki. The UI reports progress, token use, estimated cost, and the final snapshot run ID.
+
+### Inspect failures
+
+[Section titled “Inspect failures”](#inspect-failures)
+
+Failed notes are written as JSON Lines in the working directory. The filename is based on the deck or query slug, such as:
+
+```text
+japanese-core-1k-errors.jsonl
+```
+
+Each record includes the note data and error, which makes it possible to diagnose placeholder, API, and response-validation failures. Raw request logging is also available when you need to inspect complete model prompts and responses. See the [command reference](/command-reference/#process-deck) for logging options.
+
+Error logs and raw LLM logs may contain private card content. Keep them out of public repositories.
+
+## Review history and roll back
+
+[Section titled “Review history and roll back”](#review-history-and-roll-back)
+
+Every run that updates at least one note saves the original field values in a snapshot under:
+
+```text
+~/.local/state/anki-llm/snapshots/
+```
+
+List available runs:
+
+```sh
+anki-llm history
+```
+
+The table shows each run ID, source, model, note count, and rollback status. Use the run ID to preview a restore:
+
+```sh
+anki-llm rollback 20260411T153000_123Z --dry-run
+```
+
+Apply the rollback after reviewing it:
+
+```sh
+anki-llm rollback 20260411T153000_123Z
+```
+
+Rollback checks whether fields changed after the processing run. If a note was edited later in Anki, that note is reported as a conflict and skipped, which protects the newer edit. A forced rollback overrides conflict detection and restores the snapshot values, so reserve it for cases where the snapshot is the intended source of truth.
+
+See [`history`](/command-reference/#history) and [`rollback`](/command-reference/#rollback) for their complete command options.
+
+# Command reference
+
+> Review every anki-llm command, argument, and option.
+
+This reference is generated from the command-line interface definition.
+
+## Command index
+
+[Section titled “Command index”](#command-index)
+
+* [`anki-llm export`](#command-export)
+
+* [`anki-llm import`](#command-import)
+
+* [`anki-llm process-file`](#command-process-file)
+
+* [`anki-llm process-deck`](#command-process-deck)
+
+* [`anki-llm query`](#command-query)
+
+* [`anki-llm config`](#command-config)
+
+  * [`anki-llm config get`](#command-config-get)
+  * [`anki-llm config set`](#command-config-set)
+  * [`anki-llm config unset`](#command-config-unset)
+  * [`anki-llm config list`](#command-config-list)
+  * [`anki-llm config path`](#command-config-path)
+
+* [`anki-llm generate`](#command-generate)
+
+* [`anki-llm generate-init`](#command-generate-init)
+
+* [`anki-llm history`](#command-history)
+
+* [`anki-llm rollback`](#command-rollback)
+
+* [`anki-llm tts`](#command-tts)
+
+* [`anki-llm tts-voices`](#command-tts-voices)
+
+* [`anki-llm update`](#command-update)
+
+* [`anki-llm docs`](#command-docs)
+
+* [`anki-llm workspace`](#command-workspace)
+
+  * [`anki-llm workspace init`](#command-workspace-init)
+  * [`anki-llm workspace info`](#command-workspace-info)
+
+* [`anki-llm note-type`](#command-note-type)
+
+  * [`anki-llm note-type pull`](#command-note-type-pull)
+  * [`anki-llm note-type push`](#command-note-type-push)
+  * [`anki-llm note-type status`](#command-note-type-status)
+
+* [`anki-llm doctor`](#command-doctor)
+
+[]()
+
+## `anki-llm`
+
+[Section titled “anki-llm”](#anki-llm)
+
+Bulk-process Anki flashcards with LLMs
+
+**Usage**
+
+```text
+Usage: anki-llm <COMMAND>
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+* **`-V, --version`**: Print version
+
+[]()
+
+## `anki-llm export`
+
+[Section titled “anki-llm export”](#anki-llm-export)
+
+Export an Anki deck to CSV or YAML
+
+**Usage**
+
+```text
+Usage: anki-llm export [OPTIONS] <DECK|--query <QUERY>>
+```
+
+**Arguments**
+
+* **`[DECK]`**: Deck name to export
+
+**Options**
+
+* **`-q, --query <QUERY>`**: Anki search query (e.g. “tag:leech”, “prop:lapses>3”, “deck:Japanese -field:Audio”)
+* **`-o, --output <OUTPUT>`**: Output file path
+* **`-n, --note-type <NOTE_TYPE>`**: Filter by note type (required if deck contains multiple note types)
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm import`
+
+[Section titled “anki-llm import”](#anki-llm-import)
+
+Import CSV or YAML file into an Anki deck
+
+**Usage**
+
+```text
+Usage: anki-llm import [OPTIONS] --deck <DECK> <INPUT>
+```
+
+**Arguments**
+
+* **`<INPUT>`**: Input file path (CSV or YAML)
+  * Required: yes
+
+**Options**
+
+* **`-d, --deck <DECK>`**: Target Anki deck name
+  * Required: yes
+* **`-n, --note-type <NOTE_TYPE>`**: Anki note type name (inferred from deck if not specified)
+* **`-k, --key-field <KEY_FIELD>`**: Field name to use for identifying existing notes (auto-detected if not specified)
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm process-file`
+
+[Section titled “anki-llm process-file”](#anki-llm-process-file)
+
+Process notes from a file with AI (supports resume)
+
+**Usage**
+
+```text
+Usage: anki-llm process-file [OPTIONS] --prompt <PROMPT> --output <OUTPUT> <INPUT>
+```
+
+**Arguments**
+
+* **`<INPUT>`**: Input file path (CSV or YAML)
+  * Required: yes
+
+**Options**
+
+* **`-p, --prompt <PROMPT>`**: Path to prompt template file (frontmatter declares output.field or output.fields)
+  * Required: yes
+* **`-o, --output <OUTPUT>`**: Output file path (CSV or YAML)
+  * Required: yes
+* **`-m, --model <MODEL>`**: Model name
+* **`--api-base-url <API_BASE_URL>`**: Custom API base URL (e.g. <https://openrouter.ai/api/v1>, <http://localhost:11434/v1>)
+* **`--api-key <API_KEY>`**: API key (overrides environment variables)
+* **`--reasoning-effort <REASONING_EFFORT>`**: Reasoning effort passed to the model provider
+* **`-b, --batch-size <BATCH_SIZE>`**: Number of concurrent requests
+  * Default: `5`
+* **`-t, --temperature <TEMPERATURE>`**: Sampling temperature (0-2)
+* **`--max-tokens <MAX_TOKENS>`**: Maximum tokens per completion
+* **`-r, --retries <RETRIES>`**: Number of retries on failure
+  * Default: `3`
+* **`-f, --force`**: Re-process all rows, ignoring existing output
+  * Default: `false`
+* **`-d, --dry-run`**: Preview without making API calls
+  * Default: `false`
+* **`-P, --preview`**: Process a sample of cards with the LLM and show what would change
+  * Default: `false`
+* **`--preview-count <PREVIEW_COUNT>`**: Number of cards to process in preview mode (default: 3)
+  * Default: `3`
+* **`--limit <LIMIT>`**: Limit the number of rows to process
+* **`--log <LOG>`**: Append raw LLM prompts and responses to a log file (relative path)
+* **`--very-verbose`**: Print raw LLM prompts and responses to stderr
+  * Default: `false`
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm process-deck`
+
+[Section titled “anki-llm process-deck”](#anki-llm-process-deck)
+
+Process notes directly from an Anki deck
+
+**Usage**
+
+```text
+Usage: anki-llm process-deck [OPTIONS] --prompt <PROMPT> <DECK|--query <QUERY>>
+```
+
+**Arguments**
+
+* **`[DECK]`**: Deck name to process
+
+**Options**
+
+* **`-q, --query <QUERY>`**: Anki search query (e.g. “tag:leech”, “prop:lapses>3”, “deck:Japanese prop:lapses>5”)
+* **`-p, --prompt <PROMPT>`**: Path to prompt template file (frontmatter declares output.field or output.fields)
+  * Required: yes
+* **`-n, --note-type <NOTE_TYPE>`**: Filter by note type (required if deck contains multiple note types)
+* **`-m, --model <MODEL>`**: Model name
+* **`--api-base-url <API_BASE_URL>`**: Custom API base URL (e.g. <https://openrouter.ai/api/v1>, <http://localhost:11434/v1>)
+* **`--api-key <API_KEY>`**: API key (overrides environment variables)
+* **`--reasoning-effort <REASONING_EFFORT>`**: Reasoning effort passed to the model provider
+* **`-b, --batch-size <BATCH_SIZE>`**: Number of concurrent requests
+  * Default: `5`
+* **`-t, --temperature <TEMPERATURE>`**: Sampling temperature (0-2)
+* **`--max-tokens <MAX_TOKENS>`**: Maximum tokens per completion
+* **`-r, --retries <RETRIES>`**: Number of retries on failure
+  * Default: `3`
+* **`-d, --dry-run`**: Preview without making API calls
+  * Default: `false`
+* **`-P, --preview`**: Process a sample of cards with the LLM and show what would change
+  * Default: `false`
+* **`--preview-count <PREVIEW_COUNT>`**: Number of cards to process in preview mode (default: 3)
+  * Default: `3`
+* **`--limit <LIMIT>`**: Limit the number of notes to process
+* **`-f, --force`**: Re-process notes even if the target field already has content
+  * Default: `false`
+* **`--log <LOG>`**: Append raw LLM prompts and responses to a log file (relative path)
+* **`--very-verbose`**: Print raw LLM prompts and responses to stderr
+  * Default: `false`
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm query`
+
+[Section titled “anki-llm query”](#anki-llm-query)
+
+Query AnkiConnect API
+
+**Usage**
+
+```text
+Usage: anki-llm query <ACTION> [PARAMS]
+```
+
+**Arguments**
+
+* **`<ACTION>`**: AnkiConnect action name
+  * Required: yes
+* **`[PARAMS]`**: JSON parameters
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm config`
+
+[Section titled “anki-llm config”](#anki-llm-config)
+
+Manage persistent configuration
+
+**Usage**
+
+```text
+Usage: anki-llm config <COMMAND>
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm config get`
+
+[Section titled “anki-llm config get”](#anki-llm-config-get)
+
+Get a configuration value
+
+**Usage**
+
+```text
+Usage: anki-llm config get <KEY>
+```
+
+**Arguments**
+
+* **`<KEY>`**: Config key
+  * Required: yes
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm config set`
+
+[Section titled “anki-llm config set”](#anki-llm-config-set)
+
+Set a configuration value
+
+**Usage**
+
+```text
+Usage: anki-llm config set <KEY> <VALUE>
+```
+
+**Arguments**
+
+* **`<KEY>`**: Config key
+  * Required: yes
+* **`<VALUE>`**: Config value
+  * Required: yes
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm config unset`
+
+[Section titled “anki-llm config unset”](#anki-llm-config-unset)
+
+Unset a configuration value
+
+**Usage**
+
+```text
+Usage: anki-llm config unset <KEY>
+```
+
+**Arguments**
+
+* **`<KEY>`**: Config key
+  * Required: yes
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm config list`
+
+[Section titled “anki-llm config list”](#anki-llm-config-list)
+
+List all configuration settings
+
+**Usage**
+
+```text
+Usage: anki-llm config list
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm config path`
+
+[Section titled “anki-llm config path”](#anki-llm-config-path)
+
+Show the config file path
+
+**Usage**
+
+```text
+Usage: anki-llm config path
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm generate`
+
+[Section titled “anki-llm generate”](#anki-llm-generate)
+
+Generate Anki cards using an LLM
+
+**Usage**
+
+```text
+Usage: anki-llm generate [OPTIONS] [TERM]
+```
+
+**Arguments**
+
+* **`[TERM]`**: Term to generate cards for (omit to enter interactively in TUI)
+
+**Options**
+
+* **`-p, --prompt <PROMPT>`**: Path to prompt template file with frontmatter (auto-resolved from the workspace’s prompts/ if omitted)
+* **`-c, --count <COUNT>`**: Number of card examples to generate
+  * Default: `3`
+* **`-m, --model <MODEL>`**: Model name
+* **`--api-base-url <API_BASE_URL>`**: Custom API base URL (e.g. <https://openrouter.ai/api/v1>, <http://localhost:11434/v1>)
+* **`--api-key <API_KEY>`**: API key (overrides environment variables)
+* **`--reasoning-effort <REASONING_EFFORT>`**: Reasoning effort passed to the model provider
+* **`-d, --dry-run`**: Preview without importing to Anki
+  * Default: `false`
+* **`-r, --retries <RETRIES>`**: Number of retries for failed requests
+  * Default: `3`
+* **`--max-tokens <MAX_TOKENS>`**: Maximum tokens per response
+* **`-t, --temperature <TEMPERATURE>`**: LLM temperature (0-2)
+* **`-o, --output <OUTPUT>`**: Export cards to a file instead of importing to Anki
+* **`--copy`**: Copy prompt to clipboard for manual LLM mode
+  * Default: `false`
+* **`--log <LOG>`**: Append raw LLM prompts and responses to a log file (relative path)
+* **`--very-verbose`**: Print raw LLM prompts and responses to stderr
+  * Default: `false`
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm generate-init`
+
+[Section titled “anki-llm generate-init”](#anki-llm-generate-init)
+
+Create a prompt template by querying your Anki collection
+
+**Usage**
+
+```text
+Usage: anki-llm generate-init [OPTIONS] [OUTPUT]
+```
+
+**Arguments**
+
+* **`[OUTPUT]`**: Output file path
+
+**Options**
+
+* **`-m, --model <MODEL>`**: Model name
+* **`--api-base-url <API_BASE_URL>`**: Custom API base URL (e.g. <https://openrouter.ai/api/v1>, <http://localhost:11434/v1>)
+* **`--api-key <API_KEY>`**: API key (overrides environment variables)
+* **`--reasoning-effort <REASONING_EFFORT>`**: Reasoning effort passed to the model provider
+* **`-t, --temperature <TEMPERATURE>`**: LLM temperature (0-2)
+* **`--copy`**: Copy prompt to clipboard for manual LLM mode
+  * Default: `false`
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm history`
+
+[Section titled “anki-llm history”](#anki-llm-history)
+
+List past process-deck runs with snapshot data
+
+**Usage**
+
+```text
+Usage: anki-llm history
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm rollback`
+
+[Section titled “anki-llm rollback”](#anki-llm-rollback)
+
+Rollback a previous process-deck run
+
+**Usage**
+
+```text
+Usage: anki-llm rollback [OPTIONS] <RUN_ID>
+```
+
+**Arguments**
+
+* **`<RUN_ID>`**: Run ID to rollback (from `history` command)
+  * Required: yes
+
+**Options**
+
+* **`--force`**: Force rollback even if notes were modified after the run
+  * Default: `false`
+* **`-d, --dry-run`**: Preview without making changes
+  * Default: `false`
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm tts`
+
+[Section titled “anki-llm tts”](#anki-llm-tts)
+
+Generate text-to-speech audio for notes and upload to Anki’s media store
+
+**Usage**
+
+```text
+Usage: anki-llm tts [OPTIONS] [DECK]
+```
+
+**Arguments**
+
+* **`[DECK]`**: Deck name to process (defaults to deck from –prompt frontmatter)
+
+**Options**
+
+* **`-q, --query <QUERY>`**: Anki search query (e.g. “tag:leech”, “deck:Japanese -Audio:”)
+* **`--prompt <PROMPT>`**: Path to a generate prompt YAML; reads its `tts:` block instead of taking deck-design flags on the CLI
+* **`--field <FIELD>`**: Target field to write \[sound:…] into (flag mode; required)
+* **`-p, --template <TEMPLATE>`**: Path to prompt template file (flag mode)
+* **`--text-field <TEXT_FIELD>`**: Source field name (flag mode; alternative to –template)
+* **`--provider <PROVIDER>`**: TTS provider identifier (flag mode; defaults to “openai”)
+* **`--voice <VOICE>`**: Voice name (flag mode; provider-specific, e.g. alloy)
+* **`--tts-model <TTS_MODEL>`**: TTS backing model (flag mode; e.g. gpt-4o-mini-tts)
+* **`--format <FORMAT>`**: Output audio format (flag mode; defaults to “mp3”)
+* **`--speed <SPEED>`**: Playback speed (flag mode; 1.0 = normal)
+* **`--api-base-url <API_BASE_URL>`**: API base URL override (OpenAI or OpenAI-compatible providers)
+* **`--api-key <API_KEY>`**: API key override. Used as the OpenAI bearer token or the Azure subscription key depending on the active provider
+* **`--azure-region <AZURE_REGION>`**: Azure region override (flag mode; provider must be ‘azure’)
+* **`--aws-region <AWS_REGION>`**: AWS region override for Amazon Polly (flag mode; provider must be ‘amazon’)
+* **`--aws-access-key-id <AWS_ACCESS_KEY_ID>`**: AWS access key id for Amazon Polly (flag mode)
+* **`--aws-secret-access-key <AWS_SECRET_ACCESS_KEY>`**: AWS secret access key for Amazon Polly (flag mode)
+* **`-n, --note-type <NOTE_TYPE>`**: Filter by note type (flag mode; rejected in –prompt mode)
+* **`-b, --batch-size <BATCH_SIZE>`**: Number of concurrent TTS requests
+  * Default: `5`
+* **`-r, --retries <RETRIES>`**: Number of retries on transient failures
+  * Default: `3`
+* **`-f, --force`**: Regenerate audio even for notes whose target field already contains a sound tag
+  * Default: `false`
+* **`-d, --dry-run`**: Preview without making API calls or mutating Anki
+  * Default: `false`
+* **`--limit <LIMIT>`**: Limit the number of notes to process
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm tts-voices`
+
+[Section titled “anki-llm tts-voices”](#anki-llm-tts-voices)
+
+Browse and audition TTS voices across OpenAI / Azure / Google / Polly
+
+**Usage**
+
+```text
+Usage: anki-llm tts-voices [OPTIONS]
+```
+
+**Options**
+
+* **`--lang <LANG>`**: Pre-filter by language code prefix, e.g. “ja” or “en-US”
+* **`--provider <PROVIDER>`**: Pre-filter by provider id (openai, azure, google, amazon, edge)
+* **`-q, --query <QUERY>`**: Initial text query for the omni-search field
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm update`
+
+[Section titled “anki-llm update”](#anki-llm-update)
+
+Update anki-llm to the latest version
+
+**Usage**
+
+```text
+Usage: anki-llm update
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm docs`
+
+[Section titled “anki-llm docs”](#anki-llm-docs)
+
+Show the complete documentation bundle offline
+
+**Usage**
+
+```text
+Usage: anki-llm docs
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm workspace`
+
+[Section titled “anki-llm workspace”](#anki-llm-workspace)
+
+Manage anki-llm workspaces
+
+**Usage**
+
+```text
+Usage: anki-llm workspace <COMMAND>
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm workspace init`
+
+[Section titled “anki-llm workspace init”](#anki-llm-workspace-init)
+
+Initialize a new workspace in the current or specified directory
+
+**Usage**
+
+```text
+Usage: anki-llm workspace init [DIR]
+```
+
+**Arguments**
+
+* **`[DIR]`**: Directory to initialize (defaults to current directory)
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm workspace info`
+
+[Section titled “anki-llm workspace info”](#anki-llm-workspace-info)
+
+Show information about the current workspace
+
+**Usage**
+
+```text
+Usage: anki-llm workspace info
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm note-type`
+
+[Section titled “anki-llm note-type”](#anki-llm-note-type)
+
+Manage Anki note type templates and CSS
+
+**Usage**
+
+```text
+Usage: anki-llm note-type <COMMAND>
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm note-type pull`
+
+[Section titled “anki-llm note-type pull”](#anki-llm-note-type-pull)
+
+Pull note type templates and CSS from Anki into local files
+
+**Usage**
+
+```text
+Usage: anki-llm note-type pull [OPTIONS] <NAME>
+```
+
+**Arguments**
+
+* **`<NAME>`**: Note type name (as shown in Anki)
+  * Required: yes
+
+**Options**
+
+* **`--force`**: Overwrite existing local files without prompting
+  * Default: `false`
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm note-type push`
+
+[Section titled “anki-llm note-type push”](#anki-llm-note-type-push)
+
+Push local templates and CSS to Anki
+
+**Usage**
+
+```text
+Usage: anki-llm note-type push [OPTIONS] <NAME|--all>
+```
+
+**Arguments**
+
+* **`[NAME]`**: Note type name (as shown in Anki)
+
+**Options**
+
+* **`--all`**: Push all note types in the workspace
+  * Default: `false`
+* **`-d, --dry-run`**: Preview changes without modifying Anki
+  * Default: `false`
+* **`--no-snapshot`**: Skip snapshot before push
+  * Default: `false`
+* **`--force`**: Push even if Anki has diverged from the last known remote state
+  * Default: `false`
+* **`-h, --help`**: Print help
+
+[]()
+
+### `anki-llm note-type status`
+
+[Section titled “anki-llm note-type status”](#anki-llm-note-type-status)
+
+Show which note types have un-pushed changes
+
+**Usage**
+
+```text
+Usage: anki-llm note-type status
+```
+
+**Options**
+
+* **`-h, --help`**: Print help
+
+[]()
+
+## `anki-llm doctor`
+
+[Section titled “anki-llm doctor”](#anki-llm-doctor)
+
+Diagnose configuration and provider connectivity
+
+**Usage**
+
+```text
+Usage: anki-llm doctor [OPTIONS]
+```
+
+**Options**
+
+* **`--check`**: Verify provider authentication and AnkiConnect reachability over the network
+  * Default: `false`
+* **`-h, --help`**: Print help
+
+# Configuration
+
+> Look up global settings, environment variables, workspace precedence, and local state paths.
+
+## Global configuration
+
+[Section titled “Global configuration”](#global-configuration)
+
+Global settings live at:
+
+```text
+~/.config/anki-llm/config.json
+```
+
+Manage them through the CLI so values are validated and written atomically:
+
+```bash
+anki-llm config set model gpt-5-mini
+anki-llm config get model
+anki-llm config list
+anki-llm config unset model
+```
+
+### Global keys
+
+[Section titled “Global keys”](#global-keys)
+
+| Key                         | Value            | Purpose                                                      |
+| --------------------------- | ---------------- | ------------------------------------------------------------ |
+| `model`                     | string           | Default LLM model                                            |
+| `api_base_url`              | URL              | Default OpenAI-compatible endpoint                           |
+| `reasoning_effort`          | non-empty string | Default reasoning effort                                     |
+| `gemini_thinking_enabled`   | boolean          | Show and request supported Gemini thinking; defaults to true |
+| `nerd_font`                 | boolean          | Use Nerd Font symbols in terminal interfaces                 |
+| `default_workspace`         | path             | Workspace fallback outside a workspace directory             |
+| `anki_connect_url`          | URL              | AnkiConnect endpoint override                                |
+| `tts_provider`              | provider ID      | Default TTS provider                                         |
+| `tts_voice`                 | voice ID         | Default TTS voice                                            |
+| `tts_model`                 | string           | OpenAI TTS model or Amazon Polly engine                      |
+| `tts_format`                | string           | Default audio format                                         |
+| `azure_tts_key`             | secret           | Azure Speech subscription key                                |
+| `azure_tts_region`          | region           | Azure Speech region                                          |
+| `google_tts_key`            | secret           | Google Cloud TTS API key                                     |
+| `aws_tts_access_key_id`     | secret           | AWS access key ID for Polly                                  |
+| `aws_tts_secret_access_key` | secret           | AWS secret access key for Polly                              |
+| `aws_tts_region`            | region           | AWS region for Polly                                         |
+
+Global config has no LLM API key key. Prefer environment variables for all secrets, including TTS credentials, so they do not reside in `config.json`.
+
+## Environment variables
+
+[Section titled “Environment variables”](#environment-variables)
+
+### LLM
+
+[Section titled “LLM”](#llm)
+
+| Variable                    | Purpose                                           |
+| --------------------------- | ------------------------------------------------- |
+| `ANKI_LLM_API_BASE_URL`     | Generic compatible API endpoint                   |
+| `ANKI_LLM_API_KEY`          | Generic key, including OpenRouter and custom APIs |
+| `ANKI_LLM_REASONING_EFFORT` | Reasoning effort override                         |
+| `OPENAI_API_KEY`            | Auto-detected OpenAI key and OpenAI TTS fallback  |
+| `GEMINI_API_KEY`            | Auto-detected Google Gemini key                   |
+| `DEEPSEEK_API_KEY`          | Auto-detected DeepSeek key                        |
+| `XAI_API_KEY`               | Auto-detected xAI key                             |
+
+### TTS
+
+[Section titled “TTS”](#tts)
+
+| Variable                | Purpose                                           |
+| ----------------------- | ------------------------------------------------- |
+| `AZURE_TTS_KEY`         | Azure Speech subscription key                     |
+| `AZURE_TTS_REGION`      | Azure Speech region                               |
+| `GOOGLE_TTS_KEY`        | Google Cloud Text-to-Speech API key               |
+| `AWS_ACCESS_KEY_ID`     | Amazon Polly access key ID                        |
+| `AWS_SECRET_ACCESS_KEY` | Amazon Polly secret access key                    |
+| `AWS_SESSION_TOKEN`     | Optional AWS temporary-credential token           |
+| `AWS_REGION`            | Amazon Polly region                               |
+| `AWS_DEFAULT_REGION`    | Polly region fallback when `AWS_REGION` is absent |
+
+See [Models](/models/) and [TTS providers](/tts-providers/) for provider-specific resolution rules.
+
+## Workspace configuration
+
+[Section titled “Workspace configuration”](#workspace-configuration)
+
+A workspace contains `prompts/` and can include `anki-llm.yaml`:
+
+anki-llm.yaml
+
+```yaml
+default_model: gemini-2.5-flash
+reasoning_effort: low
+```
+
+The effective workspace is the workspace containing the current directory. When none contains it, `default_workspace` supplies a fallback. Its `prompts/`, `note-types/`, and `anki-llm.yaml` become available to workspace-aware commands.
+
+Model precedence is CLI, workspace `default_model`, global `model`, then key-based detection. Reasoning effort precedence is CLI, environment, workspace, global, then unset. API base URL does not have a workspace key.
+
+Read [Use workspaces](/workspaces/) for initialization, discovery, prompt selection, and version-control patterns.
+
+## Common setup
+
+[Section titled “Common setup”](#common-setup)
+
+```bash
+anki-llm config set model gpt-5-mini
+anki-llm config set reasoning_effort low
+anki-llm config set default_workspace ~/anki
+anki-llm config set anki_connect_url http://192.168.1.100:8765
+anki-llm config set gemini_thinking_enabled false
+```
+
+Inspect the resolved environment with:
+
+```bash
+anki-llm doctor
+```
+
+## State, logs, snapshots, and cache
+
+[Section titled “State, logs, snapshots, and cache”](#state-logs-snapshots-and-cache)
+
+| Path                                             | Contents                                               |
+| ------------------------------------------------ | ------------------------------------------------------ |
+| `~/.local/state/anki-llm/state.json`             | Ephemeral application state, including the last prompt |
+| `~/.local/state/anki-llm/logs/`                  | Automatic LLM session logs                             |
+| `~/.local/state/anki-llm/note-type-snapshots/`   | Backups created before note type pushes                |
+| `~/.cache/anki-llm/tts/`                         | Content-addressed synthesized audio cache              |
+| `<workspace>/note-types/<slug>/.sync-state.json` | Last-synced note type hash, locally gitignored         |
+
+These paths assume the standard home directory layout used by the current implementation.
+
+# Changelog
+
+> Review notable changes in anki-llm releases.
+
+## Unreleased
+
+[Section titled “Unreleased”](#unreleased)
+
+* Publish the complete documentation site at <https://anki-llm.raine.dev> and bundle its LLM-readable reference for offline access through `anki-llm docs`.
+
+## v2.0.19 (2026-07-28)
+
+[Section titled “v2.0.19 (2026-07-28)”](#v2019-2026-07-28)
+
+* Generate multiple fields in one `process-file` or `process-deck` request, with validation and all-or-nothing updates that preserve existing data when a response fails.
+* Build or run `anki-llm` reproducibly on Linux and macOS with the new Nix flake.
+
+## v2.0.18 (2026-05-10)
+
+[Section titled “v2.0.18 (2026-05-10)”](#v2018-2026-05-10)
+
+* Add Microsoft Edge TTS support, including bundled Edge voices and no required API key. ([#6](https://github.com/raine/anki-llm/issues/6))
+
+## v2.0.17 (2026-05-03)
+
+[Section titled “v2.0.17 (2026-05-03)”](#v2017-2026-05-03)
+
+* Stream LLM thinking content in real-time during card generation in the TUI
+* Add `gemini_thinking_enabled` config option to disable thinking for Gemini models
+* Verify duplicate search candidates match exactly before flagging duplicates ([#5](https://github.com/raine/anki-llm/issues/5))
+* Fix model picker selection resetting after filtering with keyboard input
+
+## v2.0.16 (2026-05-01)
+
+[Section titled “v2.0.16 (2026-05-01)”](#v2016-2026-05-01)
+
+* Add xAI as a provider with Grok 4.3 model
+
+## v2.0.15 (2026-04-26)
+
+[Section titled “v2.0.15 (2026-04-26)”](#v2015-2026-04-26)
+
+* Add `doctor` command to diagnose configuration, API keys, AnkiConnect connectivity, and workspace setup.
+* Add support for DeepSeek V4 models.
+* Treat empty `DEEPSEEK_API_KEY` and `GEMINI_API_KEY` environment variables as unset, so they fall back to other configured providers.
+
+## v2.0.14 (2026-04-26)
+
+[Section titled “v2.0.14 (2026-04-26)”](#v2014-2026-04-26)
+
+* Add `anki_connect_url` config key to customize the AnkiConnect endpoint (defaults to `http://localhost:8765`).
+* `tts`: fall back to annotation-stripped text when furigana parsing fails, so audio still gets generated for notes with malformed ruby markup.
+
+## v2.0.13 (2026-04-25)
+
+[Section titled “v2.0.13 (2026-04-25)”](#v2013-2026-04-25)
+
+* Add `note-type` command — pull Anki note type templates and CSS into local files, edit them in any editor, then push changes back to Anki. `note-type status` shows a live diff of what has drifted.
+* Add workspace support — a directory with a `prompts/` folder is now a workspace. Run `workspace init` to set one up. Prompts and settings are resolved from the current workspace automatically.
+* Add `workspace init` and `workspace info` subcommands
+* **Breaking:** `prompts_dir` config setting is replaced by `default_workspace`. Set it to your workspace directory and all commands resolve prompts, note types, and default model from there regardless of your working directory.
+* `process-deck` now skips notes that already have content in the target field by default — use `--force` to re-process and overwrite existing values.
+
+## v2.0.12 (2026-04-23)
+
+[Section titled “v2.0.12 (2026-04-23)”](#v2012-2026-04-23)
+
+* **Breaking:** `process-deck` and `process-file` prompts now require a YAML frontmatter block declaring the target field. The `--field`, `--json`, and `--require-result-tag` CLI flags are removed. Add a frontmatter block to each prompt file:
+
+  ```plaintext
+  ---
+  output:
+    field: Translation
+    require_result_tag: true  # optional
+  ---
+  ```
+
+* **Breaking:** JSON-merge output (`--json`) is no longer supported for `process-*`. Prompts now always write a single field.
+
+* Add `--preview` flag to `process-deck` and `process-file` — process a small sample of cards with the LLM and show a diff-like summary of what would change, then prompt for confirmation before running the full batch.
+
+## v2.0.11 (2026-04-23)
+
+[Section titled “v2.0.11 (2026-04-23)”](#v2011-2026-04-23)
+
+* Add `update` command — self-update to the latest release from GitHub
+* Add `docs` command — show bundled documentation in the terminal
+
+## v2.0.10 (2026-04-22)
+
+[Section titled “v2.0.10 (2026-04-22)”](#v2010-2026-04-22)
+
+* Add `z` key in the generate TUI to skip post-select processing — useful when you want to bypass quality checks or other post-processing steps configured in a prompt
+* Fix large deck exports failing due to HTTP response buffer limit ([#3](https://github.com/raine/anki-llm/pull/3))
+
+## v2.0.9 (2026-04-21)
+
+[Section titled “v2.0.9 (2026-04-21)”](#v209-2026-04-21)
+
+* `tts-voices` browser now copies voice YAML to clipboard on Enter and stays open so you can keep exploring voices, instead of exiting immediately
+* `generate` summary screen now lets you replay imported audio with `p`
+* Furigana parser now accepts katakana loanwords with reading annotations (e.g. `スパイク[すぱいく]`), fixing TTS preparation for those cards
+
+## v2.0.8 (2026-04-14)
+
+[Section titled “v2.0.8 (2026-04-14)”](#v208-2026-04-14)
+
+### TTS (text-to-speech)
+
+[Section titled “TTS (text-to-speech)”](#tts-text-to-speech)
+
+* Added `tts` command — synthesize audio for Anki card fields and upload to Anki as media
+* Added support for multiple TTS providers: OpenAI, Azure Neural, Google Cloud, and Amazon Polly
+* Added `tts-voices` subcommand — browse, filter, and preview voices from all providers in an interactive TUI
+* TTS is now integrated into the `generate` pipeline — audio is synthesized automatically as a pipeline step before cards are added to Anki
+* Added TTS preview hotkey in the generate selection screen — press P to preview audio before committing
+* Added utterance IR with furigana parsing for better Japanese pronunciation
+
+### `generate` improvements
+
+[Section titled “generate improvements”](#generate-improvements)
+
+* Post-select processing now shows per-card field diffs, making it easy to see what each processing step changed
+* Added per-step cost reporting after post-select processing
+* Added Summary step in the sidebar for run completion view
+* Legacy (non-TUI) mode now correctly fails on import errors instead of silently exiting successfully
+
+## v2.0.7 (2026-04-12)
+
+[Section titled “v2.0.7 (2026-04-12)”](#v207-2026-04-12)
+
+* Added interactive batch TUI for `process-deck` — same live progress, row previews, and summary screen as `process-file`
+
+## v2.0.6 (2026-04-11)
+
+[Section titled “v2.0.6 (2026-04-11)”](#v206-2026-04-11)
+
+* Added interactive batch TUI for `process-file` — live progress with elapsed time, row previews, and a summary screen when done
+* Added `--query` flag to `process-deck` and `export` to filter which notes are processed or exported
+* Added snapshot/rollback system for `process-deck` — use `history` to view past runs and `rollback` to undo changes
+* Added support for any OpenAI-compatible LLM provider — configure a custom endpoint and use any model
+
+## v2.0.5 (2026-04-11)
+
+[Section titled “v2.0.5 (2026-04-11)”](#v205-2026-04-11)
+
+### `generate`
+
+[Section titled “generate”](#generate)
+
+* Added batch/multi-term input — paste multiple terms or press Tab to queue them, then process all at once into a single selection view
+* Added single-card regeneration with feedback — press R on a card to regenerate it with custom guidance (e.g. “make the definition simpler”)
+* Added duplicate diffing — duplicate cards now show a field-by-field diff against the existing Anki note, and pressing F force-selects them when the new version is better
+* Added $EDITOR integration — press E in the selection screen to edit a card’s fields in your editor
+* Added inline term input — press N in the selection screen to generate cards for a new term without leaving the view
+* Added card removal — press X to remove unwanted cards from the selection
+* Model picker now supports type-to-filter and Ctrl-N/Ctrl-P navigation
+* Model changes in the selection screen are now deferred, showing which model generated each card
+
+## v2.0.4 (2026-04-10)
+
+[Section titled “v2.0.4 (2026-04-10)”](#v204-2026-04-10)
+
+* Added prompt picker — prompts in the prompts directory are auto-discovered, and a picker appears when `--prompt` is omitted. Use Ctrl+P to switch prompts during a session. Last used prompt is remembered.
+* Added model pricing display in the model picker
+* Model can now be switched from the card selection, done, and error screens (Ctrl+O)
+* Done screen now shows the final generated cards, allows copying card text, and deleting imported cards
+* Added step history browsing on done and error screens — review what each processing step produced
+* **Breaking:** `post_process` and `quality_check` prompt template keys have been replaced with a unified `processing` pipeline. See the README for the new configuration format.
+* All LLM queries are now automatically logged to `~/.local/state/anki-llm/logs/`
+* LLM errors are now logged to the session log file
+* `generate-init` now outputs to the prompts directory by default
+* Added gemini-3.1-flash-lite-preview model, removed gpt-5.4-pro
+* Nerd Font checkbox glyphs are now configurable
+* Fixed CJK characters bleeding into the sidebar
+* Fixed cross-provider model overrides not applying in processing steps
+* Fixed Ctrl+P not opening the picker when a prompt was already remembered
+
+## v2.0.3 (2026-04-07)
+
+[Section titled “v2.0.3 (2026-04-07)”](#v203-2026-04-07)
+
+* Added interactive TUI for the `generate` command — full-screen terminal interface with sidebar progress, card preview, and keyboard-driven workflow
+* Added `post_process` support in prompt templates — delegate individual field generation to separate focused LLM calls for higher quality results
+* **Breaking:** prompt template YAML keys switched from camelCase to snake\_case (`noteType` → `note_type`, `fieldMap` → `field_map`, `qualityCheck` → `quality_check`). Old keys will produce a clear error prompting you to update.
+
+## v2.0.2 (2026-04-06)
+
+[Section titled “v2.0.2 (2026-04-06)”](#v202-2026-04-06)
+
+* Improved terminal output with colors and better-styled progress bars
+* Card selector now shows full field content without truncation
+
+## v2.0.0 (2026-04-06)
+
+[Section titled “v2.0.0 (2026-04-06)”](#v200-2026-04-06)
+
+* Rewrote the entire tool in Rust - single self-contained binary, no Node.js runtime required
+
+## v1.6.0 (2026-02-28)
+
+[Section titled “v1.6.0 (2026-02-28)”](#v160-2026-02-28)
+
+* Added gemini-3-flash-preview and gemini-3.1-pro-preview model support
+* Added gpt-4.1-mini, gpt-4.1-nano, gpt-5.1, and gpt-5.2 models
+* Temperature parameter is now omitted for GPT-5 models (not supported by the API)
+
+## v1.5.1 (2025-11-09)
+
+[Section titled “v1.5.1 (2025-11-09)”](#v151-2025-11-09)
+
+* Arrays in LLM responses are now converted to HTML lists in `generate`
+* Added progress spinners during prompt generation and card generation
+
+## v1.5.0 (2025-11-09)
+
+[Section titled “v1.5.0 (2025-11-09)”](#v150-2025-11-09)
+
+* Added optional quality check step in `generate` — the LLM reviews generated cards before presenting them for selection
+* `generate-init` now shows which model was selected and improves the model selection flow
+* Gemini is automatically used when only `GEMINI_API_KEY` is set, even if no OpenAI key is present
+
+## v1.4.0 (2025-11-02)
+
+[Section titled “v1.4.0 (2025-11-02)”](#v140-2025-11-02)
+
+* Added copy mode in `generate` — generated card fields can be copied to an existing note instead of creating a new one
+
+## v1.3.0 (2025-11-02)
+
+[Section titled “v1.3.0 (2025-11-02)”](#v130-2025-11-02)
+
+* LLM cost is now reported after `generate` and `generate-init` complete
+* Card selector shows all fields of the selected card for easier review
+* Fixed missing whitespace between HTML elements in card display
+* Markdown is always converted to HTML in `generate` output
+* Vim-style hotkeys enabled in interactive selection prompts
+
+## v1.2.0 (2025-10-29)
+
+[Section titled “v1.2.0 (2025-10-29)”](#v120-2025-10-29)
+
+* Added `generate` command — interactively generate multiple contextual flashcard examples for a term and add selected cards to your Anki deck
+* Added `generate-init` wizard — uses an LLM to analyze your existing cards and produce a tailored prompt template file for the `generate` command
+* `generate` now supports YAML output and can append to existing YAML/CSV files with schema validation
+* Import command now auto-detects the key field from column names
+* Added gpt-5 and gpt-5-mini model support
+* Cards are validated concurrently during generation for faster feedback
+* Model can be set in config and overridden per-command
+
+## v1.1.0 (2025-10-25)
+
+[Section titled “v1.1.0 (2025-10-25)”](#v110-2025-10-25)
+
+* Added `query` command for direct AnkiConnect access from the CLI or AI agents
+
+## v1.0.1 (2025-10-25)
+
+[Section titled “v1.0.1 (2025-10-25)”](#v101-2025-10-25)
+
+* Initial release
+* `export` — export an Anki deck to CSV or YAML
+* `import` — import a CSV or YAML file back into Anki
+* `process-file` — file-based batch workflow: export, process with LLM, import (supports resume)
+* `process-deck` — direct in-place batch processing of deck notes with an LLM
+* OpenAI and Google Gemini model support
+* Template-based prompt files with field substitution
+* Concurrent processing with retry logic and cost tracking
+
+# Generate cards
+
+> Create candidate cards, review them in the TUI, and import only the cards you choose.
+
+`anki-llm generate` turns a word, phrase, or concept into several candidate cards. Its terminal UI keeps generation and import separate so you can inspect, edit, reject, or regenerate every candidate before it reaches Anki.
+
+## Create a generation prompt
+
+[Section titled “Create a generation prompt”](#create-a-generation-prompt)
+
+The recommended starting point is the interactive prompt wizard:
+
+```sh
+anki-llm workspace init
+anki-llm generate-init
+```
+
+Choose a deck and note type. The wizard samples existing notes and asks an LLM to create a prompt that matches their fields, style, and formatting. It saves the result in the workspace `prompts/` directory unless you provide a specific output path.
+
+Review the generated file before using it. A generation prompt declares the Anki destination and maps short model-facing keys to Anki fields:
+
+```yaml
+---
+title: Japanese Vocabulary
+description: Contextual sentence cards with readings
+deck: Japanese::Vocabulary
+note_type: Basic
+field_map:
+  front: Front
+  kanji: Kanji
+  reading: Reading
+  explanation: Explanation
+---
+```
+
+The body must use `{term}` and `{count}`, ask for a JSON array, and show an exact example whose keys match `field_map`. Arrays returned as field values become HTML lists during import.
+
+For a runnable starting point, see the [vocabulary generation example](https://github.com/raine/anki-llm/blob/main/examples/generate_vocab.md) or the more detailed [Japanese contextual example](https://github.com/raine/anki-llm/blob/main/examples/japanese_contextual.md). The [prompt reference](/prompt-reference/) documents generation frontmatter.
+
+Tip
+
+A capable model can produce a better initial template in `generate-init`. You can use a different, cheaper model for everyday card generation.
+
+## Select a prompt
+
+[Section titled “Select a prompt”](#select-a-prompt)
+
+Launch from a workspace and omit `--prompt`:
+
+```sh
+anki-llm generate
+```
+
+If the workspace contains one prompt, it is selected automatically. If it contains several, a picker shows each prompt’s title and description. The last selection is remembered and preselected in the next session. You can also pass a prompt path explicitly.
+
+See [Use workspaces](/workspaces/) for prompt discovery and default workspace behavior.
+
+## Generate one or many terms
+
+[Section titled “Generate one or many terms”](#generate-one-or-many-terms)
+
+You can provide a term on the command line:
+
+```sh
+anki-llm generate "会議"
+```
+
+Or omit it and enter terms in the TUI. For a batch, press `Tab` after each term to queue it, then press `Enter` on the final term. Pasting newline-separated terms creates the same queue.
+
+Use `Ctrl+O` to open the filterable model picker. It includes known pricing information and changes the model for subsequent requests in the same session. Session token use and estimated cost remain visible in the sidebar.
+
+![The generate TUI showing term entry, progress, and session cost](/generate-tui.webp)
+
+## Review candidates
+
+[Section titled “Review candidates”](#review-candidates)
+
+After generation, the selection screen lists candidates and shows the focused card in full:
+
+![The card selection screen with candidate checkboxes and a full field preview](/anki-llm-selection.webp)
+
+The main review actions are:
+
+* `Space` toggles the focused card.
+* `a` and `n` select all or none.
+* `e` opens the focused card in `$EDITOR`.
+* `R` regenerates one card with your feedback.
+* `r` generates more candidates for the same term.
+* `t` generates candidates for another term.
+* `d` removes a candidate.
+* `c` copies a card to the clipboard.
+* `z` toggles post-selection processing when the prompt configures it.
+* `Enter` confirms the selected cards.
+
+Press `?` for the complete shortcut list for the current screen.
+
+### Handle duplicates deliberately
+
+[Section titled “Handle duplicates deliberately”](#handle-duplicates-deliberately)
+
+Before selection, `anki-llm` compares the generated value for the note type’s first field with existing notes in the configured deck. Exact matches receive a `[dup]` marker and a field-by-field diff against the Anki note. Duplicates cannot be selected normally. Press `f` only when you intentionally want to force-select one.
+
+Caution
+
+Duplicate detection uses an exact match on the first Anki field. It does not identify paraphrases, spelling variants, or duplicates in another deck. Review the complete card before importing it.
+
+## Add focused processing steps
+
+[Section titled “Add focused processing steps”](#add-focused-processing-steps)
+
+Generation prompts may define `pre_select` and `post_select` LLM steps. Pre-selection steps can normalize fields or reject poor candidates before you review them. Post-selection steps can polish or check only the cards you chose.
+
+See [Processing steps](/processing-steps/) for transforms, checks, verdicts, ordering, cost, and limitations.
+
+## Observe model thinking
+
+[Section titled “Observe model thinking”](#observe-model-thinking)
+
+When a supported Gemini, DeepSeek, or Grok model emits reasoning during the primary generation request, the running screen displays it in a temporary Thinking block. The block disappears when generation completes and its content is excluded from raw prompt and response logs.
+
+Gemini thinking can be disabled in configuration when you prefer the normal non-thinking request path. See [Configuration](/configuration/) for the setting.
+
+## Generate without an API key
+
+[Section titled “Generate without an API key”](#generate-without-an-api-key)
+
+Copy mode sends the filled prompt through your clipboard instead of an API:
+
+```sh
+anki-llm generate "今日" --prompt prompt.md --copy
+```
+
+1. Paste the copied prompt into a browser-based LLM.
+2. Copy its complete JSON response.
+3. Paste the response into the terminal.
+4. Type `END` on its own line and press `Enter`.
+5. Review the validated candidates as usual.
+
+Note
+
+Copy mode does not support `pre_select` or `post_select` processing steps. The pasted response still has to contain all keys declared by `field_map`.
+
+## Add TTS audio
+
+[Section titled “Add TTS audio”](#add-tts-audio)
+
+A generation prompt can include a `tts:` block that names an audio target, source, provider, and voice. When TTS is configured and a system audio player is available:
+
+* press `p` during selection to preview the focused card’s audio;
+* selected cards receive finalized audio at import time;
+* press `p` on the summary to replay imported audio.
+
+LLM and TTS credentials remain separate. For example, generation can use OpenRouter while audio uses OpenAI or Azure credentials. See [Text-to-speech](/tts/) and [TTS providers](/tts-providers/) for configuration.
+
+## Choose a safe output path
+
+[Section titled “Choose a safe output path”](#choose-a-safe-output-path)
+
+The default interactive flow adds only confirmed cards to Anki. For additional separation, export generated cards to YAML or CSV and import them later:
+
+```sh
+anki-llm generate "会議" --output cards.yaml
+anki-llm import cards.yaml --deck "Japanese::Vocabulary"
+```
+
+A dry run prints generated cards without starting selection or import. Raw request logging is useful for debugging but can contain card content and model reasoning. See [`generate` in the command reference](/command-reference/#generate) for all runtime and output options.
+
+# Manage note types
+
+> Pull, edit, compare, and safely push Anki note type templates.
+
+`anki-llm note-type` exposes card template HTML and CSS as ordinary local files. You can use your editor, version control, and coding agents, then push the result through AnkiConnect.
+
+Anki must be running with AnkiConnect for pull, status, and push operations.
+
+## Pull a note type
+
+[Section titled “Pull a note type”](#pull-a-note-type)
+
+From a [workspace](/workspaces/), run:
+
+```bash
+anki-llm note-type pull "Japanese Vocabulary"
+```
+
+The note type appears under `note-types/<slug>/`:
+
+```text
+note-types/Japanese_Vocabulary/
+├── note-type.yaml
+├── style.css
+├── Recognition.front.html
+├── Recognition.back.html
+└── .sync-state.json
+```
+
+* `note-type.yaml` records the exact Anki model name and canonical template order. Commit it.
+* `style.css` contains the note type stylesheet.
+* `<template-slug>.front.html` and `.back.html` contain each card template.
+* `.sync-state.json` records the last-synced remote hash. anki-llm adds it to the note type directory’s `.gitignore`.
+
+Pull refuses to overwrite an existing local note type. Use `pull --force` only when replacing those local files with Anki’s current version is intentional.
+
+## Edit locally or with an agent
+
+[Section titled “Edit locally or with an agent”](#edit-locally-or-with-an-agent)
+
+Open the HTML and CSS in an editor, or give their paths and a concrete design request to a coding agent. For example:
+
+> Redesign `note-types/Japanese_Vocabulary/Recognition.back.html` and `style.css` for a compact reading and meaning layout. Preserve every Anki field reference and card-side behavior.
+
+Review the resulting diff before pushing. Keep `note-type.yaml` aligned with the files produced by `pull`, and do not hand-edit `.sync-state.json`.
+
+A useful version-control cycle is:
+
+```bash
+git diff -- note-types/Japanese_Vocabulary
+anki-llm note-type status
+anki-llm note-type push "Japanese Vocabulary" --dry-run
+```
+
+## Understand status
+
+[Section titled “Understand status”](#understand-status)
+
+`status` fetches the current Anki templates and compares both sides with the last sync hash:
+
+```bash
+anki-llm note-type status
+```
+
+| Status                      | Meaning                                  | Next step                          |
+| --------------------------- | ---------------------------------------- | ---------------------------------- |
+| Up to date                  | Local files and Anki match the last sync | Edit or continue                   |
+| Local changes ready to push | Only local files changed                 | Review, dry-run, push              |
+| Anki has new changes        | Only Anki changed                        | Pull to take Anki’s version        |
+| Diverged                    | Local files and Anki both changed        | Reconcile deliberately before push |
+
+Status also reports invalid local directories and note types missing from Anki.
+
+## Push safely
+
+[Section titled “Push safely”](#push-safely)
+
+Preview first:
+
+```bash
+anki-llm note-type push "Japanese Vocabulary" --dry-run
+```
+
+Then push:
+
+```bash
+anki-llm note-type push "Japanese Vocabulary"
+```
+
+A normal push applies CSS and existing front and back template bodies. It then updates the local sync hash. If the template update fails after CSS succeeds, anki-llm attempts to restore the previous CSS so Anki is not left with a half-applied update.
+
+Push every local note type with:
+
+```bash
+anki-llm note-type push --all
+```
+
+Each note type is handled separately, and all failures are reported at the end.
+
+## Snapshots and divergence protection
+
+[Section titled “Snapshots and divergence protection”](#snapshots-and-divergence-protection)
+
+Before changing Anki, push saves the current remote CSS and templates under:
+
+```text
+~/.local/state/anki-llm/note-type-snapshots/<slug>/<run-id>.json
+```
+
+`--no-snapshot` disables that backup. Prefer the default unless another durable backup is already in place.
+
+Push refuses these unsafe states:
+
+* Anki changed since the last pull or push.
+* No local sync state exists.
+* Local and remote template names differ.
+
+Run `pull` to accept the remote version and rebuild local sync state. If both local and remote edits matter, preserve copies and reconcile them before pulling. `--force` explicitly overwrites Anki despite missing or divergent sync state. It does not bypass template-topology checks.
+
+## Limitations
+
+[Section titled “Limitations”](#limitations)
+
+`push` edits CSS and the bodies of existing card templates. Use Anki’s GUI to add, remove, rename, or reorder card templates, then run `pull` again. The command does not create or delete note types or change their fields.
+
+# Processing steps
+
+> Split card generation into ordered transforms and quality checks.
+
+Processing steps let a generation prompt delegate focused work to additional LLM calls. The main prompt can create diverse cards, while separate steps normalize formatting, rewrite related fields, or evaluate quality.
+
+Define steps under `processing` in generation prompt frontmatter:
+
+```yaml
+processing:
+  pre_select: []
+  post_select: []
+```
+
+* `pre_select` runs after initial generation and before the candidate selection screen.
+* `post_select` runs after you confirm a selection and before import.
+
+Note
+
+Processing steps apply to `generate` prompts. Batch prompts for `process-file` and `process-deck` declare their outputs directly. See [Write batch prompts](/prompts/).
+
+## Transform one field
+
+[Section titled “Transform one field”](#transform-one-field)
+
+A `transform` step asks the model to rewrite card data. Use `target` for one `field_map` key:
+
+```yaml
+processing:
+  pre_select:
+    - type: transform
+      target: reading
+      model: gemini-2.5-flash-lite
+      prompt: |
+        Add furigana in Kanji[reading] form and insert natural bunsetsu spaces.
+
+
+        Japanese: {kanji}
+        English: {front}
+```
+
+The system requests a structured response for `reading` and applies it to the candidate. `target` refers to the left side of `field_map`, not the destination Anki field name.
+
+## Transform several fields atomically
+
+[Section titled “Transform several fields atomically”](#transform-several-fields-atomically)
+
+Use `writes` when one step should produce a coordinated field set:
+
+```yaml
+processing:
+  pre_select:
+    - type: transform
+      writes: [reading, context]
+      prompt: |
+        Japanese sentence: {kanji}
+        English meaning: {front}
+
+
+        Return a furigana reading and a brief note about the social context.
+```
+
+The model must return every named key in one structured JSON response. Results from the step are applied together to the in-memory candidate.
+
+A transform must declare either `target` or `writes`, and each destination must be a key in `field_map`. Use `target` for one field and `writes` for multiple fields.
+
+## Check card quality
+
+[Section titled “Check card quality”](#check-card-quality)
+
+A `check` evaluates the whole card without writing fields:
+
+```yaml
+processing:
+  post_select:
+    - type: check
+      prompt: |
+        Evaluate whether this Japanese sentence is natural and whether the
+        English translation preserves its meaning.
+
+
+        Japanese: {kanji}
+        English: {front}
+```
+
+Do not add `target` or `writes` to a check. `anki-llm` supplies the structured response instructions and expects a `result` plus a brief `reason`. The verdict has one of three values:
+
+* `pass`: keep the card in the normal flow.
+* `flag`: keep the card but attach the reason for review.
+* `reject`: discard the card.
+
+A pre-selection flag appears as information in the candidate selection UI. A post-selection flag routes the card to a review screen before import. A reject removes the card immediately. If the request or response fails after retries, the affected card is discarded and the error is shown in the processing log.
+
+Tip
+
+Write check prompts as evaluation criteria, not response-format instructions. The application adds the `pass`, `flag`, and `reject` JSON schema automatically.
+
+## Control ordering
+
+[Section titled “Control ordering”](#control-ordering)
+
+Steps within each phase execute in their listed order. Every later step sees the field values produced by earlier transforms:
+
+```yaml
+processing:
+  pre_select:
+    - type: transform
+      target: reading
+      prompt: |
+        Add complete furigana to: {kanji}
+    - type: check
+      prompt: |
+        Check that every kanji in {reading} has a correct reading for {kanji}.
+```
+
+The first step finishes across the candidate set before the second starts. Within a single step, cards are processed concurrently, so completion order does not change pipeline order. Each card and step is a separate LLM request and adds to session token use and cost.
+
+## Override the model per step
+
+[Section titled “Override the model per step”](#override-the-model-per-step)
+
+Add `model` to a step when a focused task can use a different model:
+
+```yaml
+processing:
+  post_select:
+    - type: check
+      model: gemini-2.5-flash
+      prompt: |
+        Check the factual accuracy of this explanation: {explanation}
+```
+
+Without an override, the step uses the generation model. A model override changes the model name but keeps the main request client’s API base URL and credentials. This works well with an endpoint such as OpenRouter that serves several models. Make sure the configured provider can access every named model.
+
+## Choose the phase deliberately
+
+[Section titled “Choose the phase deliberately”](#choose-the-phase-deliberately)
+
+Use `pre_select` when the result should affect candidate review:
+
+* normalize furigana, whitespace, or HTML;
+* enrich a field that helps you choose between candidates;
+* reject clearly invalid candidates before they clutter the selection screen.
+
+Use `post_select` when the work is worthwhile only for accepted cards:
+
+* run a more expensive quality check;
+* add final formatting or explanatory detail;
+* verify content immediately before import.
+
+The selection screen lets you toggle skipping post-selection processing with `z`. Treat that as an explicit safety bypass, especially when checks are part of your normal quality policy.
+
+## Know the limitations
+
+[Section titled “Know the limitations”](#know-the-limitations)
+
+* Processing is unavailable in `generate --copy` mode because every step needs an API request.
+* Placeholders can read card keys from `field_map`; unknown placeholders fail processing.
+* Transform destinations must already exist in `field_map`. Steps cannot add an undeclared Anki field.
+* A failed processing call discards that card instead of importing a partially processed result.
+* Step concurrency is internal and is not configured separately in prompt YAML.
+* Additional steps increase latency and cost for every card that reaches them.
+
+See the [Japanese contextual example](https://github.com/raine/anki-llm/blob/main/examples/japanese_contextual.md) for an ordered transform and check, then use [Generate cards](/generate/) to run and review the pipeline.
+
+# Write prompts
+
+> Author reliable prompt files for process-file and process-deck.
+
+Batch prompt files tell `process-file` and `process-deck` what to send to the model and which Anki fields may receive the result. They are plain text or Markdown files with YAML frontmatter followed by a prompt body.
+
+Note
+
+Generation prompts use a different frontmatter schema with `deck`, `note_type`, and `field_map`. See [Generate cards](/generate/) for that workflow.
+
+## Start with one output field
+
+[Section titled “Start with one output field”](#start-with-one-output-field)
+
+Declare the destination Anki field under `output.field`:
+
+```markdown
+---
+output:
+  field: Translation
+---
+
+
+Translate this sentence into natural English.
+
+
+Japanese: {Japanese}
+
+
+Return only the translation.
+```
+
+For each note or row, `anki-llm` replaces `{Japanese}` with that field’s raw value and writes the model’s plain-text response to `Translation`.
+
+Use raw Anki field names inside placeholders. Matching is case-insensitive, so `{japanese}` can read a field named `Japanese`. An unknown placeholder fails the individual row rather than sending an incomplete prompt.
+
+## Isolate a result from explanatory output
+
+[Section titled “Isolate a result from explanatory output”](#isolate-a-result-from-explanatory-output)
+
+Sometimes a model performs better when it can explain its decision before returning the value to save. Enable result-tag extraction for a single output field:
+
+```markdown
+---
+output:
+  field: Translation
+  require_result_tag: true
+---
+
+
+Translate: {Japanese}
+
+
+Briefly analyze important ambiguity, then put only the final translation in
+<result></result> tags.
+```
+
+Only the content inside the last complete `<result>...</result>` pair is written. A response without the tags fails validation and follows normal retry behavior.
+
+Caution
+
+`require_result_tag` is valid only with `output.field`. Do not use it with structured multi-field output.
+
+## Produce related fields together
+
+[Section titled “Produce related fields together”](#produce-related-fields-together)
+
+Use `output.fields` when one model call should create two or more related values:
+
+```markdown
+---
+output:
+  fields:
+    - Reading
+    - Explanation
+    - KanjiBreakdown
+---
+
+
+Japanese sentence: {Kanji}
+English translation: {Front}
+Grammar point: {BunproGrammar}
+Meaning: {BunproMeaning}
+
+
+Return Reading, Explanation, and KanjiBreakdown for this card.
+```
+
+The model is instructed to return one JSON object with exactly the declared keys:
+
+```json
+{
+  "Reading": "誰[だれ]もがお 寿司[すし]が 好[す]きだとは 限[かぎ]らない。",
+  "Explanation": "とは限らない means that something is not necessarily true.",
+  "KanjiBreakdown": "<div class=\"kanji-breakdown\">...</div>"
+}
+```
+
+Every declared field must be present as a non-empty string, and undeclared keys are rejected. The complete response is validated before any target field is applied. If validation fails, none of the fields for that row or note change.
+
+Multi-field output is useful when values must agree with each other. It also means one request, one retry sequence, and one token and cost record for the complete field set.
+
+## Use staging fields
+
+[Section titled “Use staging fields”](#use-staging-fields)
+
+A file workflow can carry source-only fields that help the model but do not exist on the destination Anki note type. For example, a preprocessing script could add `DictionaryDefinition` to exported YAML:
+
+```markdown
+---
+output:
+  field: Hint
+---
+
+
+Word: {Expression}
+Dictionary definition: {DictionaryDefinition}
+
+
+Write a concise learner hint without repeating the word.
+```
+
+`process-file` preserves the staging field in its output. During import, `anki-llm` ignores fields that are absent from the destination note type, while updating valid destination fields.
+
+Tip
+
+Keep source facts in placeholders and output requirements in explicit instructions. This makes a prompt easier to test and reduces accidental copying of labels or commentary into the target field.
+
+## Validate a prompt in stages
+
+[Section titled “Validate a prompt in stages”](#validate-a-prompt-in-stages)
+
+Use this sequence when authoring or changing a prompt:
+
+1. Run `--dry-run` to inspect one filled prompt without an API call.
+2. Run `--preview` to inspect model output for a few notes.
+3. Run with `--limit 20` and review the resulting file or Anki notes.
+4. Scale up only after field names, formatting, and cost look right.
+5. Add a raw request log when response validation still fails.
+
+For file-backed work, see [Process a file](/process-file/). For direct updates, see [Process a deck](/process-deck/).
+
+## Prompt authoring checklist
+
+[Section titled “Prompt authoring checklist”](#prompt-authoring-checklist)
+
+Before a large run, confirm that:
+
+* the file starts with a valid YAML block enclosed by `---` lines;
+* exactly one of `output.field` or `output.fields` is declared;
+* `output.fields` contains at least two unique, non-empty field names;
+* every placeholder exists on every selected row or note;
+* the requested response is concise enough for the target field;
+* HTML, furigana, or other formatting has a concrete example;
+* result tags are requested in the body when they are required in frontmatter;
+* a multi-field prompt asks for all declared fields and no extras.
+
+The [prompt reference](/prompt-reference/) documents the full schema and response rules.
+
+## Runnable examples
+
+[Section titled “Runnable examples”](#runnable-examples)
+
+Use the repository examples as starting points:
+
+* [Key Vocabulary batch prompt](https://github.com/raine/anki-llm/blob/main/examples/key_vocabulary.md)
+* [Japanese contextual generation prompt](https://github.com/raine/anki-llm/blob/main/examples/japanese_contextual.md)
+* [Vocabulary generation prompt](https://github.com/raine/anki-llm/blob/main/examples/generate_vocab.md)
+
+The [translation recipe](/recipes/translations/) and [Key Vocabulary recipe](/recipes/key-vocabulary/) show complete batch workflows.
+
+# Add key vocabulary
+
+> Add concise, structured vocabulary explanations to sentence cards.
+
+Sentence cards are easier to study when they highlight a few words that carry the sentence’s meaning or nuance. This recipe fills a `Key Vocabulary` field with one to three structured HTML entries per note.
+
+![An Anki card with dictionary-form vocabulary headings, meanings, and contextual usage notes](/key-vocabulary-field.webp)
+
+Assume the notes have `Japanese`, `English`, and `Key Vocabulary` fields. Add the target field to the note type in Anki before starting.
+
+## Export the sentence notes
+
+[Section titled “Export the sentence notes”](#export-the-sentence-notes)
+
+Open Anki and export the deck:
+
+```sh
+anki-llm export "Japanese Sentences" --output sentences.yaml
+```
+
+For a narrower job, export an Anki query instead. The [`export` reference](/command-reference/#export) covers deck, query, and note type selection.
+
+## Start from the full prompt
+
+[Section titled “Start from the full prompt”](#start-from-the-full-prompt)
+
+Download or copy the runnable [Key Vocabulary prompt](https://github.com/raine/anki-llm/blob/main/examples/key_vocabulary.md) and save it as `prompt-key-vocab.md`.
+
+Its frontmatter declares the field and requires a tagged result:
+
+```yaml
+---
+output:
+  field: "Key Vocabulary"
+  require_result_tag: true
+---
+```
+
+The body asks the model to:
+
+* select one to three useful words for an intermediate learner;
+* use dictionary forms in headings and include readings;
+* give part of speech, a concise meaning, and sentence-specific context;
+* return semantic `<h3>` and `<dl class="vocab-entry">` HTML;
+* put only the finished HTML inside `<result>` tags.
+
+Adapt the final placeholders if your note uses different source field names. See [Write prompts](/prompts/) for placeholder and result-tag rules.
+
+## Preview representative notes
+
+[Section titled “Preview representative notes”](#preview-representative-notes)
+
+Check the filled prompt first:
+
+```sh
+anki-llm process-file sentences.yaml \
+  --output sentences-key-vocab.yaml \
+  --prompt prompt-key-vocab.md \
+  --dry-run
+```
+
+Then inspect real model output:
+
+```sh
+anki-llm process-file sentences.yaml \
+  --output sentences-key-vocab.yaml \
+  --prompt prompt-key-vocab.md \
+  --model gemini-2.5-flash-lite \
+  --preview
+```
+
+Look for vocabulary at the intended learner level, correct dictionary forms and readings, valid HTML, and explanations tied to the actual sentence rather than generic dictionary text.
+
+Tip
+
+Preview a varied sample. Include cards with conjugated verbs, kana-only words, idioms, proper names, and sentences where the English translation is loose.
+
+## Fill the field
+
+[Section titled “Fill the field”](#fill-the-field)
+
+Process the complete export:
+
+```sh
+anki-llm process-file sentences.yaml \
+  --output sentences-key-vocab.yaml \
+  --prompt prompt-key-vocab.md \
+  --model gemini-2.5-flash-lite
+```
+
+A processed field resembles:
+
+```yaml
+Key Vocabulary: |
+  <h3>控える (ひかえる)</h3>
+  <dl class="vocab-entry">
+    <dt>Type</dt>
+    <dd>Ichidan verb</dd>
+    <dt>Meaning</dt>
+    <dd>To refrain; to hold back</dd>
+    <dt>Context</dt>
+    <dd>Appears as 控えていて, expressing an ongoing act of restraint.</dd>
+  </dl>
+```
+
+The output file retains every original field and saves completed rows incrementally. See [Process a file](/process-file/#resume-an-interrupted-run) for resume and force behavior.
+
+## Review and import
+
+[Section titled “Review and import”](#review-and-import)
+
+Inspect the HTML in the output file and render several notes if your card CSS has special rules for headings or definition lists. Then open Anki and import:
+
+```sh
+anki-llm import sentences-key-vocab.yaml --deck "Japanese Sentences"
+```
+
+Caution
+
+The importer writes valid destination fields from the file. Keep the original export and review the processed file before importing a large deck.
+
+If you prefer direct updates, the same prompt works with [`process-deck`](/process-deck/). Start with a narrow query and model-backed preview, especially when the target field already contains hand-written notes.
+
+# Verify translations
+
+> Review and replace translations across a large deck with a resumable file workflow.
+
+This recipe repairs English translations in a 1,000-note Japanese deck. It uses a local YAML file so you can inspect the model’s work before changing Anki and resume safely if processing is interrupted.
+
+Assume the deck is named `Japanese Core 1k` and each note has `Japanese` and `Translation` fields.
+
+## Export the deck
+
+[Section titled “Export the deck”](#export-the-deck)
+
+Open Anki, then export the notes:
+
+```sh
+anki-llm export "Japanese Core 1k" --output notes.yaml
+```
+
+A row looks like this:
+
+```yaml
+- noteId: 1512345678901
+  Japanese: 猫は机の上にいます。
+  Translation: The cat is on the desk.
+- noteId: 1512345678902
+  Japanese: 彼は毎日公園を散歩します。
+  Translation: He strolls in the park every day.
+```
+
+YAML keeps multiline fields readable and is easy to compare after processing. Anki can be closed after export. See [Process a file](/process-file/) for the file lifecycle and resume rules.
+
+## Write the translation prompt
+
+[Section titled “Write the translation prompt”](#write-the-translation-prompt)
+
+Create `prompt-ja-en.md`:
+
+```markdown
+---
+output:
+  field: Translation
+  require_result_tag: true
+---
+
+
+You are an expert Japanese-to-English translator.
+
+
+Translate this Japanese sentence into English: {Japanese}
+
+
+Guidelines:
+- Preserve nuance and meaning.
+- Write natural, idiomatic English.
+- When practical, preserve clues to the original Japanese grammar.
+
+
+Briefly analyze the sentence and translation choices. Put only the final
+translation inside <result></result> tags.
+```
+
+The model can reason in its response, but only the final tagged value reaches the `Translation` field. See [Write prompts](/prompts/#isolate-a-result-from-explanatory-output) for result-tag behavior.
+
+Tip
+
+If you want the model to consider the existing translation, include it as a separate labeled input such as `Existing translation: {Translation}` and ask it to retain correct wording where appropriate.
+
+## Test a small sample
+
+[Section titled “Test a small sample”](#test-a-small-sample)
+
+First verify placeholder expansion without calling the model:
+
+```sh
+anki-llm process-file notes.yaml \
+  --output notes-translated.yaml \
+  --prompt prompt-ja-en.md \
+  --dry-run
+```
+
+Then process three translations and review the proposed changes:
+
+```sh
+anki-llm process-file notes.yaml \
+  --output notes-translated.yaml \
+  --prompt prompt-ja-en.md \
+  --model gemini-2.5-flash \
+  --preview
+```
+
+Check proper names, omitted subjects, tense, register, and sentences whose meaning depends on context. Revise the prompt and repeat until the sample is reliable.
+
+## Process all notes
+
+[Section titled “Process all notes”](#process-all-notes)
+
+Run the full batch:
+
+```sh
+anki-llm process-file notes.yaml \
+  --output notes-translated.yaml \
+  --prompt prompt-ja-en.md \
+  --model gemini-2.5-flash \
+  --batch-size 10
+```
+
+The output is saved incrementally. If the command stops, rerun the same command and output path. Completed rows are skipped, while failed rows remain eligible for retry.
+
+The terminal summary reports successes, failures, elapsed time, token totals, and estimated cost. See the [`process-file` reference](/command-reference/#process-file) for concurrency, limits, retries, and diagnostic logging.
+
+## Review the result
+
+[Section titled “Review the result”](#review-the-result)
+
+Compare the original and processed files:
+
+```sh
+git diff --no-index notes.yaml notes-translated.yaml
+```
+
+Spot-check a representative sample, including short fragments, long sentences, slang, names, and cards with HTML. If a systematic error appears, adjust the prompt and run against a fresh output path or intentionally reprocess with the force option.
+
+Caution
+
+Fluent output can still be incorrect. Keep the original export until you have reviewed the updated cards in Anki and are satisfied with the result.
+
+## Import the translations
+
+[Section titled “Import the translations”](#import-the-translations)
+
+Open Anki again and update the original notes:
+
+```sh
+anki-llm import notes-translated.yaml --deck "Japanese Core 1k"
+```
+
+The exported `noteId` values identify existing notes, so the import updates them instead of creating replacements. The note type is inferred when the deck has a single type. See the [`import` reference](/command-reference/#import) when you need an explicit note type or key field.
+
+# Generate vocabulary cards
+
+> Create, refine, and import contextual vocabulary cards for one or more terms.
+
+This recipe creates contextual Japanese vocabulary cards for `会議` and adds only the candidates you approve to `Japanese::Vocabulary`.
+
+## Create a workspace prompt
+
+[Section titled “Create a workspace prompt”](#create-a-workspace-prompt)
+
+From the directory where you keep deck configuration and prompts, run:
+
+```sh
+anki-llm workspace init
+anki-llm generate-init
+```
+
+Choose `Japanese::Vocabulary` and the intended note type. The wizard samples existing notes and generates a prompt with a matching `field_map`, output shape, and style. Review the saved file in `prompts/` and refine its instructions or one-shot JSON example.
+
+For a prompt you can inspect immediately, see the [vocabulary example](https://github.com/raine/anki-llm/blob/main/examples/generate_vocab.md). The [Japanese contextual example](https://github.com/raine/anki-llm/blob/main/examples/japanese_contextual.md) shows a richer card and post-selection processing.
+
+Tip
+
+The prompt’s example is the strongest signal for field formatting. Make it a realistic card with exactly the keys declared in `field_map`.
+
+## Launch the generator
+
+[Section titled “Launch the generator”](#launch-the-generator)
+
+Start the TUI from the workspace:
+
+```sh
+anki-llm generate
+```
+
+A single prompt is selected automatically. With multiple prompts, choose one in the picker. Press `Ctrl+O` whenever you want to switch the model used by later requests.
+
+See [Generate cards](/generate/) for prompt discovery, model selection, thinking display, and the complete review workflow.
+
+## Enter one or more terms
+
+[Section titled “Enter one or more terms”](#enter-one-or-more-terms)
+
+Type `会議` and press `Enter`. To generate several terms in one session, press `Tab` after each queued term and `Enter` on the last one. You can also paste newline-separated terms.
+
+The model returns several contextual candidates. Session token use and estimated cost appear in the sidebar while requests run.
+
+## Review every candidate
+
+[Section titled “Review every candidate”](#review-every-candidate)
+
+On the selection screen, move through the candidate list and inspect every mapped field. Check that:
+
+* the sentence uses `会議` naturally and reflects the intended meaning;
+* the English translation matches the Japanese;
+* readings and furigana use your deck’s conventions;
+* explanations add useful nuance instead of repeating the definition;
+* HTML matches the card template.
+
+Use `Space` to select a card, `e` to edit it in `$EDITOR`, and `R` to regenerate it with feedback. Use `r` for more candidates for `会議`, or `t` to generate another term.
+
+Exact matches on the note type’s first field are marked `[dup]` and shown as a diff against the existing Anki note. Leave them unselected unless the new card is intentional. Pressing `f` force-selects a duplicate.
+
+Caution
+
+Duplicate detection is an exact first-field comparison. It cannot replace your review for near-duplicates or semantically equivalent cards.
+
+## Use quality processing when needed
+
+[Section titled “Use quality processing when needed”](#use-quality-processing-when-needed)
+
+A generation prompt can run transforms and checks before or after selection. For example, use a transform to normalize furigana and a post-selection check to evaluate whether the Japanese sounds natural.
+
+Post-selection work runs only for accepted cards, which keeps expensive checks focused. A flag opens a review path, while a reject removes the card. See [Processing steps](/processing-steps/) for the configuration and verdict rules.
+
+## Preview audio and import
+
+[Section titled “Preview audio and import”](#preview-audio-and-import)
+
+If the prompt contains a `tts:` block, press `p` to hear the focused card before selection. Audio for selected cards is finalized when they are imported.
+
+Press `Enter` after selecting the cards you want. Confirm the final review to add them to Anki. From the summary, press `p` to replay imported audio, `n` for another term, or `q` to quit.
+
+For an extra review boundary, generate to a local file instead of importing directly:
+
+```sh
+anki-llm generate "会議" --output meeting-cards.yaml
+```
+
+Review the file, then import it:
+
+```sh
+anki-llm import meeting-cards.yaml --deck "Japanese::Vocabulary"
+```
+
+The [`generate` command reference](/command-reference/#generate) lists output, count, retry, model, copy, logging, and dry-run options without duplicating them here.
+
+# Text-to-speech
+
+> Generate, preview, cache, and attach speech audio to Anki notes.
+
+`anki-llm tts` synthesizes speech, uploads the audio to Anki’s media store, and writes a `[sound:filename.mp3]` reference into a note field. It streams notes through AnkiConnect, so a staging file is unnecessary.
+
+## Fill an audio field
+
+[Section titled “Fill an audio field”](#fill-an-audio-field)
+
+Use flag mode for a one-off run. Exactly one deck or Anki query and exactly one text source are required.
+
+```bash
+anki-llm tts Japanese \
+  --field Audio \
+  --text-field Front \
+  --voice alloy
+```
+
+This selects notes in `Japanese`, reads `Front`, and fills `Audio`. Add `--dry-run` and `--limit 10` when testing a voice or selection.
+
+A template can combine fields:
+
+speak.txt
+
+```text
+{Word}. {ExampleSentence}
+```
+
+```bash
+anki-llm tts Japanese \
+  --field Audio \
+  --template speak.txt \
+  --voice nova
+```
+
+Template placeholders are case-insensitive raw Anki field names. If a selection contains more than one note type, provide `--note-type` so field validation is unambiguous.
+
+See the [command reference](/command-reference/) for every flag and [TTS providers](/tts-providers/) for credentials and provider-specific options.
+
+## Keep TTS settings with a prompt
+
+[Section titled “Keep TTS settings with a prompt”](#keep-tts-settings-with-a-prompt)
+
+Prompt mode stores the deck’s audio design beside its generation prompt. It is best for a maintained, version-controlled deck.
+
+```yaml
+---
+deck: Japanese::Vocab
+note_type: VocabCard
+field_map:
+  expression: Expression
+  reading: Reading
+  meaning: Meaning
+
+
+tts:
+  target: Audio
+  source:
+    field: reading
+  provider: openai
+  voice: alloy
+  model: gpt-4o-mini-tts
+  format: mp3
+  speed: 1.0
+---
+prompt body...
+```
+
+Run the bulk fill with:
+
+```bash
+anki-llm tts --prompt prompts/japanese.yaml
+```
+
+The prompt supplies `deck`, `note_type`, voice, target, source, and provider. Override only the selection with `--deck` or `--query`. Prompt mode rejects CLI overrides for voice, model, format, target field, source, provider, speed, and note type. Edit the prompt to change those values.
+
+`tts.target` is an Anki field name. `tts.source.field` and placeholders in `tts.source.template` are `field_map` keys. A source must set exactly one of `field` or `template`.
+
+## Generate cards with audio
+
+[Section titled “Generate cards with audio”](#generate-cards-with-audio)
+
+The same `tts:` block is used by [`anki-llm generate`](/generate/). In the selection UI, press `p` to preview audio for the focused card when a system audio player is available. Audio for accepted cards is synthesized, uploaded, and placed in `tts.target` during import. The summary can replay imported audio.
+
+TTS credentials are independent from LLM command flags. For example, `generate --api-base-url` can point to a local model while TTS uses `OPENAI_API_KEY` or Azure credentials.
+
+## Control Japanese pronunciation with furigana
+
+[Section titled “Control Japanese pronunciation with furigana”](#control-japanese-pronunciation-with-furigana)
+
+Annotate a CJK run with its intended reading:
+
+```text
+日本語[にほんご]
+転がり込[こ]んだ
+お父[とう]さん
+```
+
+Each bracketed reading binds to the immediately preceding CJK cluster, including clusters inside words. Azure receives SSML `<sub>` pronunciation aliases. OpenAI, Google, Amazon Polly, and Edge receive plain kana substitutions. Text without annotations passes through unchanged.
+
+The annotations can come from manual editing, another tool, or generated card fields. A generation prompt can ask the model to emit `漢字[かんじ]` into the field selected by `tts.source`.
+
+## Existing audio, normalization, and cache
+
+[Section titled “Existing audio, normalization, and cache”](#existing-audio-normalization-and-cache)
+
+By default, a note with a non-empty target field is skipped. This makes repeat runs fill gaps without replacing existing audio. Use `--force` to regenerate every matching note.
+
+Before synthesis, anki-llm normalizes source values:
+
+* HTML tags are stripped.
+* Cloze markers such as `{{c1::answer}}` become `answer`.
+* Existing `[sound:...]` tags are removed.
+* HTML entities are decoded.
+* Whitespace is collapsed.
+
+Generated files are cached under `~/.cache/anki-llm/tts/`. An identical request reuses its cached audio and avoids another provider charge. Clear all cached TTS files with:
+
+```bash
+rm -rf ~/.cache/anki-llm/tts
+```
+
+## Find and audition voices
+
+[Section titled “Find and audition voices”](#find-and-audition-voices)
+
+`anki-llm tts-voices` opens a browser over the bundled OpenAI, Azure, Google, Amazon Polly, and Edge catalogs.
+
+```bash
+anki-llm tts-voices
+anki-llm tts-voices --lang ja -q "female neural"
+anki-llm tts-voices --provider amazon -q neural
+```
+
+* Type to filter provider, voice ID, display name, language, gender, and tags. Every whitespace-separated token must match.
+* Use arrow keys or Page Up and Page Down to move.
+* Press Space to synthesize and play a sample.
+* Press Enter to copy a `tts:` YAML scaffold for the highlighted voice.
+* Press Escape or Ctrl-C to exit.
+
+Browsing needs no credentials. Previewing does. The detail pane identifies the missing environment variable or config key. Preview audio uses the same cache as batch TTS.
+
+# Use workspaces
+
+> Keep prompts, note types, and project-specific model settings together.
+
+A workspace gives `anki-llm` a predictable home for the files that define an Anki project. It is an ordinary directory recognized by either:
+
+* an `anki-llm.yaml` file, or
+* a `prompts/` directory
+
+A typical workspace looks like this:
+
+```text
+my-anki-workspace/
+├── anki-llm.yaml
+├── prompts/
+│   ├── japanese-vocabulary.md
+│   └── verify-translations.md
+└── note-types/
+    └── Japanese_Vocabulary/
+        ├── note-type.yaml
+        ├── style.css
+        ├── Recognition.front.html
+        └── Recognition.back.html
+```
+
+## Initialize a workspace
+
+[Section titled “Initialize a workspace”](#initialize-a-workspace)
+
+Create one in the current directory:
+
+```sh
+anki-llm workspace init
+```
+
+Or pass a directory:
+
+```sh
+anki-llm workspace init ~/anki
+```
+
+Initialization creates `anki-llm.yaml` and `prompts/` when they do not exist. It preserves existing files, so it is safe to run again.
+
+You can also create `prompts/` yourself. The directory alone is enough for workspace discovery.
+
+## Check workspace discovery
+
+[Section titled “Check workspace discovery”](#check-workspace-discovery)
+
+Run:
+
+```sh
+anki-llm workspace info
+```
+
+The command first checks the current directory. If that directory is not a workspace, it checks the configured `default_workspace`. The report shows the resolved root, prompts directory, model and reasoning effort when configured, and the note-types directory when it exists.
+
+Discovery scope
+
+Workspace discovery checks the current directory itself. Run commands from the workspace root, or configure it as the default, rather than relying on a search through parent directories.
+
+The current-directory workspace always wins over the default workspace.
+
+## Use a default workspace from any directory
+
+[Section titled “Use a default workspace from any directory”](#use-a-default-workspace-from-any-directory)
+
+If one workspace contains your usual prompts and note types, configure it as the fallback:
+
+```sh
+anki-llm config set default_workspace ~/anki
+```
+
+This makes its `prompts/`, `note-types/`, and `anki-llm.yaml` available when the current directory is not itself a workspace.
+
+Inspect the setting:
+
+```sh
+anki-llm config get default_workspace
+```
+
+Remove it with:
+
+```sh
+anki-llm config unset default_workspace
+```
+
+The default path must still contain `anki-llm.yaml` or `prompts/`. If it does not, `workspace info` reports that it points to a non-workspace directory.
+
+## Organize the prompts directory
+
+[Section titled “Organize the prompts directory”](#organize-the-prompts-directory)
+
+Put reusable prompt files under `prompts/`. Commands such as `generate` can resolve them without a `--prompt` flag:
+
+```sh
+anki-llm generate "今日"
+```
+
+Prompt selection follows these rules:
+
+* one available prompt is selected automatically
+* multiple prompts open an interactive picker
+* the last-used prompt is remembered and preselected on the next run
+* an explicit `--prompt <path>` selects that file instead
+
+`generate-init` writes its generated prompt to the active workspace’s `prompts/` directory when you omit an output path:
+
+```sh
+anki-llm generate-init
+```
+
+Use clear filenames based on the deck and task, such as `japanese-vocabulary-generate.md` or `spanish-verify-translations.md`.
+
+## Configure `anki-llm.yaml`
+
+[Section titled “Configure anki-llm.yaml”](#configure-anki-llmyaml)
+
+The optional workspace manifest supports project-specific LLM defaults:
+
+```yaml
+default_model: gemini-2.5-flash
+reasoning_effort: low
+```
+
+* `default_model` selects the model for commands run in this workspace.
+* `reasoning_effort` is sent as the provider-neutral top-level `reasoning_effort` value on compatible chat completion requests.
+
+The provider and model determine accepted reasoning values. Common values include `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. An unset value lets the provider choose its default.
+
+Workspace model settings override the global model configuration. For reasoning effort, the resolution order is:
+
+1. `--reasoning-effort`
+2. `ANKI_LLM_REASONING_EFFORT`
+3. workspace `reasoning_effort`
+4. global `reasoning_effort`
+5. unset
+
+Use a command flag for one-off experiments and the manifest for a project-wide choice. See [Configuration](/configuration/) for provider URLs, API keys, and global settings.
+
+Keep credentials outside the workspace
+
+Do not put API keys in `anki-llm.yaml` or prompt frontmatter. Use provider environment variables, `ANKI_LLM_API_KEY`, or the supported global credential configuration. This keeps a version-controlled workspace free of secrets.
+
+## Add prompt metadata
+
+[Section titled “Add prompt metadata”](#add-prompt-metadata)
+
+Generation prompt frontmatter can include `title` and `description` to make the interactive picker easier to scan:
+
+```yaml
+---
+title: Japanese Vocabulary
+description: Contextual sentence cards with readings
+deck: Japanese::Vocabulary
+note_type: Japanese (recognition)
+field_map:
+  en: English
+  jp: Japanese
+---
+```
+
+`title` is the human-readable picker label. `description` should briefly explain the prompt’s intended deck, content, or style. The operational metadata remains in the same frontmatter:
+
+* `deck` names the destination deck
+* `note_type` names the Anki note type
+* `field_map` maps LLM output keys to Anki fields
+
+Processing prompts use an `output` block instead of generation’s deck and field mapping. See [Prompt reference](/prompt-reference/) before reusing a prompt with a different command.
+
+## Keep workspace files in version control
+
+[Section titled “Keep workspace files in version control”](#keep-workspace-files-in-version-control)
+
+A workspace is well suited to Git because its durable configuration is plain text. Commit:
+
+* `anki-llm.yaml`
+* files under `prompts/`
+* note type manifests, HTML templates, and CSS under `note-types/`
+* small example inputs or expected outputs that do not contain private material
+
+Review prompt and model-setting changes before a run. A Git commit identifies the exact instructions and defaults used to produce an important batch.
+
+Treat collection data separately. Exported notes, query results, raw LLM logs, and error logs can contain personal or copyrighted study material. Ignore them or store them securely unless you have deliberately decided they belong in the repository. Never commit API keys.
+
+Each pulled note type also contains `.sync-state.json`. `anki-llm` gitignores that synchronization state inside the note-type directory. Commit the manifest, templates, and CSS instead.
+
+For complete reusable examples, see the repository’s [`examples/` directory](https://github.com/raine/anki-llm/tree/main/examples).
+
+# Prompt reference
+
+> Look up batch, generation, processing, and TTS prompt syntax.
+
+anki-llm has two prompt schemas. `process-file` and `process-deck` use batch output frontmatter. `generate` uses deck, note type, field mapping, optional processing, and optional TTS frontmatter. Both require a YAML block delimited by `---` at the start of the file. Use only the keys documented below; strict frontmatter blocks reject unknown entries.
+
+## Batch processing prompts
+
+[Section titled “Batch processing prompts”](#batch-processing-prompts)
+
+Used by [`process-file`](/process-file/) and [`process-deck`](/process-deck/).
+
+### Schema
+
+[Section titled “Schema”](#schema)
+
+```yaml
+---
+title: Optional title
+description: Optional description
+output:
+  field: Translation
+  require_result_tag: false
+---
+Prompt body
+```
+
+| Key                         | Type        | Required        | Rules                                               |
+| --------------------------- | ----------- | --------------- | --------------------------------------------------- |
+| `title`                     | string      | No              | Reserved metadata                                   |
+| `description`               | string      | No              | Reserved metadata                                   |
+| `output.field`              | string      | One output form | One non-empty destination field                     |
+| `output.fields`             | string list | One output form | At least two non-empty, unique destination fields   |
+| `output.require_result_tag` | boolean     | No              | Defaults to `false`; valid only with `output.field` |
+
+Declare exactly one of `output.field` or `output.fields`.
+
+### Single-field output
+
+[Section titled “Single-field output”](#single-field-output)
+
+```text
+---
+output:
+  field: Translation
+  require_result_tag: true
+---
+Translate: {Japanese}
+Existing translation: {Translation}
+Wrap the final answer in <result></result> tags.
+```
+
+The body can reference raw Anki or input-file field names with `{Field}`. Matching is case-insensitive. An unknown placeholder fails that row.
+
+With `require_result_tag: false`, the plain response is written. With `true`, only content inside the last `<result>...</result>` pair is written. A response without a complete pair fails and follows normal retry behavior.
+
+### Multi-field output
+
+[Section titled “Multi-field output”](#multi-field-output)
+
+```text
+---
+output:
+  fields:
+    - Reading
+    - Explanation
+    - KanjiBreakdown
+---
+Sentence: {Kanji}
+Translation: {Front}
+Generate all requested fields.
+```
+
+One request must return a JSON object with exactly the declared keys:
+
+```json
+{
+  "Reading": "日本語[にほんご]を勉強[べんきょう]する。",
+  "Explanation": "A neutral statement about studying Japanese.",
+  "KanjiBreakdown": "<ul><li>勉強: study</li></ul>"
+}
+```
+
+Every declared value must be a non-empty string. Missing, empty, non-string, or undeclared fields invalidate the response. Validation happens before any update, so all declared fields change together or none do. Undeclared note fields are preserved. Source-only staging fields remain in `process-file` output, and `import` ignores fields absent from the destination note type.
+
+## Generation prompts
+
+[Section titled “Generation prompts”](#generation-prompts)
+
+Used by [`generate`](/generate/).
+
+### Complete frontmatter shape
+
+[Section titled “Complete frontmatter shape”](#complete-frontmatter-shape)
+
+```yaml
+---
+title: Japanese Vocabulary
+description: Contextual sentence cards with readings
+deck: Japanese::Vocabulary
+note_type: Japanese (recognition)
+field_map:
+  en: English
+  jp: Japanese
+  reading: Reading
+
+
+processing:
+  pre_select:
+    - type: transform
+      target: reading
+      model: gpt-4o-mini
+      prompt: |
+        Add Kanji[reading] annotations to: {jp}
+  post_select:
+    - type: check
+      prompt: |
+        Check whether this sentence is natural: {jp}
+
+
+tts:
+  target: Audio
+  source:
+    field: reading
+  provider: openai
+  voice: alloy
+  model: gpt-4o-mini-tts
+  format: mp3
+  speed: 1.0
+---
+Generate {count} cards for {term} as a JSON array.
+```
+
+### Core keys
+
+[Section titled “Core keys”](#core-keys)
+
+| Key           | Type   | Required | Meaning                                                        |
+| ------------- | ------ | -------- | -------------------------------------------------------------- |
+| `title`       | string | No       | Label in the workspace prompt picker; filename is the fallback |
+| `description` | string | No       | Supporting text in the prompt picker                           |
+| `deck`        | string | Yes      | Exact destination Anki deck name                               |
+| `note_type`   | string | Yes      | Exact destination Anki note type name                          |
+| `field_map`   | map    | Yes      | Non-empty map from LLM JSON keys to Anki field names           |
+| `processing`  | object | No       | Pre-selection and post-selection LLM steps                     |
+| `tts`         | object | No       | Shared generation and bulk-TTS audio settings                  |
+
+The prompt body must use `{term}` and `{count}`. It should require one JSON array of card objects whose keys are the left side of `field_map`. String values are used directly. JSON arrays in field values become `<ul><li>` HTML lists during import.
+
+Example response for `field_map: { en: English, jp: Japanese }`:
+
+```json
+[
+  {
+    "en": "How was your day?",
+    "jp": "今日はどうでしたか？"
+  }
+]
+```
+
+## Processing steps
+
+[Section titled “Processing steps”](#processing-steps)
+
+`processing.pre_select` runs after generation and before card selection. `processing.post_select` runs after selection and before final import. Steps in a phase run in order, and later steps see earlier updates. Cards within a step are processed concurrently. Processing is unavailable with `generate --copy`.
+
+### Transform
+
+[Section titled “Transform”](#transform)
+
+A transform rewrites one or more `field_map` keys. Use exactly one write form:
+
+```yaml
+processing:
+  pre_select:
+    - type: transform
+      target: reading
+      model: gpt-4o-mini
+      prompt: "Add furigana to {jp}"
+```
+
+```yaml
+processing:
+  pre_select:
+    - type: transform
+      writes: [reading, context]
+      prompt: |
+        Sentence: {jp}
+        Produce a reading and a brief context note.
+```
+
+| Key      | Required       | Rules                                                    |
+| -------- | -------------- | -------------------------------------------------------- |
+| `type`   | Yes            | `transform`                                              |
+| `target` | One write form | One `field_map` key                                      |
+| `writes` | One write form | One or more `field_map` keys                             |
+| `prompt` | Yes            | Non-empty; all card fields are available as placeholders |
+| `model`  | No             | Model override for this step                             |
+
+A multi-field transform receives structured output for the declared write keys.
+
+### Check
+
+[Section titled “Check”](#check)
+
+```yaml
+processing:
+  post_select:
+    - type: check
+      model: gemini-2.5-flash-lite
+      prompt: "Evaluate whether this is natural Japanese: {jp}"
+```
+
+A check must not declare `target` or `writes`. anki-llm adds the response contract and expects `result` plus `reason`. Results are:
+
+* `pass`: continue normally.
+* `flag`: keep the card with a warning. Pre-selection flags are informational; post-selection flags open a review screen.
+* `reject`: discard the card.
+
+## Shared `tts` block
+
+[Section titled “Shared tts block”](#shared-tts-block)
+
+The same block drives audio during `generate` import and bulk filling with `tts --prompt`.
+
+| Key               | Type   | Required          | Rules                                                            |
+| ----------------- | ------ | ----------------- | ---------------------------------------------------------------- |
+| `target`          | string | Yes               | Non-empty Anki field name, not a `field_map` key                 |
+| `source`          | object | Yes               | Exactly one of `field` or `template`                             |
+| `source.field`    | string | One source form   | Must be a `field_map` key                                        |
+| `source.template` | string | One source form   | Placeholders must be `field_map` keys, case-insensitive          |
+| `voice`           | string | Yes               | Non-empty provider voice identifier                              |
+| `provider`        | string | No                | `openai` by default; also `azure`, `google`, `amazon`, `edge`    |
+| `region`          | string | Provider-specific | Required for Azure and Amazon, forbidden otherwise               |
+| `model`           | string | Provider-specific | OpenAI model or Amazon engine; forbidden for Azure, Google, Edge |
+| `format`          | string | No                | Defaults to `mp3`                                                |
+| `speed`           | number | No                | Must be greater than zero; forbidden for Azure and Amazon        |
+
+Amazon `model` accepts `standard`, `neural`, `generative`, or `long-form`. Provider credentials stay outside prompt files. See [TTS providers](/tts-providers/) for exact resolution and examples.
+
+## Placeholder scopes
+
+[Section titled “Placeholder scopes”](#placeholder-scopes)
+
+| Context                     | Placeholder names                               |
+| --------------------------- | ----------------------------------------------- |
+| Batch prompt body           | Raw Anki or input-file fields, case-insensitive |
+| Generation body             | `{term}` and `{count}`                          |
+| Processing prompt           | `field_map` keys for all card fields            |
+| `tts.source.template`       | `field_map` keys, case-insensitive              |
+| TTS flag-mode template file | Raw Anki fields, case-insensitive               |
+
+# Models
+
+> Configure LLM providers, endpoints, reasoning effort, and cost estimates.
+
+anki-llm sends OpenAI-compatible Chat Completions requests. Any model name is accepted, and a custom base URL supports hosted compatible APIs and local servers.
+
+## Built-in provider detection
+
+[Section titled “Built-in provider detection”](#built-in-provider-detection)
+
+The model prefix selects a built-in endpoint and provider-specific key:
+
+| Model prefix     | Endpoint                                                  | API key            |
+| ---------------- | --------------------------------------------------------- | ------------------ |
+| `gemini-`        | `https://generativelanguage.googleapis.com/v1beta/openai` | `GEMINI_API_KEY`   |
+| `deepseek-`      | `https://api.deepseek.com`                                | `DEEPSEEK_API_KEY` |
+| `grok-`          | `https://api.x.ai/v1`                                     | `XAI_API_KEY`      |
+| Any other prefix | OpenAI default                                            | `OPENAI_API_KEY`   |
+
+```bash
+export OPENAI_API_KEY="..."
+export GEMINI_API_KEY="..."
+export DEEPSEEK_API_KEY="..."
+export XAI_API_KEY="..."
+```
+
+With no explicit model, resolution is:
+
+1. `--model`
+2. `default_model` in the effective workspace’s `anki-llm.yaml`
+3. Global `model`
+4. A key-based default: `gemini-2.5-flash`, `deepseek-v4-flash`, `grok-4.3`, or `gpt-5`, checked in that order
+
+A model that does not match Gemini, DeepSeek, or Grok uses OpenAI defaults unless you configure a custom endpoint.
+
+## OpenRouter
+
+[Section titled “OpenRouter”](#openrouter)
+
+```bash
+export ANKI_LLM_API_KEY="your-openrouter-key"
+anki-llm generate "今日" \
+  --api-base-url https://openrouter.ai/api/v1 \
+  --model anthropic/claude-sonnet-4
+```
+
+Persist the endpoint and model:
+
+```bash
+anki-llm config set api_base_url https://openrouter.ai/api/v1
+anki-llm config set model anthropic/claude-sonnet-4
+```
+
+Model names are forwarded unchanged. Use OpenRouter’s provider-qualified model ID.
+
+## Local servers
+
+[Section titled “Local servers”](#local-servers)
+
+Ollama, llama.cpp, vLLM, and similar servers work when they expose `/v1/chat/completions`:
+
+```bash
+anki-llm generate "今日" \
+  --api-base-url http://localhost:11434/v1 \
+  --model llama3
+```
+
+A custom endpoint does not require a key from anki-llm. The server can still require authentication, in which case pass `--api-key` or set `ANKI_LLM_API_KEY`.
+
+For safety, provider-specific keys are not sent to a custom endpoint. If `OPENAI_API_KEY` is set and `--api-base-url` points elsewhere, anki-llm does not forward that key unless it is supplied through the generic key setting.
+
+## Other compatible APIs
+
+[Section titled “Other compatible APIs”](#other-compatible-apis)
+
+```bash
+anki-llm process-file input.yaml \
+  --output output.yaml \
+  --prompt prompt.md \
+  --api-base-url https://api.together.xyz/v1 \
+  --api-key your-key \
+  --model meta-llama/Llama-3-70b-chat-hf
+```
+
+Together, Fireworks, Groq, proxies, and private gateways follow the same pattern. Compatibility depends on the endpoint accepting the request fields used by the selected command.
+
+## Endpoint and key precedence
+
+[Section titled “Endpoint and key precedence”](#endpoint-and-key-precedence)
+
+API base URL:
+
+1. `--api-base-url`
+2. `ANKI_LLM_API_BASE_URL`
+3. Global `api_base_url`
+4. Built-in provider detection
+
+API key:
+
+1. `--api-key`
+2. `ANKI_LLM_API_KEY`
+3. Provider-specific environment variable, only for an auto-detected endpoint
+
+API keys are not stored in the global LLM configuration. Use environment variables or a command flag.
+
+## Reasoning effort
+
+[Section titled “Reasoning effort”](#reasoning-effort)
+
+Reasoning effort is an optional provider-neutral top-level field in the standard Chat Completions request.
+
+```bash
+anki-llm config set reasoning_effort low
+export ANKI_LLM_REASONING_EFFORT=medium
+```
+
+anki-llm.yaml
+
+```yaml
+default_model: gpt-5.4-mini
+reasoning_effort: high
+```
+
+```bash
+anki-llm process-file input.csv \
+  --output output.csv \
+  --prompt prompt.md \
+  --reasoning-effort xhigh
+```
+
+Resolution order is CLI, `ANKI_LLM_REASONING_EFFORT`, workspace, global config, then unset. Values are trimmed and must be non-empty. anki-llm does not enforce a fixed vocabulary because providers and models differ. Common values include `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`.
+
+When unset, the request omits `reasoning_effort` and the provider chooses its default. A compatible server must accept the field if you set it.
+
+## Known models and cost estimates
+
+[Section titled “Known models and cost estimates”](#known-models-and-cost-estimates)
+
+The built-in pricing table recognizes exact model IDs in these families:
+
+* OpenAI: GPT-4.1, GPT-4o, GPT-5 through GPT-5.4, including listed mini and nano variants
+* Google: Gemini 2.0 Flash, Gemini 2.5 Flash, Flash Lite and Pro, plus listed Gemini 3 preview models
+* DeepSeek: `deepseek-v4-flash` and `deepseek-v4-pro`
+* xAI: `grok-4.3`
+
+Known models appear in the TUI picker when their provider key is available. A generic `ANKI_LLM_API_KEY` makes all known models available in the picker, and the configured model is included even when unknown.
+
+Pricing is an exact-name lookup, not provider discovery and not a whitelist. Unknown or provider-qualified names still run, but their cost estimate is unavailable. Estimates multiply reported input and output token counts by the hard-coded per-million-token rates. DeepSeek uses cache-miss, undiscounted rates.
+
+Treat every displayed cost as guidance:
+
+* Provider prices can change after anki-llm ships.
+* Cached input, batch discounts, taxes, free tiers, routing markups, and custom contracts are not modeled.
+* OpenRouter and other gateways can price the same model differently.
+* Providers can report usage differently, especially reasoning tokens.
+* Extra processing steps make additional requests.
+
+Check the provider’s current pricing before a large run. Use `--limit` on a representative sample and extrapolate from the token and cost summary.
+
+# TTS providers
+
+> Configure credentials, voices, and settings for each TTS provider.
+
+Select a provider with `--provider` in flag mode or `tts.provider` in a prompt. The accepted IDs are `openai`, `azure`, `google`, `amazon`, and `edge`. OpenAI is the default.
+
+Credentials belong in environment variables or global configuration, not prompt YAML. In flag mode, credential flags take precedence over environment variables, which take precedence over `~/.config/anki-llm/config.json`.
+
+## Settings at a glance
+
+[Section titled “Settings at a glance”](#settings-at-a-glance)
+
+| Provider | Voice example                    | Region      | `model` meaning                      | `speed`                    |
+| -------- | -------------------------------- | ----------- | ------------------------------------ | -------------------------- |
+| OpenAI   | `alloy`                          | Unsupported | TTS model, default `gpt-4o-mini-tts` | Provider speed             |
+| Azure    | `ja-JP-MasaruMultilingualNeural` | Required    | Unsupported                          | Unsupported                |
+| Google   | `ja-JP-Neural2-B`                | Unsupported | Unsupported                          | `audioConfig.speakingRate` |
+| Amazon   | `Takumi`                         | Required    | Polly engine                         | Unsupported                |
+| Edge     | `ja-JP-NanamiNeural`             | Unsupported | Unsupported                          | SSML prosody rate          |
+
+All providers support `format: mp3`. The current implementation writes MP3 audio. Furigana routing differs by provider: Azure uses SSML `<sub>`, while the other providers replace annotated kanji with plain kana.
+
+## OpenAI
+
+[Section titled “OpenAI”](#openai)
+
+OpenAI resolves credentials in this order:
+
+1. `--api-key`
+2. `ANKI_LLM_API_KEY`
+3. `OPENAI_API_KEY`
+
+A custom `--api-base-url`, `ANKI_LLM_API_BASE_URL`, or global `api_base_url` can point OpenAI TTS requests at a compatible endpoint. A custom endpoint can run without a key if the server permits it.
+
+Persist defaults:
+
+```bash
+anki-llm config set tts_provider openai
+anki-llm config set tts_voice alloy
+anki-llm config set tts_model gpt-4o-mini-tts
+anki-llm config set tts_format mp3
+```
+
+```yaml
+---
+deck: English
+note_type: Basic
+field_map:
+  front: Front
+  back: Back
+tts:
+  target: Audio
+  source:
+    field: front
+  provider: openai
+  voice: alloy
+  model: gpt-4o-mini-tts
+  format: mp3
+  speed: 1.0
+---
+```
+
+Common voice IDs include `alloy`, `ash`, `ballad`, `coral`, `echo`, `fable`, `nova`, `onyx`, `sage`, and `shimmer`. Consult the [OpenAI TTS guide](https://platform.openai.com/docs/guides/text-to-speech) for the provider’s current catalog.
+
+## Azure Neural TTS
+
+[Section titled “Azure Neural TTS”](#azure-neural-tts)
+
+Azure needs a Speech subscription key and region.
+
+| Source        | Key             | Region             |
+| ------------- | --------------- | ------------------ |
+| CLI           | `--api-key`     | `--azure-region`   |
+| Environment   | `AZURE_TTS_KEY` | `AZURE_TTS_REGION` |
+| Global config | `azure_tts_key` | `azure_tts_region` |
+
+```bash
+export AZURE_TTS_KEY="your-subscription-key"
+export AZURE_TTS_REGION="eastus"
+
+
+anki-llm tts Japanese \
+  --field Audio \
+  --text-field Reading \
+  --provider azure \
+  --voice ja-JP-MasaruMultilingualNeural \
+  --azure-region eastus
+```
+
+```yaml
+---
+deck: Japanese::Vocab
+note_type: VocabCard
+field_map:
+  reading: Reading
+tts:
+  target: Audio
+  source:
+    field: reading
+  provider: azure
+  voice: ja-JP-MasaruMultilingualNeural
+  region: eastus
+  format: mp3
+---
+```
+
+Azure voices use `<locale>-<Voice>Neural` names. `region` is required. `model` and `speed` are rejected in prompt YAML and ignored as provider settings. Browse the [Azure language and voice list](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support).
+
+## Google Cloud Text-to-Speech
+
+[Section titled “Google Cloud Text-to-Speech”](#google-cloud-text-to-speech)
+
+Enable Text-to-Speech in a Google Cloud project and create an API key. Credentials resolve from `--api-key`, then `GOOGLE_TTS_KEY`, then the global `google_tts_key` setting.
+
+```bash
+export GOOGLE_TTS_KEY="your-google-cloud-key"
+```
+
+```yaml
+---
+deck: Japanese::Vocab
+note_type: VocabCard
+field_map:
+  reading: Reading
+tts:
+  target: Audio
+  source:
+    field: reading
+  provider: google
+  voice: ja-JP-Neural2-B
+  format: mp3
+  speed: 1.0
+---
+```
+
+Supply the complete voice name, such as `ja-JP-Neural2-B`, `en-US-Wavenet-D`, or `cmn-CN-Wavenet-A`. anki-llm derives `languageCode` from the first two segments. `region` and `model` are unsupported. `speed` is sent as `audioConfig.speakingRate`. See the [Google voice list](https://cloud.google.com/text-to-speech/docs/voices).
+
+## Amazon Polly
+
+[Section titled “Amazon Polly”](#amazon-polly)
+
+Polly uses AWS credentials and a region.
+
+| Source        | Access key              | Secret                      | Region                                  | Session token       |
+| ------------- | ----------------------- | --------------------------- | --------------------------------------- | ------------------- |
+| CLI           | `--aws-access-key-id`   | `--aws-secret-access-key`   | `--aws-region`                          | Environment only    |
+| Environment   | `AWS_ACCESS_KEY_ID`     | `AWS_SECRET_ACCESS_KEY`     | `AWS_REGION`, then `AWS_DEFAULT_REGION` | `AWS_SESSION_TOKEN` |
+| Global config | `aws_tts_access_key_id` | `aws_tts_secret_access_key` | `aws_tts_region`                        | Unsupported         |
+
+```bash
+export AWS_ACCESS_KEY_ID="your-access-key-id"
+export AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+export AWS_REGION="us-east-1"
+```
+
+```yaml
+---
+deck: Japanese::Vocab
+note_type: VocabCard
+field_map:
+  reading: Reading
+tts:
+  target: Audio
+  source:
+    field: reading
+  provider: amazon
+  voice: Takumi
+  region: us-east-1
+  model: neural
+  format: mp3
+---
+```
+
+`voice` is a Polly `VoiceId`, such as `Joanna`, `Matthew`, `Takumi`, or `Mizuki`. `model` selects the Polly engine and accepts exactly `standard`, `neural`, `generative`, or `long-form`. `region` is required and `speed` is unsupported. A voice and region must support the selected engine. See the [Polly voice list](https://docs.aws.amazon.com/polly/latest/dg/voicelist.html).
+
+## Microsoft Edge TTS
+
+[Section titled “Microsoft Edge TTS”](#microsoft-edge-tts)
+
+Edge uses Microsoft’s consumer Read Aloud service. It needs no API key, region, or model.
+
+```yaml
+---
+deck: Japanese::Vocab
+note_type: VocabCard
+field_map:
+  reading: Reading
+tts:
+  target: Audio
+  source:
+    field: reading
+  provider: edge
+  voice: ja-JP-NanamiNeural
+  format: mp3
+  speed: 1.0
+---
+```
+
+Voice IDs are Edge short names such as `en-US-JennyNeural` and `ja-JP-NanamiNeural`. `speed` becomes an SSML prosody rate. Prompt YAML rejects `region` and `model`.
+
+Edge is an unofficial free provider backed by a consumer endpoint. Service availability and throttling can differ from paid APIs. If a large batch is throttled, retry with fewer concurrent requests, for example `--batch-size 1`.
+
+## Browse exact voice IDs
+
+[Section titled “Browse exact voice IDs”](#browse-exact-voice-ids)
+
+Use [`anki-llm tts-voices`](/tts/#find-and-audition-voices) to filter the bundled catalog, audition a voice, and copy a valid provider-specific YAML scaffold.
+
+# AnkiConnect
+
+> Understand the local API that connects anki-llm to Anki.
+
+[AnkiConnect](https://ankiweb.net/shared/info/2055492159) is an Anki add-on that exposes a local HTTP API. Anki itself does not provide an equivalent API for external tools. anki-llm uses AnkiConnect to read notes, update fields, add cards, manage media, and inspect note types.
+
+Install the add-on, restart Anki, and leave Anki running while using commands that access the collection. The default endpoint is `http://127.0.0.1:8765`. A remote, WSL, or non-default setup can use:
+
+```bash
+anki-llm config set anki_connect_url http://192.168.1.100:8765
+```
+
+AnkiConnect has broad access to the open collection. Keep it bound to a trusted interface and review its origin and network configuration before allowing remote clients.
+
+## Query the API
+
+[Section titled “Query the API”](#query-the-api)
+
+`anki-llm query` provides a JSON-oriented command-line interface to any AnkiConnect action:
+
+```bash
+anki-llm query deckNames
+anki-llm query modelNames
+anki-llm query findNotes '{"query":"deck:Japanese"}'
+anki-llm query cardsInfo '{"cards":[1498938915662]}'
+anki-llm query getDeckStats '{"decks":["Default"]}'
+anki-llm query version
+```
+
+The first argument is the AnkiConnect action. The optional second argument is a JSON object containing that action’s parameters. Output is JSON, which makes the command suitable for shell pipelines and coding agents.
+
+Anki search strings use Anki’s own query language. For example:
+
+```bash
+anki-llm query findNotes '{"query":"deck:Japanese tag:vocabulary -is:suspended"}'
+```
+
+The same search syntax is accepted by command options such as `process-deck --query` and `tts --query`. See [Anki’s searching documentation](https://docs.ankiweb.net/searching.html) for operators, quoting rules, and date searches.
+
+## Look up actions and parameters
+
+[Section titled “Look up actions and parameters”](#look-up-actions-and-parameters)
+
+Ask the installed AnkiConnect instance for its API reference:
+
+```bash
+anki-llm query docs
+# `help` is an alias
+anki-llm query help
+```
+
+This is useful when an agent needs to discover an action before calling it. The repository also vendors a snapshot of the reference in [ANKI\_CONNECT.md](https://github.com/raine/anki-llm/blob/main/ANKI_CONNECT.md). The running add-on’s `docs` response is the best match for the version installed in Anki.
+
+# Troubleshooting
+
+> Diagnose AnkiConnect, model, provider, rate-limit, and TTS failures.
+
+## Start with doctor
+
+[Section titled “Start with doctor”](#start-with-doctor)
+
+```bash
+anki-llm doctor
+```
+
+The report shows detected API keys, the resolved default model and reasoning effort, the effective workspace, AnkiConnect URL and connectivity, and TTS credentials. Secrets are masked.
+
+For active provider checks, run:
+
+```bash
+anki-llm doctor --check
+```
+
+For each configured LLM provider, `--check` sends a one-token completion using a low-cost model. It checks authentication, model access, account balance, and rate-limit availability. The command exits non-zero if any check fails and makes a small billable request for each checked provider.
+
+A warning beside the resolved model means its exact name is absent from the built-in pricing list. That can indicate a typo, but custom and newer model names are valid.
+
+## AnkiConnect is unavailable
+
+[Section titled “AnkiConnect is unavailable”](#ankiconnect-is-unavailable)
+
+**Symptoms:** connection refused, a failed AnkiConnect doctor row, or commands that cannot list decks or notes.
+
+1. Start Anki and keep it open.
+
+2. Install and enable the AnkiConnect add-on.
+
+3. Test the endpoint with `anki-llm query version`.
+
+4. Confirm the configured URL with `anki-llm config get anki_connect_url`.
+
+5. For WSL or a remote host, configure a reachable address:
+
+   ```bash
+   anki-llm config set anki_connect_url http://192.168.1.100:8765
+   ```
+
+6. Check firewall and AnkiConnect origin or bind settings. Expose the API only on a trusted network.
+
+## An API key is missing or rejected
+
+[Section titled “An API key is missing or rejected”](#an-api-key-is-missing-or-rejected)
+
+Run `anki-llm doctor` to see which variables are detected, then export the key in the same shell that runs anki-llm:
+
+```bash
+export OPENAI_API_KEY="..."
+export GEMINI_API_KEY="..."
+export DEEPSEEK_API_KEY="..."
+export XAI_API_KEY="..."
+```
+
+For OpenRouter or another compatible service, use `ANKI_LLM_API_KEY` and set the base URL. Provider-specific keys are intentionally withheld from custom endpoints. See [Models](/models/#endpoint-and-key-precedence).
+
+If the key is present but `doctor --check` fails, read the provider response for invalid credentials, missing model permission, exhausted balance, or account restrictions.
+
+## The wrong model or endpoint is selected
+
+[Section titled “The wrong model or endpoint is selected”](#the-wrong-model-or-endpoint-is-selected)
+
+Inspect `doctor`, then check every source that can override the value:
+
+```bash
+anki-llm config get model
+anki-llm config get api_base_url
+anki-llm workspace info
+```
+
+A workspace `default_model` takes precedence over global `model`. CLI flags take precedence over both. `ANKI_LLM_API_BASE_URL` takes precedence over global `api_base_url`.
+
+Model names are accepted without a whitelist. If a provider reports “model not found,” use the exact ID exposed by that provider or gateway. Provider-qualified OpenRouter names differ from direct-provider names.
+
+A compatible endpoint must implement OpenAI `POST /v1/chat/completions`. If it rejects `reasoning_effort`, unset the option or choose a value supported by that server:
+
+```bash
+anki-llm config unset reasoning_effort
+```
+
+## Requests are rate-limited or time out
+
+[Section titled “Requests are rate-limited or time out”](#requests-are-rate-limited-or-time-out)
+
+LLM and TTS operations retry transient 429 responses, server errors, and timeouts according to `--retries`. Reduce concurrency when failures persist:
+
+```bash
+anki-llm process-file input.yaml -o output.yaml -p prompt.md --batch-size 1
+anki-llm tts Japanese --field Audio --text-field Front --voice alloy --batch-size 1
+```
+
+Re-run an interrupted `process-file` command with the same input and output. It skips complete rows unless `--force` is used. TTS also skips populated target fields, and its cache prevents identical successful requests from being billed again.
+
+For paid APIs, confirm quota and balance with the provider. Edge TTS uses an unofficial consumer endpoint and can throttle large batches even without an account.
+
+## A batch prompt fails rows
+
+[Section titled “A batch prompt fails rows”](#a-batch-prompt-fails-rows)
+
+Common causes include:
+
+* The prompt lacks YAML frontmatter.
+* Both or neither of `output.field` and `output.fields` are declared.
+* A `{placeholder}` does not match an input field.
+* `require_result_tag: true` is set but the response lacks a complete final `<result>...</result>` pair.
+* Multi-field output has missing, empty, non-string, or extra JSON keys.
+
+Use a small preview and raw logging:
+
+```bash
+anki-llm process-file input.yaml \
+  --output output.yaml \
+  --prompt prompt.md \
+  --preview \
+  --log run.log
+```
+
+Multi-field updates are atomic. An invalid response leaves all declared fields unchanged and can be retried safely. See [Prompt reference](/prompt-reference/).
+
+## TTS configuration fails
+
+[Section titled “TTS configuration fails”](#tts-configuration-fails)
+
+Check the active provider’s required values:
+
+* OpenAI: `OPENAI_API_KEY` or `ANKI_LLM_API_KEY`, unless a custom endpoint needs no authentication.
+* Azure: `AZURE_TTS_KEY` and `AZURE_TTS_REGION`.
+* Google: `GOOGLE_TTS_KEY` from a project with Text-to-Speech enabled.
+* Amazon: access key, secret key, and AWS region. Temporary credentials also use `AWS_SESSION_TOKEN`.
+* Edge: no credentials.
+
+Prompt mode requires exactly one TTS source. Azure and Amazon require `region`. Azure, Google, and Edge reject `model`; Azure and Amazon reject `speed`. Amazon `model` must be a supported Polly engine.
+
+Use the voice browser to validate names and credential availability:
+
+```bash
+anki-llm tts-voices --provider azure --lang ja
+```
+
+Browsing works without credentials. Pressing Space reports the missing setting or attempts a preview. A provider can also reject a valid voice when its locale, region, engine, or account access is incompatible.
+
+## Audio text sounds wrong
+
+[Section titled “Audio text sounds wrong”](#audio-text-sounds-wrong)
+
+Source fields are stripped of HTML, cloze markup, sound tags, entities, and extra whitespace before synthesis. For Japanese words with ambiguous kanji readings, add inline furigana such as `日本語[にほんご]`. See [Text-to-speech](/tts/#control-japanese-pronunciation-with-furigana).
+
+Use `--force` only when replacing existing target audio is intended. If a fixed request keeps reusing unwanted cached audio, clear `~/.cache/anki-llm/tts/` and run it again.
+
+# Frequently asked questions
+
+> Find answers about AnkiConnect, costs, and AnkiMCP.
+
+## Why does anki-llm require AnkiConnect?
+
+[Section titled “Why does anki-llm require AnkiConnect?”](#why-does-anki-llm-require-ankiconnect)
+
+Anki has no built-in external API for reading and updating a collection. AnkiConnect supplies a local REST API that anki-llm uses to export notes, import changes, add generated cards, upload audio, and manage note type templates.
+
+Anki must be running for collection operations. File processing can run while Anki is closed because it works against CSV or YAML. Read the [AnkiConnect guide](/ankiconnect/) for setup and direct queries.
+
+## How much does processing cost?
+
+[Section titled “How much does processing cost?”](#how-much-does-processing-cost)
+
+Cost depends on model pricing, prompt length, note fields included in each request, generated output size, retries, and extra processing steps. There is no single per-deck price.
+
+As an order-of-magnitude example, generating a substantial HTML grammar explanation for 1,000 Glossika EN-JP cards has cost roughly:
+
+| Model                           | Approximate cost per 1,000 cards |
+| ------------------------------- | -------------------------------- |
+| `gemini-2.5-flash-lite`         | $0.35                            |
+| `deepseek-v4-flash`             | $0.45                            |
+| `gemini-3.1-flash-lite-preview` | $1.00                            |
+| `gemini-2.5-flash`              | $1.50                            |
+| `gpt-5-mini`                    | $3.00                            |
+| `grok-4.3`                      | $3.50                            |
+
+A short hint or translation can cost much less. A long multi-field response can cost more. For generation, three candidates with a moderately involved prompt have cost about $0.0002 per card with `gemini-2.5-flash-lite`, $0.001 with `gemini-2.5-flash`, and $0.0025 with `gpt-5-mini`.
+
+These figures are examples, not quotes. Provider pricing and model behavior change. Gateway markups, cached tokens, reasoning tokens, free tiers, and provider discounts can change the final bill.
+
+Test a representative sample before a large run:
+
+```bash
+anki-llm process-deck "My Deck" -p prompt.md --limit 20 --preview
+```
+
+anki-llm reports token usage and an estimate for models in its built-in pricing table. Extrapolate from the sample and check current provider pricing. Every `transform` or `check` step adds an LLM request for each card that reaches it. Unknown models still work but have no built-in estimate. See [Models and cost estimates](/models/#known-models-and-cost-estimates).
+
+TTS billing is separate. Cached identical requests reuse local audio, but new voices, text, models, speeds, or provider settings can produce billable requests.
+
+## How is anki-llm different from AnkiMCP?
+
+[Section titled “How is anki-llm different from AnkiMCP?”](#how-is-anki-llm-different-from-ankimcp)
+
+AnkiMCP is an MCP server for conversational, interactive access from an MCP client. It is a natural fit when an assistant should inspect or create a small number of cards during a chat.
+
+anki-llm is a CLI and terminal UI for bulk, repeatable workflows:
+
+| Need                                  | anki-llm                                                     | AnkiMCP                                      |
+| ------------------------------------- | ------------------------------------------------------------ | -------------------------------------------- |
+| Process thousands of notes            | Batch concurrency, retries, resume, and atomic field updates | Usually agent-driven calls per task          |
+| Review changes as files               | CSV and YAML export, processing, diff, and import            | Conversation-oriented                        |
+| Choose the model and endpoint per run | Any OpenAI-compatible API, including local servers           | Usually follows the MCP client’s model setup |
+| Generate several candidates           | Interactive selection and editing TUI                        | Conversational creation                      |
+| Add speech audio                      | Integrated multi-provider TTS and caching                    | Depends on server tools                      |
+| Edit card templates                   | Pull and push local HTML and CSS                             | Depends on server tools                      |
+| Give a coding agent raw API access    | `anki-llm query` returns JSON                                | Native MCP tools                             |
+
+They can complement each other. Use AnkiMCP for conversational collection access and anki-llm for version-controlled prompts, scripted bulk transformations, reviewable files, generation sessions, TTS, and local note type editing.

@@ -1,4 +1,12 @@
-# Changelog
+---
+title: "Changelog"
+description: "Review notable changes in anki-llm releases."
+---
+
+## Unreleased
+
+- Publish the complete documentation site at https://anki-llm.raine.dev and bundle
+  its LLM-readable reference for offline access through `anki-llm docs`.
 
 ## v2.0.19 (2026-07-28)
 

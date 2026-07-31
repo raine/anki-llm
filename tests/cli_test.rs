@@ -41,6 +41,22 @@ fn prints_version() {
 }
 
 #[test]
+fn docs_prints_complete_offline_documentation() {
+    Command::cargo_bin("anki-llm")
+        .unwrap()
+        .arg("docs")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::starts_with(
+                "<SYSTEM>This is the full developer documentation for anki-llm</SYSTEM>",
+            )
+            .and(predicate::str::contains("## `anki-llm docs`"))
+            .and(predicate::str::contains("# Changelog")),
+        );
+}
+
+#[test]
 fn config_path_prints_path() {
     Command::cargo_bin("anki-llm")
         .unwrap()

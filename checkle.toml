@@ -18,9 +18,9 @@ name = "command-reference"
 command = ["cargo", "run", "--quiet", "--locked", "--example", "generate-command-reference", "--", "--check"]
 
 [[check]]
-name = "docs-build"
-command = ["just", "docs-build"]
+name = "docs-bundle"
+command = ["just", "docs-bundle-check"]
 
 [[group]]
 name = "all"
-checks = ["format-check", "clippy", "test", "command-reference", "docs-build"]
+checks = ["format-check", "clippy", "test", "command-reference", "docs-bundle"]

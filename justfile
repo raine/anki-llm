@@ -93,9 +93,30 @@ docs:
     exit 1
 
 # Build the documentation site
-docs-build:
+_docs-build:
     bun install --cwd docs --frozen-lockfile
     bun run --cwd docs build
+
+# Build the documentation site
+docs-build:
+    just _docs-build
+
+# Regenerate the documentation bundle embedded in the CLI
+docs-bundle:
+    just _docs-build
+    mkdir -p docs/generated
+    cp docs/dist/llms-full.txt docs/generated/llms-full.txt
+
+# Verify the embedded documentation bundle is current
+docs-bundle-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just _docs-build
+    if ! cmp -s docs/dist/llms-full.txt docs/generated/llms-full.txt; then
+        echo "Error: docs/generated/llms-full.txt is stale." >&2
+        echo "Run 'just docs-bundle' and commit the updated bundle." >&2
+        exit 1
+    fi
 
 # Run the application
 run *ARGS:

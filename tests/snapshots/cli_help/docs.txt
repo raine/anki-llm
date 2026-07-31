@@ -1,4 +1,4 @@
-Show bundled documentation
+Show the complete documentation bundle offline
 
 Usage: anki-llm docs
 
