@@ -110,6 +110,7 @@ anki-llm doctor
 | --- | --- |
 | `~/.local/state/anki-llm/state.json` | Ephemeral application state, including the last prompt |
 | `~/.local/state/anki-llm/logs/` | Automatic LLM session logs |
+| `~/.local/state/anki-llm/snapshots/` | Original field values from direct deck-processing runs |
 | `~/.local/state/anki-llm/note-type-snapshots/` | Backups created before note type pushes |
 | `~/.cache/anki-llm/tts/` | Content-addressed synthesized audio cache |
 | `<workspace>/note-types/<slug>/.sync-state.json` | Last-synced note type hash, locally gitignored |

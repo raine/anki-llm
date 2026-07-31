@@ -1816,6 +1816,7 @@ anki-llm doctor
 | ------------------------------------------------ | ------------------------------------------------------ |
 | `~/.local/state/anki-llm/state.json`             | Ephemeral application state, including the last prompt |
 | `~/.local/state/anki-llm/logs/`                  | Automatic LLM session logs                             |
+| `~/.local/state/anki-llm/snapshots/`             | Original field values from direct deck-processing runs |
 | `~/.local/state/anki-llm/note-type-snapshots/`   | Backups created before note type pushes                |
 | `~/.cache/anki-llm/tts/`                         | Content-addressed synthesized audio cache              |
 | `<workspace>/note-types/<slug>/.sync-state.json` | Last-synced note type hash, locally gitignored         |
@@ -2134,6 +2135,14 @@ Tip
 
 A capable model can produce a better initial template in `generate-init`. You can use a different, cheaper model for everyday card generation.
 
+If you want the wizard without API access, run:
+
+```sh
+anki-llm generate-init --copy
+```
+
+The wizard copies its analysis prompt to the clipboard. Paste that prompt into a browser-based LLM, paste the complete response back into the terminal, then type `END` on its own line. The wizard saves the response as the body of the generated prompt file.
+
 ## Select a prompt
 
 [Section titled “Select a prompt”](#select-a-prompt)
@@ -2257,7 +2266,7 @@ anki-llm generate "会議" --output cards.yaml
 anki-llm import cards.yaml --deck "Japanese::Vocabulary"
 ```
 
-A dry run prints generated cards without starting selection or import. Raw request logging is useful for debugging but can contain card content and model reasoning. See [`generate` in the command reference](/command-reference/#command-generate) for all runtime and output options.
+A dry run prints generated cards without starting selection or import. Raw request logging is useful for debugging but can contain complete card content and model output. The temporary Thinking block remains excluded. See [`generate` in the command reference](/command-reference/#command-generate) for all runtime and output options.
 
 # Manage note types
 
@@ -2979,7 +2988,7 @@ Open Anki again and update the original notes:
 anki-llm import notes-translated.yaml --deck "Japanese Core 1k"
 ```
 
-The exported `noteId` values identify existing notes, so the import updates them instead of creating replacements. The note type is inferred when the deck has a single type. See the [`import` reference](/command-reference/#command-import) when you need an explicit note type or key field.
+The exported `noteId` values identify existing notes, so the import updates them instead of creating replacements. The importer reports the valid destination fields and partitions rows into additions and updates. With all 1,000 exported IDs intact, this recipe produces 0 additions and 1,000 updates. The note type is inferred when the deck has a single type. See the [`import` reference](/command-reference/#command-import) when you need an explicit note type or key field.
 
 # Generate vocabulary cards
 
@@ -3062,7 +3071,7 @@ Post-selection work runs only for accepted cards, which keeps expensive checks f
 
 If the prompt contains a `tts:` block, press `p` to hear the focused card before selection. Audio for selected cards is finalized when they are imported.
 
-Press `Enter` after selecting the cards you want. Confirm the final review to add them to Anki. From the summary, press `p` to replay imported audio, `n` for another term, or `q` to quit.
+Press `Enter` after selecting the cards you want. Confirm the final review to add them to Anki. From the summary, press `p` to replay imported audio, `n` for another term, `r` to generate the last term again, or `q` to quit.
 
 For an extra review boundary, generate to a local file instead of importing directly:
 

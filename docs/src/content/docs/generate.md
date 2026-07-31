@@ -53,6 +53,17 @@ A capable model can produce a better initial template in `generate-init`. You
 can use a different, cheaper model for everyday card generation.
 :::
 
+If you want the wizard without API access, run:
+
+```sh
+anki-llm generate-init --copy
+```
+
+The wizard copies its analysis prompt to the clipboard. Paste that prompt into a
+browser-based LLM, paste the complete response back into the terminal, then type
+`END` on its own line. The wizard saves the response as the body of the generated
+prompt file.
+
 ## Select a prompt
 
 Launch from a workspace and omit `--prompt`:
@@ -187,6 +198,7 @@ anki-llm import cards.yaml --deck "Japanese::Vocabulary"
 ```
 
 A dry run prints generated cards without starting selection or import. Raw
-request logging is useful for debugging but can contain card content and model
-reasoning. See [`generate` in the command reference](/command-reference/#command-generate)
+request logging is useful for debugging but can contain complete card content
+and model output. The temporary Thinking block remains excluded. See
+[`generate` in the command reference](/command-reference/#command-generate)
 for all runtime and output options.

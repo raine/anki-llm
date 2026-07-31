@@ -139,6 +139,9 @@ anki-llm import notes-translated.yaml --deck "Japanese Core 1k"
 ```
 
 The exported `noteId` values identify existing notes, so the import updates them
-instead of creating replacements. The note type is inferred when the deck has a
-single type. See the [`import` reference](/command-reference/#command-import) when you
-need an explicit note type or key field.
+instead of creating replacements. The importer reports the valid destination
+fields and partitions rows into additions and updates. With all 1,000 exported
+IDs intact, this recipe produces 0 additions and 1,000 updates. The note type is
+inferred when the deck has a single type. See the
+[`import` reference](/command-reference/#command-import) when you need an
+explicit note type or key field.

@@ -97,7 +97,8 @@ imported.
 
 Press <kbd>Enter</kbd> after selecting the cards you want. Confirm the final
 review to add them to Anki. From the summary, press <kbd>p</kbd> to replay
-imported audio, <kbd>n</kbd> for another term, or <kbd>q</kbd> to quit.
+imported audio, <kbd>n</kbd> for another term, <kbd>r</kbd> to generate the last
+term again, or <kbd>q</kbd> to quit.
 
 For an extra review boundary, generate to a local file instead of importing
 directly:
