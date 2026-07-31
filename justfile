@@ -7,6 +7,10 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default:
     @just --list
 
+# Regenerate the command reference from the Clap command tree
+command-reference:
+    cargo run --quiet --locked --example generate-command-reference
+
 # Run all read-only project checks
 check:
     @checkle run all
