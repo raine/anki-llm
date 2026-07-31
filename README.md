@@ -53,6 +53,18 @@
 - **Scriptable collection access** – Query AnkiConnect directly from the CLI or
   AI agents. [Command reference](#anki-llm-query-action-params)
 
+### Let an agent drive the workflow
+
+The best way to use `anki-llm` is often to describe the outcome to a coding
+agent and let it choose and run the commands. For example:
+
+> Use `anki-llm` to add grammar breakdowns to my Japanese cards. Start with
+> five cards so I can review the result.
+
+The agent can inspect your collection, prepare the prompt and query, run a small
+preview, and scale up after you approve the result. You stay focused on what the
+cards should contain instead of assembling each CLI step yourself.
+
 ## Why?
 
 Hand-editing a large Anki collection is slow and error-prone. Verifying
