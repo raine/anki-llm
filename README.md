@@ -19,6 +19,21 @@
   <img src="https://anki-llm.raine.dev/anki-llm-generate.webp" alt="anki-llm generation TUI" width="830">
 </p>
 
+## What people say
+
+> What's next get AI to answer your flashcards for you?
+>
+> <cite>grei_earl (Reddit)</cite>
+
+> I love this. The README is extremely detailed and clear, and using
+> AnkiConnect to edit decks in-place avoids the usual apkg headaches.
+>
+> <cite>rahimnathwani (Hacker News)</cite>
+
+> This is cool!
+>
+> <cite>Hsaeedx (Reddit)</cite>
+
 ## Why anki-llm?
 
 - **Process files or decks.** Export notes to reviewable CSV or YAML, process

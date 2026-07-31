@@ -7,6 +7,20 @@ description: Bulk-process, generate, and maintain Anki flashcards with LLMs and 
 
 ![anki-llm generating Japanese vocabulary cards in a terminal interface](/anki-llm-generate.webp)
 
+## What people say
+
+> What's next get AI to answer your flashcards for you?
+>
+> <cite>grei_earl (Reddit)</cite>
+
+> I love this. The README is extremely detailed and clear, and using AnkiConnect to edit decks in-place avoids the usual apkg headaches.
+>
+> <cite>rahimnathwani (Hacker News)</cite>
+
+> This is cool!
+>
+> <cite>Hsaeedx (Reddit)</cite>
+
 ## Why anki-llm?
 
 - Improve existing notes by verifying translations, adding grammar explanations, creating hints, or filling structured fields across a deck.

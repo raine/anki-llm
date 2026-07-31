@@ -8,6 +8,22 @@
 
 ![anki-llm generating Japanese vocabulary cards in a terminal interface](/anki-llm-generate.webp)
 
+## What people say
+
+[Section titled “What people say”](#what-people-say)
+
+> What’s next get AI to answer your flashcards for you?
+>
+> grei\_earl (Reddit)
+
+> I love this. The README is extremely detailed and clear, and using AnkiConnect to edit decks in-place avoids the usual apkg headaches.
+>
+> rahimnathwani (Hacker News)
+
+> This is cool!
+>
+> Hsaeedx (Reddit)
+
 ## Why anki-llm?
 
 [Section titled “Why anki-llm?”](#why-anki-llm)

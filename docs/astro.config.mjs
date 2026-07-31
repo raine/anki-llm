@@ -50,12 +50,22 @@ export default defineConfig({
         replacesTitle: true,
       },
       favicon: '/favicon.svg',
+      head: [
+        {
+          tag: 'script',
+          attrs: {
+            src: '/image-zoom.js',
+            defer: true,
+          },
+        },
+      ],
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/raine/anki-llm' },
       ],
       components: {
         SocialIcons: './src/components/HeaderLinks.astro',
       },
+      customCss: ['./src/styles/image-zoom.css'],
       sidebar: [
         {
           label: 'Start here',

@@ -1,0 +1,97 @@
+.image-zoom-trigger {
+  display: block;
+  padding: 0;
+  margin-block: 1.5rem;
+  border: 0;
+  border-radius: 0.8rem;
+  background: transparent;
+  color: inherit;
+  cursor: zoom-in;
+}
+
+.image-zoom-trigger img {
+  display: block;
+  margin: 0;
+  border-radius: inherit;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.image-zoom-trigger:hover img,
+.image-zoom-trigger:focus-visible img {
+  transform: translateY(-4px);
+  box-shadow: 0 1rem 2.5rem color-mix(in srgb, var(--sl-color-black) 24%, transparent);
+}
+
+.image-zoom-trigger:focus-visible {
+  outline: 2px solid var(--sl-color-accent-high);
+  outline-offset: 4px;
+}
+
+.image-zoom-dialog {
+  box-sizing: border-box;
+  width: 100dvw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  padding: 1rem;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.image-zoom-dialog[open] {
+  display: grid;
+  place-items: center;
+}
+
+.image-zoom-frame {
+  box-sizing: border-box;
+  display: grid;
+  max-width: calc(100dvw - 2rem);
+  max-height: calc(100dvh - 2rem);
+  place-items: center;
+}
+
+.image-zoom-dialog::backdrop {
+  background: color-mix(in srgb, var(--sl-color-black) 78%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.image-zoom-full {
+  display: block;
+  max-width: min(calc(100dvw - 2rem), 1600px);
+  max-height: calc(100dvh - 2rem);
+  width: auto;
+  height: auto;
+  margin: auto;
+  border-radius: 0.9rem;
+  object-fit: contain;
+  box-shadow: 0 2rem 5rem color-mix(in srgb, var(--sl-color-black) 48%, transparent);
+}
+
+.image-zoom-close {
+  position: fixed;
+  inset-block-start: 1rem;
+  inset-inline-end: 1rem;
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: 999px;
+  background: var(--sl-color-bg-nav);
+  color: var(--sl-color-text);
+  font: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.image-zoom-close:hover,
+.image-zoom-close:focus-visible {
+  color: var(--sl-color-text-invert);
+  background: var(--sl-color-accent);
+}
