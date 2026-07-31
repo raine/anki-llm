@@ -42,10 +42,10 @@ description: "Review notable changes in anki-llm releases."
 
 ## v2.0.13 (2026-04-25)
 
-- Add `note-type` command — pull Anki note type templates and CSS into local
+- Add `note-type` command - pull Anki note type templates and CSS into local
   files, edit them in any editor, then push changes back to Anki. `note-type
 status` shows a live diff of what has drifted.
-- Add workspace support — a directory with a `prompts/` folder is now a
+- Add workspace support - a directory with a `prompts/` folder is now a
   workspace. Run `workspace init` to set one up. Prompts and settings are
   resolved from the current workspace automatically.
 - Add `workspace init` and `workspace info` subcommands
@@ -53,7 +53,7 @@ status` shows a live diff of what has drifted.
   Set it to your workspace directory and all commands resolve prompts, note
   types, and default model from there regardless of your working directory.
 - `process-deck` now skips notes that already have content in the target field
-  by default — use `--force` to re-process and overwrite existing values.
+  by default - use `--force` to re-process and overwrite existing values.
 
 ## v2.0.12 (2026-04-23)
 
@@ -73,18 +73,18 @@ status` shows a live diff of what has drifted.
 - **Breaking:** JSON-merge output (`--json`) is no longer supported for
   `process-*`. Prompts now always write a single field.
 
-- Add `--preview` flag to `process-deck` and `process-file` — process a small
+- Add `--preview` flag to `process-deck` and `process-file` - process a small
   sample of cards with the LLM and show a diff-like summary of what would
   change, then prompt for confirmation before running the full batch.
 
 ## v2.0.11 (2026-04-23)
 
-- Add `update` command — self-update to the latest release from GitHub
-- Add `docs` command — show bundled documentation in the terminal
+- Add `update` command - self-update to the latest release from GitHub
+- Add `docs` command - show bundled documentation in the terminal
 
 ## v2.0.10 (2026-04-22)
 
-- Add `z` key in the generate TUI to skip post-select processing — useful when
+- Add `z` key in the generate TUI to skip post-select processing - useful when
   you want to bypass quality checks or other post-processing steps configured in
   a prompt
 - Fix large deck exports failing due to HTTP response buffer limit
@@ -102,15 +102,15 @@ status` shows a live diff of what has drifted.
 
 ### TTS (text-to-speech)
 
-- Added `tts` command — synthesize audio for Anki card fields and upload to Anki
+- Added `tts` command - synthesize audio for Anki card fields and upload to Anki
   as media
 - Added support for multiple TTS providers: OpenAI, Azure Neural, Google Cloud,
   and Amazon Polly
-- Added `tts-voices` subcommand — browse, filter, and preview voices from all
+- Added `tts-voices` subcommand - browse, filter, and preview voices from all
   providers in an interactive TUI
-- TTS is now integrated into the `generate` pipeline — audio is synthesized
+- TTS is now integrated into the `generate` pipeline - audio is synthesized
   automatically as a pipeline step before cards are added to Anki
-- Added TTS preview hotkey in the generate selection screen — press P to preview
+- Added TTS preview hotkey in the generate selection screen - press P to preview
   audio before committing
 - Added utterance IR with furigana parsing for better Japanese pronunciation
 
@@ -125,43 +125,43 @@ status` shows a live diff of what has drifted.
 
 ## v2.0.7 (2026-04-12)
 
-- Added interactive batch TUI for `process-deck` — same live progress, row
+- Added interactive batch TUI for `process-deck` - same live progress, row
   previews, and summary screen as `process-file`
 
 ## v2.0.6 (2026-04-11)
 
-- Added interactive batch TUI for `process-file` — live progress with elapsed
+- Added interactive batch TUI for `process-file` - live progress with elapsed
   time, row previews, and a summary screen when done
 - Added `--query` flag to `process-deck` and `export` to filter which notes are
   processed or exported
-- Added snapshot/rollback system for `process-deck` — use `history` to view past
+- Added snapshot/rollback system for `process-deck` - use `history` to view past
   runs and `rollback` to undo changes
-- Added support for any OpenAI-compatible LLM provider — configure a custom
+- Added support for any OpenAI-compatible LLM provider - configure a custom
   endpoint and use any model
 
 ## v2.0.5 (2026-04-11)
 
 ### `generate`
 
-- Added batch/multi-term input — paste multiple terms or press Tab to queue
+- Added batch/multi-term input - paste multiple terms or press Tab to queue
   them, then process all at once into a single selection view
-- Added single-card regeneration with feedback — press R on a card to regenerate
+- Added single-card regeneration with feedback - press R on a card to regenerate
   it with custom guidance (e.g. "make the definition simpler")
-- Added duplicate diffing — duplicate cards now show a field-by-field diff
+- Added duplicate diffing - duplicate cards now show a field-by-field diff
   against the existing Anki note, and pressing F force-selects them when the new
   version is better
-- Added $EDITOR integration — press E in the selection screen to edit a card's
+- Added $EDITOR integration - press E in the selection screen to edit a card's
   fields in your editor
-- Added inline term input — press N in the selection screen to generate cards
+- Added inline term input - press N in the selection screen to generate cards
   for a new term without leaving the view
-- Added card removal — press X to remove unwanted cards from the selection
+- Added card removal - press X to remove unwanted cards from the selection
 - Model picker now supports type-to-filter and Ctrl-N/Ctrl-P navigation
 - Model changes in the selection screen are now deferred, showing which model
   generated each card
 
 ## v2.0.4 (2026-04-10)
 
-- Added prompt picker — prompts in the prompts directory are auto-discovered,
+- Added prompt picker - prompts in the prompts directory are auto-discovered,
   and a picker appears when `--prompt` is omitted. Use Ctrl+P to switch prompts
   during a session. Last used prompt is remembered.
 - Added model pricing display in the model picker
@@ -169,7 +169,7 @@ status` shows a live diff of what has drifted.
   (Ctrl+O)
 - Done screen now shows the final generated cards, allows copying card text, and
   deleting imported cards
-- Added step history browsing on done and error screens — review what each
+- Added step history browsing on done and error screens - review what each
   processing step produced
 - **Breaking:** `post_process` and `quality_check` prompt template keys have
   been replaced with a unified `processing` pipeline. See the README for the new
@@ -186,9 +186,9 @@ status` shows a live diff of what has drifted.
 
 ## v2.0.3 (2026-04-07)
 
-- Added interactive TUI for the `generate` command — full-screen terminal
+- Added interactive TUI for the `generate` command - full-screen terminal
   interface with sidebar progress, card preview, and keyboard-driven workflow
-- Added `post_process` support in prompt templates — delegate individual field
+- Added `post_process` support in prompt templates - delegate individual field
   generation to separate focused LLM calls for higher quality results
 - **Breaking:** prompt template YAML keys switched from camelCase to snake_case
   (`noteType` → `note_type`, `fieldMap` → `field_map`, `qualityCheck` →
@@ -218,7 +218,7 @@ status` shows a live diff of what has drifted.
 
 ## v1.5.0 (2025-11-09)
 
-- Added optional quality check step in `generate` — the LLM reviews generated
+- Added optional quality check step in `generate` - the LLM reviews generated
   cards before presenting them for selection
 - `generate-init` now shows which model was selected and improves the model
   selection flow
@@ -227,7 +227,7 @@ status` shows a live diff of what has drifted.
 
 ## v1.4.0 (2025-11-02)
 
-- Added copy mode in `generate` — generated card fields can be copied to an
+- Added copy mode in `generate` - generated card fields can be copied to an
   existing note instead of creating a new one
 
 ## v1.3.0 (2025-11-02)
@@ -240,9 +240,9 @@ status` shows a live diff of what has drifted.
 
 ## v1.2.0 (2025-10-29)
 
-- Added `generate` command — interactively generate multiple contextual
+- Added `generate` command - interactively generate multiple contextual
   flashcard examples for a term and add selected cards to your Anki deck
-- Added `generate-init` wizard — uses an LLM to analyze your existing cards and
+- Added `generate-init` wizard - uses an LLM to analyze your existing cards and
   produce a tailored prompt template file for the `generate` command
 - `generate` now supports YAML output and can append to existing YAML/CSV files
   with schema validation
@@ -258,11 +258,11 @@ status` shows a live diff of what has drifted.
 ## v1.0.1 (2025-10-25)
 
 - Initial release
-- `export` — export an Anki deck to CSV or YAML
-- `import` — import a CSV or YAML file back into Anki
-- `process-file` — file-based batch workflow: export, process with LLM, import
+- `export` - export an Anki deck to CSV or YAML
+- `import` - import a CSV or YAML file back into Anki
+- `process-file` - file-based batch workflow: export, process with LLM, import
   (supports resume)
-- `process-deck` — direct in-place batch processing of deck notes with an LLM
+- `process-deck` - direct in-place batch processing of deck notes with an LLM
 - OpenAI and Google Gemini model support
 - Template-based prompt files with field substitution
 - Concurrent processing with retry logic and cost tracking

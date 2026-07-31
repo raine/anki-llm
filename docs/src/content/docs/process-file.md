@@ -27,11 +27,19 @@ Anki must be open with AnkiConnect installed while exporting:
 anki-llm export "Japanese Core 1k" --output notes.yaml
 ```
 
+When you select a deck and omit `--output`, anki-llm derives a YAML filename from
+the deck name, such as `Japanese Core 1k` to `japanese-core-1k.yaml`. A
+`--query` export requires an explicit output path:
+
+```sh
+anki-llm export --query 'deck:Japanese -field:Audio' --output missing-audio.yaml
+```
+
 You can export a deck or select notes with an Anki search query. Each exported
 row includes a note ID, which `process-file` uses to match input rows with saved
 output and `import` uses to update the original note.
 
-See [`export` in the command reference](/command-reference/#export) for deck,
+See [`export` in the command reference](/command-reference/#command-export) for deck,
 query, note type, and output options.
 
 ## 2. Write a processing prompt
@@ -103,7 +111,7 @@ UI shows progress, token use, and estimated cost. When output is piped, the
 command uses plain progress output instead.
 
 For the complete option list, including runtime, model, retry, and diagnostic
-settings, see [`process-file` in the command reference](/command-reference/#process-file).
+settings, see [`process-file` in the command reference](/command-reference/#command-process-file).
 
 ### Resume an interrupted run
 
@@ -174,10 +182,16 @@ When the changes look right, open Anki and import them:
 anki-llm import notes-processed.yaml --deck "Japanese Core 1k"
 ```
 
-The importer uses the note ID when present, preserves destination note fields
-that are absent from the file, and ignores file fields that do not exist on the
-destination note type. See [`import` in the command reference](/command-reference/#import)
-for key-field and note-type behavior.
+The importer identifies existing notes with `--key-field` when supplied. Without
+it, the importer uses `noteId` when that column exists, then falls back to the
+note type's first field. Matching rows update existing notes, while unmatched
+rows create notes in the destination deck. Blank, duplicate, or ambiguous keys
+stop the import instead of choosing a note nondeterministically.
+
+Destination note fields that are absent from the file are preserved, and file
+fields that do not exist on the destination note type are ignored. See
+[`import` in the command reference](/command-reference/#command-import) for its
+complete options.
 
 ## When Anki can be closed
 

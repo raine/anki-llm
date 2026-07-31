@@ -21,7 +21,7 @@ anki-llm export "Japanese Sentences" --output sentences.yaml
 ```
 
 For a narrower job, export an Anki query instead. The
-[`export` reference](/command-reference/#export) covers deck, query, and note
+[`export` reference](/command-reference/#command-export) covers deck, query, and note
 type selection.
 
 ## Start from the full prompt

@@ -67,7 +67,17 @@ Run the bulk fill with:
 anki-llm tts --prompt prompts/japanese.yaml
 ```
 
-The prompt supplies `deck`, `note_type`, voice, target, source, and provider. Override only the selection with `--deck` or `--query`. Prompt mode rejects CLI overrides for voice, model, format, target field, source, provider, speed, and note type. Edit the prompt to change those values.
+The prompt supplies `deck`, `note_type`, voice, target, source, and provider. To
+override only the selection, pass a positional deck after `tts` or use
+`--query`:
+
+```bash
+anki-llm tts "Japanese::Review" --prompt prompts/japanese.yaml
+anki-llm tts --query 'deck:Japanese tag:needs-audio' --prompt prompts/japanese.yaml
+```
+
+Prompt mode rejects CLI overrides for voice, model, format, target field,
+source, provider, speed, and note type. Edit the prompt to change those values.
 
 `tts.target` is an Anki field name. `tts.source.field` and placeholders in `tts.source.template` are `field_map` keys. A source must set exactly one of `field` or `template`.
 
@@ -119,10 +129,13 @@ anki-llm tts-voices --lang ja -q "female neural"
 anki-llm tts-voices --provider amazon -q neural
 ```
 
-- Type to filter provider, voice ID, display name, language, gender, and tags. Every whitespace-separated token must match.
+- Type to filter provider, voice ID, display name, language, gender, and tags. Every whitespace-separated token must match. OpenAI multilingual voices remain visible under language pre-filters.
 - Use arrow keys or Page Up and Page Down to move.
 - Press Space to synthesize and play a sample.
-- Press Enter to copy a `tts:` YAML scaffold for the highlighted voice.
+- Press Enter to copy a `tts:` YAML scaffold for the highlighted voice. The scaffold includes provider-specific region and Polly engine values when required. Fill in `target` and `source`, then keep browsing.
 - Press Escape or Ctrl-C to exit.
 
-Browsing needs no credentials. Previewing does. The detail pane identifies the missing environment variable or config key. Preview audio uses the same cache as batch TTS.
+Browsing needs no credentials. Previewing does. Providers without usable
+credentials show as unavailable, and the detail pane identifies the missing
+environment variable or config key. Preview audio uses the same cache as batch
+TTS.

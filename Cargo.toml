@@ -11,7 +11,15 @@ homepage = "https://anki-llm.raine.dev"
 documentation = "https://anki-llm.raine.dev"
 keywords = ["anki", "llm", "flashcards", "cli", "openai"]
 categories = ["command-line-utilities"]
-include = ["src/**/*", "tests/**/*", "docs/generated/llms-full.txt", "README.md", "LICENSE", "CHANGELOG.md", "ANKI_CONNECT.md"]
+include = [
+    "/src/**/*",
+    "/tests/**/*",
+    "/docs/generated/llms-full.txt",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/ANKI_CONNECT.md",
+]
 
 [dependencies]
 # CLI

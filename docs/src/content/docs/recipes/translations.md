@@ -109,7 +109,7 @@ and output path. Completed rows are skipped, while failed rows remain eligible
 for retry.
 
 The terminal summary reports successes, failures, elapsed time, token totals,
-and estimated cost. See the [`process-file` reference](/command-reference/#process-file)
+and estimated cost. See the [`process-file` reference](/command-reference/#command-process-file)
 for concurrency, limits, retries, and diagnostic logging.
 
 ## Review the result
@@ -140,5 +140,5 @@ anki-llm import notes-translated.yaml --deck "Japanese Core 1k"
 
 The exported `noteId` values identify existing notes, so the import updates them
 instead of creating replacements. The note type is inferred when the deck has a
-single type. See the [`import` reference](/command-reference/#import) when you
+single type. See the [`import` reference](/command-reference/#command-import) when you
 need an explicit note type or key field.

@@ -1,10 +1,14 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { unified } from '@astrojs/markdown-remark';
 import starlightLlmsTxt from 'starlight-llms-txt';
 
 export default defineConfig({
   site: 'https://anki-llm.raine.dev',
+  markdown: {
+    processor: unified({ smartypants: { dashes: false } }),
+  },
   integrations: [
     starlight({
       title: 'anki-llm',

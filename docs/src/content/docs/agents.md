@@ -104,6 +104,12 @@ makes a future rerun safer than reconstructing intent from terminal history.
 Query outputs can contain private study material, so decide whether they belong
 in version control.
 
+A multi-step extraction can combine discovery, random sampling, field reads, and
+file output. This [example agent conversation](https://gist.github.com/raine/b8d42275a188005bd2dadc34b8e05824)
+asks an agent to sample ten cards from each matching Glossika deck and save their
+English and Japanese fields to Markdown. It illustrates why clean JSON output
+and the action reference are useful together.
+
 ## Edit note types through files
 
 Agents are especially effective at card template work because `anki-llm` can

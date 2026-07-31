@@ -53,7 +53,7 @@ Queries let you target useful subsets, for example `tag:leech` or `rated:7:1`.
 If the selection contains more than one note type, filter it with the note-type
 option so every selected note has the same fields.
 
-See [`process-deck` in the command reference](/command-reference/#process-deck)
+See [`process-deck` in the command reference](/command-reference/#command-process-deck)
 for the exact selection syntax and complete option list.
 
 ## Preview safely
@@ -143,7 +143,7 @@ japanese-core-1k-errors.jsonl
 Each record includes the note data and error, which makes it possible to diagnose
 placeholder, API, and response-validation failures. Raw request logging is also
 available when you need to inspect complete model prompts and responses. See the
-[command reference](/command-reference/#process-deck) for logging options.
+[command reference](/command-reference/#command-process-deck) for logging options.
 
 Error logs and raw LLM logs may contain private card content. Keep them out of
 public repositories.
@@ -182,5 +182,5 @@ protects the newer edit. A forced rollback overrides conflict detection and
 restores the snapshot values, so reserve it for cases where the snapshot is the
 intended source of truth.
 
-See [`history`](/command-reference/#history) and
-[`rollback`](/command-reference/#rollback) for their complete command options.
+See [`history`](/command-reference/#command-history) and
+[`rollback`](/command-reference/#command-rollback) for their complete command options.

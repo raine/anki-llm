@@ -495,6 +495,8 @@ A one-line query can stay in shell history. For analysis, migrations, or multi-s
 
 This creates a reviewable specification for what the agent selected. It also makes a future rerun safer than reconstructing intent from terminal history. Query outputs can contain private study material, so decide whether they belong in version control.
 
+A multi-step extraction can combine discovery, random sampling, field reads, and file output. This [example agent conversation](https://gist.github.com/raine/b8d42275a188005bd2dadc34b8e05824) asks an agent to sample ten cards from each matching Glossika deck and save their English and Japanese fields to Markdown. It illustrates why clean JSON output and the action reference are useful together.
+
 ## Edit note types through files
 
 [Section titled “Edit note types through files”](#edit-note-types-through-files)
@@ -604,9 +606,15 @@ Anki must be open with AnkiConnect installed while exporting:
 anki-llm export "Japanese Core 1k" --output notes.yaml
 ```
 
+When you select a deck and omit `--output`, anki-llm derives a YAML filename from the deck name, such as `Japanese Core 1k` to `japanese-core-1k.yaml`. A `--query` export requires an explicit output path:
+
+```sh
+anki-llm export --query 'deck:Japanese -field:Audio' --output missing-audio.yaml
+```
+
 You can export a deck or select notes with an Anki search query. Each exported row includes a note ID, which `process-file` uses to match input rows with saved output and `import` uses to update the original note.
 
-See [`export` in the command reference](/command-reference/#export) for deck, query, note type, and output options.
+See [`export` in the command reference](/command-reference/#command-export) for deck, query, note type, and output options.
 
 ## 2. Write a processing prompt
 
@@ -675,7 +683,7 @@ anki-llm process-file notes.yaml \
 
 Each row becomes one model request. Requests run concurrently according to the batch size, and transient failures use the configured retry count. The terminal UI shows progress, token use, and estimated cost. When output is piped, the command uses plain progress output instead.
 
-For the complete option list, including runtime, model, retry, and diagnostic settings, see [`process-file` in the command reference](/command-reference/#process-file).
+For the complete option list, including runtime, model, retry, and diagnostic settings, see [`process-file` in the command reference](/command-reference/#command-process-file).
 
 ### Resume an interrupted run
 
@@ -738,7 +746,9 @@ When the changes look right, open Anki and import them:
 anki-llm import notes-processed.yaml --deck "Japanese Core 1k"
 ```
 
-The importer uses the note ID when present, preserves destination note fields that are absent from the file, and ignores file fields that do not exist on the destination note type. See [`import` in the command reference](/command-reference/#import) for key-field and note-type behavior.
+The importer identifies existing notes with `--key-field` when supplied. Without it, the importer uses `noteId` when that column exists, then falls back to the note type’s first field. Matching rows update existing notes, while unmatched rows create notes in the destination deck. Blank, duplicate, or ambiguous keys stop the import instead of choosing a note nondeterministically.
+
+Destination note fields that are absent from the file are preserved, and file fields that do not exist on the destination note type are ignored. See [`import` in the command reference](/command-reference/#command-import) for its complete options.
 
 ## When Anki can be closed
 
@@ -796,7 +806,7 @@ anki-llm process-deck \
 
 Queries let you target useful subsets, for example `tag:leech` or `rated:7:1`. If the selection contains more than one note type, filter it with the note-type option so every selected note has the same fields.
 
-See [`process-deck` in the command reference](/command-reference/#process-deck) for the exact selection syntax and complete option list.
+See [`process-deck` in the command reference](/command-reference/#command-process-deck) for the exact selection syntax and complete option list.
 
 ## Preview safely
 
@@ -878,7 +888,7 @@ Failed notes are written as JSON Lines in the working directory. The filename is
 japanese-core-1k-errors.jsonl
 ```
 
-Each record includes the note data and error, which makes it possible to diagnose placeholder, API, and response-validation failures. Raw request logging is also available when you need to inspect complete model prompts and responses. See the [command reference](/command-reference/#process-deck) for logging options.
+Each record includes the note data and error, which makes it possible to diagnose placeholder, API, and response-validation failures. Raw request logging is also available when you need to inspect complete model prompts and responses. See the [command reference](/command-reference/#command-process-deck) for logging options.
 
 Error logs and raw LLM logs may contain private card content. Keep them out of public repositories.
 
@@ -912,7 +922,7 @@ anki-llm rollback 20260411T153000_123Z
 
 Rollback checks whether fields changed after the processing run. If a note was edited later in Anki, that note is reported as a conflict and skipped, which protects the newer edit. A forced rollback overrides conflict detection and restores the snapshot values, so reserve it for cases where the snapshot is the intended source of truth.
 
-See [`history`](/command-reference/#history) and [`rollback`](/command-reference/#rollback) for their complete command options.
+See [`history`](/command-reference/#command-history) and [`rollback`](/command-reference/#command-rollback) for their complete command options.
 
 # Command reference
 
@@ -1419,7 +1429,7 @@ Usage: anki-llm tts [OPTIONS] [DECK]
 
 **Arguments**
 
-* **`[DECK]`**: Deck name to process (defaults to deck from –prompt frontmatter)
+* **`[DECK]`**: Deck name to process (defaults to deck from --prompt frontmatter)
 
 **Options**
 
@@ -1427,7 +1437,7 @@ Usage: anki-llm tts [OPTIONS] [DECK]
 * **`--prompt <PROMPT>`**: Path to a generate prompt YAML; reads its `tts:` block instead of taking deck-design flags on the CLI
 * **`--field <FIELD>`**: Target field to write \[sound:…] into (flag mode; required)
 * **`-p, --template <TEMPLATE>`**: Path to prompt template file (flag mode)
-* **`--text-field <TEXT_FIELD>`**: Source field name (flag mode; alternative to –template)
+* **`--text-field <TEXT_FIELD>`**: Source field name (flag mode; alternative to --template)
 * **`--provider <PROVIDER>`**: TTS provider identifier (flag mode; defaults to “openai”)
 * **`--voice <VOICE>`**: Voice name (flag mode; provider-specific, e.g. alloy)
 * **`--tts-model <TTS_MODEL>`**: TTS backing model (flag mode; e.g. gpt-4o-mini-tts)
@@ -1439,7 +1449,7 @@ Usage: anki-llm tts [OPTIONS] [DECK]
 * **`--aws-region <AWS_REGION>`**: AWS region override for Amazon Polly (flag mode; provider must be ‘amazon’)
 * **`--aws-access-key-id <AWS_ACCESS_KEY_ID>`**: AWS access key id for Amazon Polly (flag mode)
 * **`--aws-secret-access-key <AWS_SECRET_ACCESS_KEY>`**: AWS secret access key for Amazon Polly (flag mode)
-* **`-n, --note-type <NOTE_TYPE>`**: Filter by note type (flag mode; rejected in –prompt mode)
+* **`-n, --note-type <NOTE_TYPE>`**: Filter by note type (flag mode; rejected in --prompt mode)
 * **`-b, --batch-size <BATCH_SIZE>`**: Number of concurrent TTS requests
   * Default: `5`
 * **`-r, --retries <RETRIES>`**: Number of retries on transient failures
@@ -1869,11 +1879,11 @@ These paths assume the standard home directory layout used by the current implem
 
 [Section titled “v2.0.13 (2026-04-25)”](#v2013-2026-04-25)
 
-* Add `note-type` command — pull Anki note type templates and CSS into local files, edit them in any editor, then push changes back to Anki. `note-type status` shows a live diff of what has drifted.
-* Add workspace support — a directory with a `prompts/` folder is now a workspace. Run `workspace init` to set one up. Prompts and settings are resolved from the current workspace automatically.
+* Add `note-type` command - pull Anki note type templates and CSS into local files, edit them in any editor, then push changes back to Anki. `note-type status` shows a live diff of what has drifted.
+* Add workspace support - a directory with a `prompts/` folder is now a workspace. Run `workspace init` to set one up. Prompts and settings are resolved from the current workspace automatically.
 * Add `workspace init` and `workspace info` subcommands
 * **Breaking:** `prompts_dir` config setting is replaced by `default_workspace`. Set it to your workspace directory and all commands resolve prompts, note types, and default model from there regardless of your working directory.
-* `process-deck` now skips notes that already have content in the target field by default — use `--force` to re-process and overwrite existing values.
+* `process-deck` now skips notes that already have content in the target field by default - use `--force` to re-process and overwrite existing values.
 
 ## v2.0.12 (2026-04-23)
 
@@ -1891,20 +1901,20 @@ These paths assume the standard home directory layout used by the current implem
 
 * **Breaking:** JSON-merge output (`--json`) is no longer supported for `process-*`. Prompts now always write a single field.
 
-* Add `--preview` flag to `process-deck` and `process-file` — process a small sample of cards with the LLM and show a diff-like summary of what would change, then prompt for confirmation before running the full batch.
+* Add `--preview` flag to `process-deck` and `process-file` - process a small sample of cards with the LLM and show a diff-like summary of what would change, then prompt for confirmation before running the full batch.
 
 ## v2.0.11 (2026-04-23)
 
 [Section titled “v2.0.11 (2026-04-23)”](#v2011-2026-04-23)
 
-* Add `update` command — self-update to the latest release from GitHub
-* Add `docs` command — show bundled documentation in the terminal
+* Add `update` command - self-update to the latest release from GitHub
+* Add `docs` command - show bundled documentation in the terminal
 
 ## v2.0.10 (2026-04-22)
 
 [Section titled “v2.0.10 (2026-04-22)”](#v2010-2026-04-22)
 
-* Add `z` key in the generate TUI to skip post-select processing — useful when you want to bypass quality checks or other post-processing steps configured in a prompt
+* Add `z` key in the generate TUI to skip post-select processing - useful when you want to bypass quality checks or other post-processing steps configured in a prompt
 * Fix large deck exports failing due to HTTP response buffer limit ([#3](https://github.com/raine/anki-llm/pull/3))
 
 ## v2.0.9 (2026-04-21)
@@ -1923,11 +1933,11 @@ These paths assume the standard home directory layout used by the current implem
 
 [Section titled “TTS (text-to-speech)”](#tts-text-to-speech)
 
-* Added `tts` command — synthesize audio for Anki card fields and upload to Anki as media
+* Added `tts` command - synthesize audio for Anki card fields and upload to Anki as media
 * Added support for multiple TTS providers: OpenAI, Azure Neural, Google Cloud, and Amazon Polly
-* Added `tts-voices` subcommand — browse, filter, and preview voices from all providers in an interactive TUI
-* TTS is now integrated into the `generate` pipeline — audio is synthesized automatically as a pipeline step before cards are added to Anki
-* Added TTS preview hotkey in the generate selection screen — press P to preview audio before committing
+* Added `tts-voices` subcommand - browse, filter, and preview voices from all providers in an interactive TUI
+* TTS is now integrated into the `generate` pipeline - audio is synthesized automatically as a pipeline step before cards are added to Anki
+* Added TTS preview hotkey in the generate selection screen - press P to preview audio before committing
 * Added utterance IR with furigana parsing for better Japanese pronunciation
 
 ### `generate` improvements
@@ -1943,16 +1953,16 @@ These paths assume the standard home directory layout used by the current implem
 
 [Section titled “v2.0.7 (2026-04-12)”](#v207-2026-04-12)
 
-* Added interactive batch TUI for `process-deck` — same live progress, row previews, and summary screen as `process-file`
+* Added interactive batch TUI for `process-deck` - same live progress, row previews, and summary screen as `process-file`
 
 ## v2.0.6 (2026-04-11)
 
 [Section titled “v2.0.6 (2026-04-11)”](#v206-2026-04-11)
 
-* Added interactive batch TUI for `process-file` — live progress with elapsed time, row previews, and a summary screen when done
+* Added interactive batch TUI for `process-file` - live progress with elapsed time, row previews, and a summary screen when done
 * Added `--query` flag to `process-deck` and `export` to filter which notes are processed or exported
-* Added snapshot/rollback system for `process-deck` — use `history` to view past runs and `rollback` to undo changes
-* Added support for any OpenAI-compatible LLM provider — configure a custom endpoint and use any model
+* Added snapshot/rollback system for `process-deck` - use `history` to view past runs and `rollback` to undo changes
+* Added support for any OpenAI-compatible LLM provider - configure a custom endpoint and use any model
 
 ## v2.0.5 (2026-04-11)
 
@@ -1962,12 +1972,12 @@ These paths assume the standard home directory layout used by the current implem
 
 [Section titled “generate”](#generate)
 
-* Added batch/multi-term input — paste multiple terms or press Tab to queue them, then process all at once into a single selection view
-* Added single-card regeneration with feedback — press R on a card to regenerate it with custom guidance (e.g. “make the definition simpler”)
-* Added duplicate diffing — duplicate cards now show a field-by-field diff against the existing Anki note, and pressing F force-selects them when the new version is better
-* Added $EDITOR integration — press E in the selection screen to edit a card’s fields in your editor
-* Added inline term input — press N in the selection screen to generate cards for a new term without leaving the view
-* Added card removal — press X to remove unwanted cards from the selection
+* Added batch/multi-term input - paste multiple terms or press Tab to queue them, then process all at once into a single selection view
+* Added single-card regeneration with feedback - press R on a card to regenerate it with custom guidance (e.g. “make the definition simpler”)
+* Added duplicate diffing - duplicate cards now show a field-by-field diff against the existing Anki note, and pressing F force-selects them when the new version is better
+* Added $EDITOR integration - press E in the selection screen to edit a card’s fields in your editor
+* Added inline term input - press N in the selection screen to generate cards for a new term without leaving the view
+* Added card removal - press X to remove unwanted cards from the selection
 * Model picker now supports type-to-filter and Ctrl-N/Ctrl-P navigation
 * Model changes in the selection screen are now deferred, showing which model generated each card
 
@@ -1975,11 +1985,11 @@ These paths assume the standard home directory layout used by the current implem
 
 [Section titled “v2.0.4 (2026-04-10)”](#v204-2026-04-10)
 
-* Added prompt picker — prompts in the prompts directory are auto-discovered, and a picker appears when `--prompt` is omitted. Use Ctrl+P to switch prompts during a session. Last used prompt is remembered.
+* Added prompt picker - prompts in the prompts directory are auto-discovered, and a picker appears when `--prompt` is omitted. Use Ctrl+P to switch prompts during a session. Last used prompt is remembered.
 * Added model pricing display in the model picker
 * Model can now be switched from the card selection, done, and error screens (Ctrl+O)
 * Done screen now shows the final generated cards, allows copying card text, and deleting imported cards
-* Added step history browsing on done and error screens — review what each processing step produced
+* Added step history browsing on done and error screens - review what each processing step produced
 * **Breaking:** `post_process` and `quality_check` prompt template keys have been replaced with a unified `processing` pipeline. See the README for the new configuration format.
 * All LLM queries are now automatically logged to `~/.local/state/anki-llm/logs/`
 * LLM errors are now logged to the session log file
@@ -1994,8 +2004,8 @@ These paths assume the standard home directory layout used by the current implem
 
 [Section titled “v2.0.3 (2026-04-07)”](#v203-2026-04-07)
 
-* Added interactive TUI for the `generate` command — full-screen terminal interface with sidebar progress, card preview, and keyboard-driven workflow
-* Added `post_process` support in prompt templates — delegate individual field generation to separate focused LLM calls for higher quality results
+* Added interactive TUI for the `generate` command - full-screen terminal interface with sidebar progress, card preview, and keyboard-driven workflow
+* Added `post_process` support in prompt templates - delegate individual field generation to separate focused LLM calls for higher quality results
 * **Breaking:** prompt template YAML keys switched from camelCase to snake\_case (`noteType` → `note_type`, `fieldMap` → `field_map`, `qualityCheck` → `quality_check`). Old keys will produce a clear error prompting you to update.
 
 ## v2.0.2 (2026-04-06)
@@ -2030,7 +2040,7 @@ These paths assume the standard home directory layout used by the current implem
 
 [Section titled “v1.5.0 (2025-11-09)”](#v150-2025-11-09)
 
-* Added optional quality check step in `generate` — the LLM reviews generated cards before presenting them for selection
+* Added optional quality check step in `generate` - the LLM reviews generated cards before presenting them for selection
 * `generate-init` now shows which model was selected and improves the model selection flow
 * Gemini is automatically used when only `GEMINI_API_KEY` is set, even if no OpenAI key is present
 
@@ -2038,7 +2048,7 @@ These paths assume the standard home directory layout used by the current implem
 
 [Section titled “v1.4.0 (2025-11-02)”](#v140-2025-11-02)
 
-* Added copy mode in `generate` — generated card fields can be copied to an existing note instead of creating a new one
+* Added copy mode in `generate` - generated card fields can be copied to an existing note instead of creating a new one
 
 ## v1.3.0 (2025-11-02)
 
@@ -2054,8 +2064,8 @@ These paths assume the standard home directory layout used by the current implem
 
 [Section titled “v1.2.0 (2025-10-29)”](#v120-2025-10-29)
 
-* Added `generate` command — interactively generate multiple contextual flashcard examples for a term and add selected cards to your Anki deck
-* Added `generate-init` wizard — uses an LLM to analyze your existing cards and produce a tailored prompt template file for the `generate` command
+* Added `generate` command - interactively generate multiple contextual flashcard examples for a term and add selected cards to your Anki deck
+* Added `generate-init` wizard - uses an LLM to analyze your existing cards and produce a tailored prompt template file for the `generate` command
 * `generate` now supports YAML output and can append to existing YAML/CSV files with schema validation
 * Import command now auto-detects the key field from column names
 * Added gpt-5 and gpt-5-mini model support
@@ -2073,10 +2083,10 @@ These paths assume the standard home directory layout used by the current implem
 [Section titled “v1.0.1 (2025-10-25)”](#v101-2025-10-25)
 
 * Initial release
-* `export` — export an Anki deck to CSV or YAML
-* `import` — import a CSV or YAML file back into Anki
-* `process-file` — file-based batch workflow: export, process with LLM, import (supports resume)
-* `process-deck` — direct in-place batch processing of deck notes with an LLM
+* `export` - export an Anki deck to CSV or YAML
+* `import` - import a CSV or YAML file back into Anki
+* `process-file` - file-based batch workflow: export, process with LLM, import (supports resume)
+* `process-deck` - direct in-place batch processing of deck notes with an LLM
 * OpenAI and Google Gemini model support
 * Template-based prompt files with field substitution
 * Concurrent processing with retry logic and cost tracking
@@ -2174,6 +2184,7 @@ The main review actions are:
 * `c` copies a card to the clipboard.
 * `z` toggles post-selection processing when the prompt configures it.
 * `Enter` confirms the selected cards.
+* `q` or `Ctrl-C` quits without importing the pending selection.
 
 Press `?` for the complete shortcut list for the current screen.
 
@@ -2246,7 +2257,7 @@ anki-llm generate "会議" --output cards.yaml
 anki-llm import cards.yaml --deck "Japanese::Vocabulary"
 ```
 
-A dry run prints generated cards without starting selection or import. Raw request logging is useful for debugging but can contain card content and model reasoning. See [`generate` in the command reference](/command-reference/#generate) for all runtime and output options.
+A dry run prints generated cards without starting selection or import. Raw request logging is useful for debugging but can contain card content and model reasoning. See [`generate` in the command reference](/command-reference/#command-generate) for all runtime and output options.
 
 # Manage note types
 
@@ -2729,7 +2740,7 @@ Open Anki and export the deck:
 anki-llm export "Japanese Sentences" --output sentences.yaml
 ```
 
-For a narrower job, export an Anki query instead. The [`export` reference](/command-reference/#export) covers deck, query, and note type selection.
+For a narrower job, export an Anki query instead. The [`export` reference](/command-reference/#command-export) covers deck, query, and note type selection.
 
 ## Start from the full prompt
 
@@ -2940,7 +2951,7 @@ anki-llm process-file notes.yaml \
 
 The output is saved incrementally. If the command stops, rerun the same command and output path. Completed rows are skipped, while failed rows remain eligible for retry.
 
-The terminal summary reports successes, failures, elapsed time, token totals, and estimated cost. See the [`process-file` reference](/command-reference/#process-file) for concurrency, limits, retries, and diagnostic logging.
+The terminal summary reports successes, failures, elapsed time, token totals, and estimated cost. See the [`process-file` reference](/command-reference/#command-process-file) for concurrency, limits, retries, and diagnostic logging.
 
 ## Review the result
 
@@ -2968,7 +2979,7 @@ Open Anki again and update the original notes:
 anki-llm import notes-translated.yaml --deck "Japanese Core 1k"
 ```
 
-The exported `noteId` values identify existing notes, so the import updates them instead of creating replacements. The note type is inferred when the deck has a single type. See the [`import` reference](/command-reference/#import) when you need an explicit note type or key field.
+The exported `noteId` values identify existing notes, so the import updates them instead of creating replacements. The note type is inferred when the deck has a single type. See the [`import` reference](/command-reference/#command-import) when you need an explicit note type or key field.
 
 # Generate vocabulary cards
 
@@ -3065,7 +3076,7 @@ Review the file, then import it:
 anki-llm import meeting-cards.yaml --deck "Japanese::Vocabulary"
 ```
 
-The [`generate` command reference](/command-reference/#generate) lists output, count, retry, model, copy, logging, and dry-run options without duplicating them here.
+The [`generate` command reference](/command-reference/#command-generate) lists output, count, retry, model, copy, logging, and dry-run options without duplicating them here.
 
 # Text-to-speech
 
@@ -3142,7 +3153,14 @@ Run the bulk fill with:
 anki-llm tts --prompt prompts/japanese.yaml
 ```
 
-The prompt supplies `deck`, `note_type`, voice, target, source, and provider. Override only the selection with `--deck` or `--query`. Prompt mode rejects CLI overrides for voice, model, format, target field, source, provider, speed, and note type. Edit the prompt to change those values.
+The prompt supplies `deck`, `note_type`, voice, target, source, and provider. To override only the selection, pass a positional deck after `tts` or use `--query`:
+
+```bash
+anki-llm tts "Japanese::Review" --prompt prompts/japanese.yaml
+anki-llm tts --query 'deck:Japanese tag:needs-audio' --prompt prompts/japanese.yaml
+```
+
+Prompt mode rejects CLI overrides for voice, model, format, target field, source, provider, speed, and note type. Edit the prompt to change those values.
 
 `tts.target` is an Anki field name. `tts.source.field` and placeholders in `tts.source.template` are `field_map` keys. A source must set exactly one of `field` or `template`.
 
@@ -3202,13 +3220,13 @@ anki-llm tts-voices --lang ja -q "female neural"
 anki-llm tts-voices --provider amazon -q neural
 ```
 
-* Type to filter provider, voice ID, display name, language, gender, and tags. Every whitespace-separated token must match.
+* Type to filter provider, voice ID, display name, language, gender, and tags. Every whitespace-separated token must match. OpenAI multilingual voices remain visible under language pre-filters.
 * Use arrow keys or Page Up and Page Down to move.
 * Press Space to synthesize and play a sample.
-* Press Enter to copy a `tts:` YAML scaffold for the highlighted voice.
+* Press Enter to copy a `tts:` YAML scaffold for the highlighted voice. The scaffold includes provider-specific region and Polly engine values when required. Fill in `target` and `source`, then keep browsing.
 * Press Escape or Ctrl-C to exit.
 
-Browsing needs no credentials. Previewing does. The detail pane identifies the missing environment variable or config key. Preview audio uses the same cache as batch TTS.
+Browsing needs no credentials. Previewing does. Providers without usable credentials show as unavailable, and the detail pane identifies the missing environment variable or config key. Preview audio uses the same cache as batch TTS.
 
 # Use workspaces
 
@@ -3677,6 +3695,8 @@ export DEEPSEEK_API_KEY="..."
 export XAI_API_KEY="..."
 ```
 
+Create keys through [OpenAI](https://platform.openai.com/api-keys), [Google AI Studio](https://aistudio.google.com/api-keys), [DeepSeek](https://platform.deepseek.com/api_keys), or [xAI](https://console.x.ai/team/default/api-keys).
+
 With no explicit model, resolution is:
 
 1. `--model`
@@ -3689,6 +3709,8 @@ A model that does not match Gemini, DeepSeek, or Grok uses OpenAI defaults unles
 ## OpenRouter
 
 [Section titled “OpenRouter”](#openrouter)
+
+[OpenRouter](https://openrouter.ai) exposes many provider-qualified models through one compatible endpoint and API key:
 
 ```bash
 export ANKI_LLM_API_KEY="your-openrouter-key"
@@ -3798,7 +3820,36 @@ The built-in pricing table recognizes exact model IDs in these families:
 
 Known models appear in the TUI picker when their provider key is available. A generic `ANKI_LLM_API_KEY` makes all known models available in the picker, and the configured model is included even when unknown.
 
-Pricing is an exact-name lookup, not provider discovery and not a whitelist. Unknown or provider-qualified names still run, but their cost estimate is unavailable. Estimates multiply reported input and output token counts by the hard-coded per-million-token rates. DeepSeek uses cache-miss, undiscounted rates.
+Pricing is an exact-name lookup, not provider discovery and not a whitelist. Unknown or provider-qualified names still run, but their cost estimate is unavailable. Estimates multiply reported input and output token counts by these built-in per-million-token rates:
+
+| Model                           | Input / 1M | Output / 1M | Provider reference                                                                   |
+| ------------------------------- | ---------: | ----------: | ------------------------------------------------------------------------------------ |
+| `gpt-4.1`                       |      $2.00 |       $8.00 | [OpenAI](https://platform.openai.com/docs/models/gpt-4.1)                            |
+| `gpt-4.1-mini`                  |      $0.40 |       $1.60 | [OpenAI](https://platform.openai.com/docs/models/gpt-4.1-mini)                       |
+| `gpt-4.1-nano`                  |      $0.10 |       $0.40 | [OpenAI](https://platform.openai.com/docs/models/gpt-4.1-nano)                       |
+| `gpt-4o`                        |      $2.50 |      $10.00 | [OpenAI](https://platform.openai.com/docs/models/gpt-4o)                             |
+| `gpt-4o-mini`                   |      $0.15 |       $0.60 | [OpenAI](https://platform.openai.com/docs/models/gpt-4o-mini)                        |
+| `gpt-5`                         |      $1.25 |      $10.00 | [OpenAI](https://platform.openai.com/docs/models/gpt-5)                              |
+| `gpt-5-mini`                    |      $0.25 |       $2.00 | [OpenAI](https://platform.openai.com/docs/models/gpt-5-mini)                         |
+| `gpt-5-nano`                    |      $0.05 |       $0.40 | [OpenAI](https://platform.openai.com/docs/models/gpt-5-nano)                         |
+| `gpt-5.1`                       |      $1.25 |      $10.00 | [OpenAI](https://platform.openai.com/docs/models/gpt-5.1)                            |
+| `gpt-5.2`                       |      $1.75 |      $14.00 | [OpenAI](https://platform.openai.com/docs/models/gpt-5.2)                            |
+| `gpt-5.3`                       |      $1.75 |      $14.00 | [OpenAI](https://platform.openai.com/docs/models/gpt-5.3)                            |
+| `gpt-5.4`                       |      $2.50 |      $15.00 | [OpenAI](https://platform.openai.com/docs/models/gpt-5.4)                            |
+| `gpt-5.4-mini`                  |      $0.75 |       $4.50 | [OpenAI](https://platform.openai.com/docs/models/gpt-5.4-mini)                       |
+| `gpt-5.4-nano`                  |      $0.20 |       $1.25 | [OpenAI](https://platform.openai.com/docs/models/gpt-5.4-nano)                       |
+| `gemini-2.0-flash`              |      $0.10 |       $0.40 | [Google](https://ai.google.dev/gemini-api/docs/models#gemini-2.0-flash)              |
+| `gemini-2.5-flash`              |      $0.30 |       $2.50 | [Google](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)              |
+| `gemini-2.5-flash-lite`         |      $0.10 |       $0.40 | [Google](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-lite)         |
+| `gemini-2.5-pro`                |      $1.25 |      $10.00 | [Google](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)                |
+| `gemini-3-flash-preview`        |      $0.50 |       $3.00 | [Google](https://ai.google.dev/gemini-api/docs/models#gemini-3-flash-preview)        |
+| `gemini-3.1-flash-lite-preview` |      $0.25 |       $1.50 | [Google](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-flash-lite-preview) |
+| `gemini-3.1-pro-preview`        |      $2.00 |      $12.00 | [Google](https://ai.google.dev/gemini-api/docs/models#gemini-3.1-pro-preview)        |
+| `deepseek-v4-flash`             |      $0.14 |       $0.28 | [DeepSeek](https://api-docs.deepseek.com/quick_start/pricing)                        |
+| `deepseek-v4-pro`               |      $1.74 |       $3.48 | [DeepSeek](https://api-docs.deepseek.com/quick_start/pricing)                        |
+| `grok-4.3`                      |      $1.25 |       $2.50 | [xAI](https://docs.x.ai/docs/models)                                                 |
+
+DeepSeek estimates use cache-miss, undiscounted rates.
 
 Treat every displayed cost as guidance:
 
@@ -4246,13 +4297,13 @@ Cost depends on model pricing, prompt length, note fields included in each reque
 As an order-of-magnitude example, generating a substantial HTML grammar explanation for 1,000 Glossika EN-JP cards has cost roughly:
 
 | Model                           | Approximate cost per 1,000 cards |
-| ------------------------------- | -------------------------------- |
-| `gemini-2.5-flash-lite`         | $0.35                            |
-| `deepseek-v4-flash`             | $0.45                            |
-| `gemini-3.1-flash-lite-preview` | $1.00                            |
-| `gemini-2.5-flash`              | $1.50                            |
-| `gpt-5-mini`                    | $3.00                            |
-| `grok-4.3`                      | $3.50                            |
+| ------------------------------- | -------------------------------: |
+| `gemini-2.5-flash-lite`         |                            $0.35 |
+| `deepseek-v4-flash`             |                            $0.45 |
+| `gemini-3.1-flash-lite-preview` |                            $1.00 |
+| `gemini-2.5-flash`              |                            $1.50 |
+| `gpt-5-mini`                    |                            $3.00 |
+| `grok-4.3`                      |                            $3.50 |
 
 A short hint or translation can cost much less. A long multi-field response can cost more. For generation, three candidates with a moderately involved prompt have cost about $0.0002 per card with `gemini-2.5-flash-lite`, $0.001 with `gemini-2.5-flash`, and $0.0025 with `gpt-5-mini`.
 

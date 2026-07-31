@@ -112,6 +112,6 @@ Review the file, then import it:
 anki-llm import meeting-cards.yaml --deck "Japanese::Vocabulary"
 ```
 
-The [`generate` command reference](/command-reference/#generate) lists output,
+The [`generate` command reference](/command-reference/#command-generate) lists output,
 count, retry, model, copy, logging, and dry-run options without duplicating them
 here.

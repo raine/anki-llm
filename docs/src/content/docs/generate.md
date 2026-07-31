@@ -106,6 +106,7 @@ The main review actions are:
 - <kbd>c</kbd> copies a card to the clipboard.
 - <kbd>z</kbd> toggles post-selection processing when the prompt configures it.
 - <kbd>Enter</kbd> confirms the selected cards.
+- <kbd>q</kbd> or <kbd>Ctrl-C</kbd> quits without importing the pending selection.
 
 Press <kbd>?</kbd> for the complete shortcut list for the current screen.
 
@@ -187,5 +188,5 @@ anki-llm import cards.yaml --deck "Japanese::Vocabulary"
 
 A dry run prints generated cards without starting selection or import. Raw
 request logging is useful for debugging but can contain card content and model
-reasoning. See [`generate` in the command reference](/command-reference/#generate)
+reasoning. See [`generate` in the command reference](/command-reference/#command-generate)
 for all runtime and output options.
