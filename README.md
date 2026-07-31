@@ -90,6 +90,7 @@ workspace and run your first processing or generation workflow.
 
 ## Documentation
 
+- [What is anki-llm?](https://anki-llm.raine.dev/)
 - [Getting started](https://anki-llm.raine.dev/getting-started/)
 - [Core concepts](https://anki-llm.raine.dev/concepts/)
 - [Process a file](https://anki-llm.raine.dev/process-file/)

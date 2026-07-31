@@ -1,63 +1,44 @@
 <SYSTEM>This is the full developer documentation for anki-llm</SYSTEM>
 
-# anki-llm
+# What is anki-llm?
 
-> A CLI and terminal UI for repeatable, reviewable AI workflows over your Anki collection.
+> Bulk-process, generate, and maintain Anki flashcards with LLMs and text-to-speech.
 
-`anki-llm` connects Anki Desktop to OpenAI-compatible language models. Use it to transform many existing notes, generate candidate cards for review, add audio, or maintain card templates as files. It is designed for collection-scale work where repeatability and inspection matter more than one-off chat interactions.
+`anki-llm` is a CLI and terminal UI for repeatable, reviewable AI workflows over an Anki collection. It connects Anki Desktop to OpenAI-compatible language models to transform existing notes, generate candidate cards, add audio, and maintain card templates as files.
 
-## What can you do with it?
+![anki-llm generating Japanese vocabulary cards in a terminal interface](/anki-llm-generate.webp)
 
-[Section titled “What can you do with it?”](#what-can-you-do-with-it)
+## Why anki-llm?
 
-* **Improve existing notes:** verify translations, add grammar explanations, create hints, or fill structured fields across a deck.
-* **Generate cards:** request several contextual examples for a term, inspect them in the terminal UI, and import only the cards you select.
-* **Add speech:** fill audio fields with text-to-speech from OpenAI, Azure, Google Cloud, Amazon Polly, or Microsoft Edge.
-* **Maintain note types:** pull card template HTML and CSS into ordinary files, edit them with your normal tools, and safely push them back to Anki.
-* **Automate collection tasks:** expose AnkiConnect as clean JSON through `anki-llm query`, including workflows driven by coding agents.
+[Section titled “Why anki-llm?”](#why-anki-llm)
+
+* Improve existing notes by verifying translations, adding grammar explanations, creating hints, or filling structured fields across a deck.
+* Generate several contextual cards for a term, inspect and edit them in the terminal UI, and import only the cards you select.
+* Add speech with OpenAI, Azure, Google Cloud, Amazon Polly, or Microsoft Edge text-to-speech.
+* Pull note type HTML and CSS into ordinary files, edit them with normal tools, and safely push them back to Anki.
+* Use OpenAI, Gemini, DeepSeek, xAI, OpenRouter, Ollama, or another OpenAI-compatible endpoint, with model selection, token accounting, and estimated costs for known models.
+* Give coding agents structured access to collection data through the JSON-oriented `anki-llm query` command.
 
 ## Choose a workflow
 
 [Section titled “Choose a workflow”](#choose-a-workflow)
 
-| Goal                                               | Start with                        | Why                                                                               |
-| -------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------- |
-| Review changes in a file before touching Anki      | [Process a file](/process-file/)  | Export, transform, diff, then import. Large jobs can resume.                      |
-| Update matching notes directly                     | [Process a deck](/process-deck/)  | One command, small previews, automatic snapshots, and rollback.                   |
-| Create cards from a word or concept                | [Generate cards](/generate/)      | Review and edit candidate cards in an interactive terminal UI.                    |
-| Add pronunciation audio                            | [Text-to-speech](/tts/)           | Fill audio fields while preserving existing audio by default.                     |
-| Redesign card templates with an editor or agent    | [Manage note types](/note-types/) | Keep HTML and CSS in files with diffs and version control.                        |
-| Describe an outcome instead of assembling commands | [Work with agents](/agents/)      | Let an agent inspect the collection, prepare files, and begin with a safe sample. |
+* [Process a file](/process-file/) to export, transform, diff, and import a reviewable CSV or YAML file. File processing supports incremental output and resume for interrupted jobs.
+* [Process a deck](/process-deck/) to update matching notes directly with a small preview, automatic snapshots, history, and conflict-aware rollback.
+* [Generate cards](/generate/) to review, edit, regenerate, and deduplicate candidate cards in an interactive terminal UI before import.
+* [Use text-to-speech](/tts/) to fill audio fields while preserving existing audio by default.
+* [Manage note types](/note-types/) to keep card template HTML and CSS in files that work with diffs, version control, editors, and coding agents.
+* [Work with agents](/agents/) to describe an outcome while an agent inspects the collection, prepares files, and begins with a safe sample.
 
-Unsure where to begin?
+## Design principles
 
-Use the [file-based workflow](/process-file/) when you want a reviewable staging file or expect interruptions. Use [direct processing](/process-deck/) for a shorter workflow with automatic snapshots and rollback.
+[Section titled “Design principles”](#design-principles)
 
-## Built for controlled bulk work
+An Anki collection is valuable, stateful data, while language model output is probabilistic. Prompt files make transformations repeatable and explicit output fields keep updates constrained. Preview, dry-run, and limit controls expose mistakes before a whole deck is changed. Exported files provide a diffable review boundary, while direct processing creates rollback snapshots.
 
-[Section titled “Built for controlled bulk work”](#built-for-controlled-bulk-work)
+Batch workflows support concurrency, retries, incremental progress, and file-mode resume. They can run against local or hosted OpenAI-compatible endpoints. Manual copy mode also supports browser-based language models when an API workflow is not appropriate.
 
-`anki-llm` combines:
-
-* CSV and YAML export and import
-* custom prompt files with explicit output fields
-* direct-to-Anki and file-based batch processing
-* concurrency, retries, incremental progress, and file-mode resume
-* preview, dry-run, and limit controls
-* direct-processing snapshots, history, and conflict-aware rollback
-* model selection for OpenAI, Gemini, DeepSeek, xAI, OpenRouter, Ollama, and other OpenAI-compatible endpoints
-* token accounting and estimated costs for known models
-* a generation TUI with duplicate detection, editing, regeneration, and model switching
-* optional manual copy mode for browser-based LLMs
-* integrated text-to-speech and note-type file workflows
-
-## Why files and explicit review steps?
-
-[Section titled “Why files and explicit review steps?”](#why-files-and-explicit-review-steps)
-
-An Anki collection is valuable, stateful data. Prompt files make transformations repeatable and reviewable. Small previews expose prompt mistakes before they reach a whole deck. Exported files create a diffable boundary, while direct runs create rollback snapshots. These choices let you use probabilistic models without treating their output as automatically correct.
-
-Ready to try it? [Install `anki-llm` and run a safe first generation](/getting-started/).
+Generation keeps acceptance decisions with the user. The terminal UI supports duplicate detection, editing, regeneration, model switching, and optional text-to-speech before selected cards enter Anki.
 
 # Getting started
 
