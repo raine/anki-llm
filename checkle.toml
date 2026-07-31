@@ -13,6 +13,10 @@ name = "test"
 mode = "cargo"
 command = ["cargo", "test", "--message-format=json", "--target-dir", "target/test", "--all-targets", "--locked"]
 
+[[check]]
+name = "docs-build"
+command = ["just", "docs-build"]
+
 [[group]]
 name = "all"
-checks = ["format-check", "clippy", "test"]
+checks = ["format-check", "clippy", "test", "docs-build"]

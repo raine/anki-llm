@@ -73,6 +73,26 @@ install:
 install-dev:
     cargo build && ln -sf $(pwd)/target/debug/anki-llm ~/.cargo/bin/anki-llm
 
+# Run the docs development server
+docs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bun install --cwd docs --frozen-lockfile
+    preferred_port=4321
+    max_port=$((preferred_port + 50))
+    for ((port = preferred_port; port <= max_port; port++)); do
+        if ! nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+            exec bun run --cwd docs dev --port "$port"
+        fi
+    done
+    echo "Error: could not find an available docs port between ${preferred_port} and ${max_port}" >&2
+    exit 1
+
+# Build the documentation site
+docs-build:
+    bun install --cwd docs --frozen-lockfile
+    bun run --cwd docs build
+
 # Run the application
 run *ARGS:
     cargo run -- "$@"

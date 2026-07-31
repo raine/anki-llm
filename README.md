@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <a href="https://anki-llm.raine.dev">Documentation</a> ·
   <a href="#installation">Install</a> · <a href="#features">Features</a> ·
   <a href="#commands-reference">Commands</a> · <a href="#configuration">Configuration</a> ·
   <a href="#faq">FAQ</a> · <a href="CHANGELOG.md">Changelog</a>
