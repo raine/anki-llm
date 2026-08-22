@@ -21,18 +21,9 @@
 
 ## What people say
 
-> What's next get AI to answer your flashcards for you?
->
-> <cite>grei_earl (Reddit)</cite>
-
-> I love this. The README is extremely detailed and clear, and using
-> AnkiConnect to edit decks in-place avoids the usual apkg headaches.
->
-> <cite>rahimnathwani (Hacker News)</cite>
-
-> This is cool!
->
-> <cite>Hsaeedx (Reddit)</cite>
+- *"What's next get AI to answer your flashcards for you?"* - grei_earl on Reddit
+- *"I love this. The README is extremely detailed and clear, and using AnkiConnect to edit decks in-place avoids the usual apkg headaches."* - rahimnathwani on Hacker News
+- *"This is cool!"* - Hsaeedx on Reddit
 
 ## Why anki-llm?
 
