@@ -5,6 +5,8 @@ description: "Review notable changes in anki-llm releases."
 
 ## Unreleased
 
+- Add optional `tts.instructions` in prompt YAML to guide OpenAI pronunciation,
+  accent, and tone. ([#7](https://github.com/raine/anki-llm/issues/7))
 - Publish the complete documentation site at https://anki-llm.raine.dev and bundle
   its LLM-readable reference for offline access through `anki-llm docs`.
 
