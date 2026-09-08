@@ -84,6 +84,7 @@ pub struct SynthesisRequest {
     /// every provider uses this (Azure doesn't).
     pub model: Option<String>,
     pub speed: Option<f32>,
+    pub instructions: Option<String>,
     /// Optional endpoint identity: for OpenAI-compatible providers this is
     /// `api_base_url`, for Azure it's `https://<region>.tts.speech.microsoft.com`.
     /// Part of the cache key so audio generated against a different

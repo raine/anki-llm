@@ -225,6 +225,7 @@ mod tests {
             model: None,
             format: AudioFormat::Mp3,
             speed: None,
+            instructions: None,
             endpoint: None,
         }))
     }
@@ -252,6 +253,7 @@ mod tests {
                 model: None,
                 format: None,
                 speed: None,
+                instructions: None,
             }),
         }
     }

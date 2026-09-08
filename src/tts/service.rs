@@ -55,6 +55,7 @@ pub struct TtsService {
     model: Option<String>,
     format: AudioFormat,
     speed: Option<f32>,
+    instructions: Option<String>,
     endpoint: Option<String>,
 }
 
@@ -67,6 +68,7 @@ pub struct TtsServiceConfig {
     pub model: Option<String>,
     pub format: AudioFormat,
     pub speed: Option<f32>,
+    pub instructions: Option<String>,
     pub endpoint: Option<String>,
 }
 
@@ -81,6 +83,7 @@ impl TtsService {
             model: cfg.model,
             format: cfg.format,
             speed: cfg.speed,
+            instructions: cfg.instructions,
             endpoint: cfg.endpoint,
         }
     }
@@ -142,6 +145,7 @@ impl TtsService {
             format: self.format,
             model: self.model.clone(),
             speed: self.speed,
+            instructions: self.instructions.clone(),
             endpoint: self.endpoint.clone(),
         };
 
@@ -326,6 +330,7 @@ pub fn build_bundle(
         model: resolved.model,
         format: resolved.format,
         speed: resolved.speed,
+        instructions: resolved.instructions,
         endpoint: endpoint_identity,
     }));
 
@@ -426,6 +431,7 @@ mod tests {
             model: None,
             format: AudioFormat::Mp3,
             speed: None,
+            instructions: None,
             endpoint: None,
         })
     }
@@ -446,6 +452,7 @@ mod tests {
             model: None,
             format: AudioFormat::Mp3,
             speed,
+            instructions: None,
             endpoint: None,
         })
     }
@@ -455,6 +462,35 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect()
+    }
+
+    #[test]
+    fn instructions_reach_provider_without_changing_spoken_text() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = Arc::new(TtsCache::new(tmp.path().to_path_buf()).unwrap());
+        let provider = Arc::new(MockProvider::new("openai", RenderProfile::PlainText));
+        let mut svc = mk_service(
+            provider.clone(),
+            cache,
+            TemplateSource::field("front".into()),
+            "Audio",
+        );
+        let fields = map(&[("Front", "v")]);
+        let field_map = map(&[("front", "Front")]);
+        let plain = svc.prepare_from_anki_fields(&fields, &field_map).unwrap();
+        svc.ensure_cached(&plain).unwrap();
+        svc.instructions = Some("Mluv česky. Keep {front} literal.".into());
+        let guided = svc.prepare_from_anki_fields(&fields, &field_map).unwrap();
+        assert_eq!(guided.request.payload, "v");
+        assert_eq!(guided.spoken_chars, 1);
+        assert_ne!(plain.filename, guided.filename);
+        svc.ensure_cached(&guided).unwrap();
+        svc.ensure_cached(&guided).unwrap();
+        assert_eq!(provider.call_count(), 2);
+        assert_eq!(
+            provider.calls.lock().unwrap()[1].instructions,
+            svc.instructions
+        );
     }
 
     #[test]
@@ -672,6 +708,7 @@ mod tests {
             model: None,
             format: None,
             speed: None,
+            instructions: None,
         }
     }
 

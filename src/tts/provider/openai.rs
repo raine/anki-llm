@@ -38,6 +38,8 @@ struct SpeechRequest<'a> {
     response_format: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     speed: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instructions: Option<&'a str>,
 }
 
 impl TtsProvider for OpenAiTtsProvider {
@@ -57,6 +59,7 @@ impl TtsProvider for OpenAiTtsProvider {
             voice: &req.voice,
             response_format: req.format.ext(),
             speed: req.speed,
+            instructions: req.instructions.as_deref(),
         };
 
         let mut request = self
@@ -93,5 +96,72 @@ impl TtsProvider for OpenAiTtsProvider {
             return Err(TtsError::Transient("empty audio response".to_string()));
         }
         Ok(buf)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tts::provider::{AudioFormat, TextFormat};
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    #[test]
+    fn speech_request_sends_optional_instructions() {
+        for instructions in [None, Some("Mluv česky.\nKeep {word} literal."), Some("")] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let base = format!("http://{}", listener.local_addr().unwrap());
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut reader = BufReader::new(&mut stream);
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                assert_eq!(line, "POST /audio/speech HTTP/1.1\r\n");
+                let mut length = None;
+                loop {
+                    line.clear();
+                    assert!(reader.read_line(&mut line).unwrap() > 0);
+                    if line == "\r\n" {
+                        break;
+                    }
+                    if let Some((name, value)) = line.split_once(':')
+                        && name.eq_ignore_ascii_case("content-length")
+                    {
+                        length = Some(value.trim().parse::<usize>().unwrap());
+                    }
+                }
+                let mut body = vec![0; length.unwrap()];
+                reader.read_exact(&mut body).unwrap();
+                stream
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\naudio",
+                    )
+                    .unwrap();
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+            });
+            let provider = OpenAiTtsProvider::new(None, Some(base));
+            let req = SynthesisRequest {
+                payload: "v".into(),
+                provider_id: "openai".into(),
+                text_format: TextFormat::PlainText,
+                voice: "alloy".into(),
+                format: AudioFormat::Mp3,
+                model: None,
+                speed: None,
+                instructions: instructions.map(String::from),
+                endpoint: None,
+            };
+            assert_eq!(provider.synthesize(&req).unwrap(), b"audio");
+            let body = server.join().unwrap();
+            assert_eq!(body["input"], "v");
+            assert_eq!(body["model"], DEFAULT_MODEL);
+            match instructions {
+                Some(text) => assert_eq!(body["instructions"], text),
+                None => assert!(body.get("instructions").is_none()),
+            }
+        }
     }
 }

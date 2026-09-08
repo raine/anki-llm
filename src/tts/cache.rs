@@ -38,6 +38,14 @@ impl TtsCache {
     /// version). Same inputs always produce the same key.
     pub fn key(req: &SynthesisRequest) -> String {
         let mut h = Sha256::new();
+        // A distinct prefix separates guided speech from unguided speech.
+        // Length-prefix literal instructions so embedded delimiters are safe.
+        // Absent instructions retain the cache identity of unguided speech.
+        if let Some(instructions) = &req.instructions {
+            h.update(b"instructions\0");
+            h.update((instructions.len() as u64).to_be_bytes());
+            h.update(instructions.as_bytes());
+        }
         h.update(format!("v{}\n", CACHE_SCHEMA_VERSION).as_bytes());
         h.update(format!("provider={}\n", req.provider_id).as_bytes());
         h.update(format!("text_format={}\n", req.text_format.tag()).as_bytes());
@@ -124,8 +132,30 @@ mod tests {
             format: AudioFormat::Mp3,
             model: Some("gpt-4o-mini-tts".into()),
             speed: None,
+            instructions: None,
             endpoint: None,
         }
+    }
+
+    #[test]
+    fn instructions_change_cache_identity() {
+        let plain = req("v");
+        let mut czech = plain.clone();
+        czech.instructions = Some("Speak Czech.\nUse a natural rhythm.".into());
+        let mut english = plain.clone();
+        english.instructions = Some("Speak English.".into());
+        assert_ne!(TtsCache::filename(&plain), TtsCache::filename(&czech));
+        assert_ne!(TtsCache::key(&czech), TtsCache::key(&english));
+        assert_eq!(TtsCache::key(&czech), TtsCache::key(&czech.clone()));
+        let mut empty = plain.clone();
+        empty.instructions = Some(String::new());
+        assert_ne!(TtsCache::key(&plain), TtsCache::key(&empty));
+    }
+
+    #[test]
+    fn absent_instructions_preserve_existing_key() {
+        let bytes = b"v2\nprovider=openai\ntext_format=plain\nendpoint=\nvoice=alloy\nformat=mp3\nmodel=gpt-4o-mini-tts\nspeed=1\npayload=v\n";
+        assert_eq!(TtsCache::key(&req("v")), hex(&Sha256::digest(bytes)));
     }
 
     #[test]

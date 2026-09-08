@@ -122,6 +122,7 @@ fn synthesize_one(req: PreviewRequest) -> Result<PathBuf, String> {
         model: entry.preview_model.clone(),
         format: AudioFormat::Mp3,
         speed: None,
+        instructions: None,
         endpoint,
     });
 

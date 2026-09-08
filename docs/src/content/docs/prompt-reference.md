@@ -212,6 +212,7 @@ The same block drives audio during `generate` import and bulk filling with `tts 
 | `model` | string | Provider-specific | OpenAI model or Amazon engine; forbidden for Azure, Google, Edge |
 | `format` | string | No | Defaults to `mp3` |
 | `speed` | number | No | Must be greater than zero; forbidden for Azure and Amazon |
+| `instructions` | string | No | Literal OpenAI voice guidance; unsupported by `tts-1`, `tts-1-hd`, and non-OpenAI providers |
 
 Amazon `model` accepts `standard`, `neural`, `generative`, or `long-form`. Provider credentials stay outside prompt files. See [TTS providers](/tts-providers/) for exact resolution and examples.
 

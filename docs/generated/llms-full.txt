@@ -3648,18 +3648,19 @@ A check must not declare `target` or `writes`. anki-llm adds the response contra
 
 The same block drives audio during `generate` import and bulk filling with `tts --prompt`.
 
-| Key               | Type   | Required          | Rules                                                            |
-| ----------------- | ------ | ----------------- | ---------------------------------------------------------------- |
-| `target`          | string | Yes               | Non-empty Anki field name, not a `field_map` key                 |
-| `source`          | object | Yes               | Exactly one of `field` or `template`                             |
-| `source.field`    | string | One source form   | Must be a `field_map` key                                        |
-| `source.template` | string | One source form   | Placeholders must be `field_map` keys, case-insensitive          |
-| `voice`           | string | Yes               | Non-empty provider voice identifier                              |
-| `provider`        | string | No                | `openai` by default; also `azure`, `google`, `amazon`, `edge`    |
-| `region`          | string | Provider-specific | Required for Azure and Amazon, forbidden otherwise               |
-| `model`           | string | Provider-specific | OpenAI model or Amazon engine; forbidden for Azure, Google, Edge |
-| `format`          | string | No                | Defaults to `mp3`                                                |
-| `speed`           | number | No                | Must be greater than zero; forbidden for Azure and Amazon        |
+| Key               | Type   | Required          | Rules                                                                                       |
+| ----------------- | ------ | ----------------- | ------------------------------------------------------------------------------------------- |
+| `target`          | string | Yes               | Non-empty Anki field name, not a `field_map` key                                            |
+| `source`          | object | Yes               | Exactly one of `field` or `template`                                                        |
+| `source.field`    | string | One source form   | Must be a `field_map` key                                                                   |
+| `source.template` | string | One source form   | Placeholders must be `field_map` keys, case-insensitive                                     |
+| `voice`           | string | Yes               | Non-empty provider voice identifier                                                         |
+| `provider`        | string | No                | `openai` by default; also `azure`, `google`, `amazon`, `edge`                               |
+| `region`          | string | Provider-specific | Required for Azure and Amazon, forbidden otherwise                                          |
+| `model`           | string | Provider-specific | OpenAI model or Amazon engine; forbidden for Azure, Google, Edge                            |
+| `format`          | string | No                | Defaults to `mp3`                                                                           |
+| `speed`           | number | No                | Must be greater than zero; forbidden for Azure and Amazon                                   |
+| `instructions`    | string | No                | Literal OpenAI voice guidance; unsupported by `tts-1`, `tts-1-hd`, and non-OpenAI providers |
 
 Amazon `model` accepts `standard`, `neural`, `generative`, or `long-form`. Provider credentials stay outside prompt files. See [TTS providers](/tts-providers/) for exact resolution and examples.
 
@@ -3930,6 +3931,31 @@ tts:
 ```
 
 Common voice IDs include `alloy`, `ash`, `ballad`, `coral`, `echo`, `fable`, `nova`, `onyx`, `sage`, and `shimmer`. Consult the [OpenAI TTS guide](https://platform.openai.com/docs/guides/text-to-speech) for the provider’s current catalog.
+
+### Pronunciation instructions
+
+[Section titled “Pronunciation instructions”](#pronunciation-instructions)
+
+In prompt YAML, OpenAI supports optional `tts.instructions` to guide pronunciation, accent, tone, or rhythm. For example, for Czech vocabulary:
+
+```yaml
+tts:
+  target: Aussprache
+  source:
+    field: wort
+  provider: openai
+  voice: alloy
+  model: gpt-4o-mini-tts
+  instructions: >-
+    Pronounce the text as a native Czech speaker. Use standard Czech
+    pronunciation, correct diacritics, and natural sentence rhythm.
+  format: mp3
+  speed: 1.0
+```
+
+Define `wort` in the prompt’s `field_map`. Instructions are literal text, not a field template, and are sent separately from the spoken input. They work with `gpt-4o-mini-tts` (the default model), but not `tts-1`, `tts-1-hd`, or other providers. Compatible custom endpoints must support this parameter themselves. There is no instructions flag or global configuration setting.
+
+The setting applies to both `tts --prompt` and generation audio. Changing it changes the audio cache identity. To replace audio already present in Anki, run `anki-llm tts --prompt czech.md --force`. Omitting instructions preserves existing behavior and cache entries. Pronunciation guidance does not guarantee a particular pronunciation, so preview the audio before importing.
 
 ## Azure Neural TTS
 

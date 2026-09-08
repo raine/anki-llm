@@ -324,6 +324,7 @@ fn run_flag_mode(args: TtsArgs) -> Result<()> {
         model: runtime.model,
         format: runtime.format,
         speed: runtime.speed,
+        instructions: None,
         target: field,
         source,
         batch_size: runtime.batch_size,
@@ -610,6 +611,7 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
         model: resolved.model.clone(),
         format: resolved.format,
         speed: resolved.speed,
+        instructions: resolved.instructions.clone(),
         endpoint: endpoint_identity,
         field_map: field_map_for_projection.cloned(),
     });

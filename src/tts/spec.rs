@@ -112,6 +112,7 @@ pub struct ResolvedTtsSpec {
     pub model: Option<String>,
     pub format: AudioFormat,
     pub speed: Option<f32>,
+    pub instructions: Option<String>,
     pub target: String,
     pub source: TemplateSource,
     pub batch_size: u32,
@@ -134,6 +135,7 @@ pub struct CliOverrides<'a> {
 }
 
 pub fn resolve(spec: &TtsSpec, overrides: &CliOverrides) -> Result<ResolvedTtsSpec> {
+    spec.validate_instructions().map_err(anyhow::Error::msg)?;
     let config = read_config().ok();
 
     let provider_name = spec
@@ -337,6 +339,7 @@ pub fn resolve(spec: &TtsSpec, overrides: &CliOverrides) -> Result<ResolvedTtsSp
         model,
         format,
         speed,
+        instructions: spec.instructions.clone(),
         target: spec.target.clone(),
         source,
         batch_size: overrides.batch_size,
@@ -374,6 +377,7 @@ mod tests {
             model: None,
             format: None,
             speed: None,
+            instructions: None,
         }
     }
 
@@ -390,6 +394,29 @@ mod tests {
             force: false,
             dry_run: false,
         }
+    }
+
+    #[test]
+    fn resolves_and_validates_instructions() {
+        let mut s = spec(Some("front"), None);
+        s.instructions = Some("Speak Czech.".into());
+        let resolved = resolve(&s, &overrides()).unwrap();
+        assert_eq!(resolved.instructions, s.instructions);
+        s.model = Some("tts-1".into());
+        assert!(
+            resolve(&s, &overrides())
+                .unwrap_err()
+                .to_string()
+                .contains("tts.instructions")
+        );
+        s.model = None;
+        s.provider = Some("edge".into());
+        assert!(
+            resolve(&s, &overrides())
+                .unwrap_err()
+                .to_string()
+                .contains("tts.instructions")
+        );
     }
 
     #[test]

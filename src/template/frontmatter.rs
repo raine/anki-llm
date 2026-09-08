@@ -53,6 +53,23 @@ pub struct TtsSpec {
     pub format: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speed: Option<f32>,
+    /// Literal OpenAI voice guidance, separate from the spoken text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<String>,
+}
+
+impl TtsSpec {
+    pub(crate) fn validate_instructions(&self) -> Result<(), String> {
+        if self.instructions.is_some() {
+            if self.provider.as_deref().unwrap_or("openai") != "openai" {
+                return Err("tts.instructions is only supported with tts.provider 'openai'".into());
+            }
+            if matches!(self.model.as_deref(), Some("tts-1" | "tts-1-hd")) {
+                return Err("tts.instructions is not supported with tts.model 'tts-1' or 'tts-1-hd'; use gpt-4o-mini-tts".into());
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Exactly one of `field` / `template` must be set. Both reference
@@ -184,6 +201,8 @@ pub fn parse_prompt_file(content: &str) -> Result<ParsedPromptFile, TemplateErro
     }
 
     if let Some(ref tts) = frontmatter.tts {
+        tts.validate_instructions()
+            .map_err(TemplateError::InvalidFrontmatter)?;
         if tts.target.trim().is_empty() {
             return Err(TemplateError::InvalidFrontmatter(
                 "tts.target is required".into(),
@@ -490,6 +509,65 @@ body";
     }
 
     // ---- TTS spec tests -------------------------------------------------
+
+    #[test]
+    fn tts_instructions_parse_and_validate() {
+        let yaml = "---
+deck: Czech
+note_type: Basic
+field_map:
+  wort: Wort
+tts:
+  target: Aussprache
+  source:
+    field: wort
+  voice: alloy
+  instructions: 'Use Czech pronunciation. Keep {wort} literal.'
+---
+body";
+        let parsed = parse_prompt_file(yaml).unwrap();
+        assert_eq!(
+            parsed.frontmatter.tts.unwrap().instructions.as_deref(),
+            Some("Use Czech pronunciation. Keep {wort} literal.")
+        );
+        for provider in ["azure", "google", "amazon", "edge"] {
+            let yaml = yaml.replace(
+                "  voice: alloy",
+                &format!("  voice: alloy\n  provider: {provider}"),
+            );
+            assert!(
+                parse_prompt_file(&yaml)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("tts.instructions")
+            );
+        }
+        for model in ["tts-1", "tts-1-hd"] {
+            let yaml = yaml.replace(
+                "  voice: alloy",
+                &format!("  voice: alloy\n  model: {model}"),
+            );
+            assert!(
+                parse_prompt_file(&yaml)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("tts.instructions")
+            );
+        }
+        assert!(
+            parse_prompt_file(&yaml.replace(
+                "  voice: alloy",
+                "  voice: alloy\n  model: gpt-4o-mini-tts-2025-12-15"
+            ))
+            .is_ok()
+        );
+        assert!(
+            parse_prompt_file(
+                &yaml.replace("'Use Czech pronunciation. Keep {wort} literal.'", "[]")
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn parse_tts_block_with_field_source() {

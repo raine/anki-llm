@@ -59,6 +59,38 @@ tts:
 
 Common voice IDs include `alloy`, `ash`, `ballad`, `coral`, `echo`, `fable`, `nova`, `onyx`, `sage`, and `shimmer`. Consult the [OpenAI TTS guide](https://platform.openai.com/docs/guides/text-to-speech) for the provider's current catalog.
 
+### Pronunciation instructions
+
+In prompt YAML, OpenAI supports optional `tts.instructions` to guide pronunciation,
+accent, tone, or rhythm. For example, for Czech vocabulary:
+
+```yaml
+tts:
+  target: Aussprache
+  source:
+    field: wort
+  provider: openai
+  voice: alloy
+  model: gpt-4o-mini-tts
+  instructions: >-
+    Pronounce the text as a native Czech speaker. Use standard Czech
+    pronunciation, correct diacritics, and natural sentence rhythm.
+  format: mp3
+  speed: 1.0
+```
+
+Define `wort` in the prompt's `field_map`. Instructions are literal text, not a
+field template, and are sent separately from the spoken input. They work with
+`gpt-4o-mini-tts` (the default model), but not `tts-1`, `tts-1-hd`, or other
+providers. Compatible custom endpoints must support this parameter themselves.
+There is no instructions flag or global configuration setting.
+
+The setting applies to both `tts --prompt` and generation audio. Changing it
+changes the audio cache identity. To replace audio already present in Anki, run
+`anki-llm tts --prompt czech.md --force`. Omitting instructions preserves existing
+behavior and cache entries. Pronunciation guidance does not guarantee a particular
+pronunciation, so preview the audio before importing.
+
 ## Azure Neural TTS
 
 Azure needs a Speech subscription key and region.

@@ -26,6 +26,7 @@ pub struct TtsProcessConfig {
     pub model: Option<String>,
     pub format: AudioFormat,
     pub speed: Option<f32>,
+    pub instructions: Option<String>,
     /// Endpoint identity for cache-key derivation. For OpenAI this is the
     /// `api_base_url`; for Azure it's the derived region endpoint. The
     /// provider itself still uses its own internal endpoint to make the
@@ -92,6 +93,7 @@ pub fn build_tts_process_fn(cfg: TtsProcessConfig) -> ProcessFn {
         model: cfg.model,
         format: cfg.format,
         speed: cfg.speed,
+        instructions: cfg.instructions,
         endpoint: cfg.endpoint,
     }));
 
