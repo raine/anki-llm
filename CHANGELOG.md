@@ -3,12 +3,12 @@ title: "Changelog"
 description: "Review notable changes in anki-llm releases."
 ---
 
-## Unreleased
+## v2.0.20 (2026-09-08)
 
-- Add optional `tts.instructions` in prompt YAML to guide OpenAI pronunciation,
-  accent, and tone. ([#7](https://github.com/raine/anki-llm/issues/7))
-- Publish the complete documentation site at https://anki-llm.raine.dev and bundle
-  its LLM-readable reference for offline access through `anki-llm docs`.
+- Guide OpenAI text-to-speech pronunciation, accent, and tone with optional `tts.instructions` in prompt YAML. ([#7](https://github.com/raine/anki-llm/issues/7))
+- Set reasoning effort for supported models with `--reasoning-effort`, environment variables, or workspace and global settings.
+- Remove saved settings with `config unset` without editing the configuration file manually.
+- Browse the complete documentation at https://anki-llm.raine.dev or read it offline with `anki-llm docs`.
 
 ## v2.0.19 (2026-07-28)
 
