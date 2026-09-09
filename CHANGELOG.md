@@ -3,6 +3,10 @@ title: "Changelog"
 description: "Review notable changes in anki-llm releases."
 ---
 
+## Unreleased
+
+- Inspect OpenAI text-to-speech requests, including pronunciation instructions, in automatic session logs or with `tts --log` and `--very-verbose`. ([#7](https://github.com/raine/anki-llm/issues/7))
+
 ## v2.0.20 (2026-09-08)
 
 - Guide OpenAI text-to-speech pronunciation, accent, and tone with optional `tts.instructions` in prompt YAML. ([#7](https://github.com/raine/anki-llm/issues/7))

@@ -1827,6 +1827,12 @@ These paths assume the standard home directory layout used by the current implem
 
 > Review notable changes in anki-llm releases.
 
+## Unreleased
+
+[Section titled “Unreleased”](#unreleased)
+
+* Inspect OpenAI text-to-speech requests, including pronunciation instructions, in automatic session logs or with `tts --log` and `--very-verbose`. ([#7](https://github.com/raine/anki-llm/issues/7))
+
 ## v2.0.20 (2026-09-08)
 
 [Section titled “v2.0.20 (2026-09-08)”](#v2020-2026-09-08)
