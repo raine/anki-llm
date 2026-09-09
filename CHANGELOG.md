@@ -3,7 +3,7 @@ title: "Changelog"
 description: "Review notable changes in anki-llm releases."
 ---
 
-## Unreleased
+## v2.0.21 (2026-09-09)
 
 - Inspect OpenAI text-to-speech requests, including pronunciation instructions, in automatic session logs or with `tts --log` and `--very-verbose`. ([#7](https://github.com/raine/anki-llm/issues/7))
 
