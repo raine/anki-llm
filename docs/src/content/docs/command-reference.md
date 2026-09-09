@@ -455,6 +455,9 @@ Usage: anki-llm tts [OPTIONS] [DECK]
 
 **Options**
 
+- **`--log <LOG>`**: Append OpenAI TTS request JSON to a log file
+- **`--very-verbose`**: Print OpenAI TTS request JSON to stderr
+  - Default: `false`
 - **`-q, --query <QUERY>`**: Anki search query (e.g. "tag:leech", "deck:Japanese -Audio:")
 - **`--prompt <PROMPT>`**: Path to a generate prompt YAML; reads its `tts:` block instead of taking deck-design flags on the CLI
 - **`--field <FIELD>`**: Target field to write [sound:...] into (flag mode; required)

@@ -153,7 +153,13 @@ pub(super) fn run_copy_mode(
             Some(crate::tts::service::build_bundle(
                 spec,
                 anki_client(),
-                crate::tts::service::TtsBundleOptions { azure_region: None },
+                crate::tts::service::TtsBundleOptions {
+                    azure_region: None,
+                    logger: Some(std::sync::Arc::new(crate::llm::logger::LlmLogger::new(
+                        args.log.as_deref(),
+                        args.very_verbose,
+                    )?)),
+                },
             )?)
         } else {
             None

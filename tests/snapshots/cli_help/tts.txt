@@ -6,6 +6,10 @@ Arguments:
   [DECK]  Deck name to process (defaults to deck from --prompt frontmatter)
 
 Options:
+      --log <LOG>
+          Append OpenAI TTS request JSON to a log file
+      --very-verbose
+          Print OpenAI TTS request JSON to stderr
   -q, --query <QUERY>
           Anki search query (e.g. "tag:leech", "deck:Japanese -Audio:")
       --prompt <PROMPT>

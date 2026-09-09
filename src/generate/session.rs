@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 
 use crate::anki::client::{AnkiClient, anki_client};
@@ -31,7 +33,7 @@ pub(super) struct PreparedSession {
     pub field_map_keys: Vec<String>,
     pub anki: AnkiClient,
     pub client: LlmClient,
-    pub logger: LlmLogger,
+    pub logger: Arc<LlmLogger>,
     /// Lazy TTS bundle. Holds the `TtsSpec` from the prompt frontmatter
     /// and a `OnceCell<TtsBundle>` that's populated on first access via
     /// `SessionTts::bundle()`. Deferring construction means
@@ -83,7 +85,7 @@ pub(super) fn prepare_session(
     })?;
     progress.step_done(PipelineStep::ValidateAnki, None);
 
-    let logger = LlmLogger::new(args.log.as_deref(), very_verbose)?;
+    let logger = Arc::new(LlmLogger::new(args.log.as_deref(), very_verbose)?);
     let runtime = build_runtime_config(RuntimeConfigArgs {
         model: args.model.as_deref(),
         api_base_url: args.api_base_url.as_deref(),
@@ -105,7 +107,11 @@ pub(super) fn prepare_session(
     // (`AZURE_TTS_KEY`, `OPENAI_API_KEY`,
     // `~/.config/anki-llm/config.json`'s `tts_*` fields); generate's
     // `--api-key` / `--api-base-url` are LLM-only and never forwarded.
-    let tts = loaded.frontmatter.tts.clone().map(SessionTts::new);
+    let tts = loaded
+        .frontmatter
+        .tts
+        .clone()
+        .map(|spec| SessionTts::new(spec).with_logger(Arc::clone(&logger)));
 
     Ok(PreparedSession {
         frontmatter: loaded.frontmatter,

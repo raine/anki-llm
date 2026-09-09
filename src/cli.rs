@@ -88,6 +88,14 @@ pub struct VoicesArgs {
 
 #[derive(clap::Args)]
 pub struct TtsArgs {
+    /// Append OpenAI TTS request JSON to a log file
+    #[arg(long)]
+    pub log: Option<PathBuf>,
+
+    /// Print OpenAI TTS request JSON to stderr
+    #[arg(long)]
+    pub very_verbose: bool,
+
     /// Deck name to process (defaults to deck from --prompt frontmatter)
     pub deck: Option<String>,
 

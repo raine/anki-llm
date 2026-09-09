@@ -332,3 +332,22 @@ fn process_deck_accepts_note_type() {
         _ => panic!("expected ProcessDeck"),
     }
 }
+
+#[test]
+fn tts_accepts_existing_logging_options() {
+    let cli = Cli::try_parse_from([
+        "anki-llm",
+        "tts",
+        "--prompt",
+        "czech.md",
+        "--log",
+        "tts.log",
+        "--very-verbose",
+    ])
+    .unwrap();
+    let Commands::Tts(args) = cli.command else {
+        panic!("expected tts")
+    };
+    assert_eq!(args.log.unwrap(), std::path::PathBuf::from("tts.log"));
+    assert!(args.very_verbose);
+}

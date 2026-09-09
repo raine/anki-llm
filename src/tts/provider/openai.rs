@@ -1,7 +1,10 @@
 use std::io::Read;
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
+
+use crate::llm::logger::LlmLogger;
 
 use super::{RenderProfile, SynthesisRequest, TtsProvider};
 use crate::tts::error::TtsError;
@@ -14,6 +17,7 @@ pub struct OpenAiTtsProvider {
     base_url: String,
     api_key: Option<String>,
     agent: ureq::Agent,
+    logger: Option<Arc<LlmLogger>>,
 }
 
 impl OpenAiTtsProvider {
@@ -26,6 +30,32 @@ impl OpenAiTtsProvider {
             base_url: base_url.unwrap_or_else(|| DEFAULT_BASE.to_string()),
             api_key,
             agent,
+            logger: None,
+        }
+    }
+
+    pub fn with_logger(mut self, logger: Option<Arc<LlmLogger>>) -> Self {
+        self.logger = logger;
+        self
+    }
+
+    fn request_body<'a>(&self, req: &'a SynthesisRequest) -> SpeechRequest<'a> {
+        SpeechRequest {
+            model: req.model.as_deref().unwrap_or(DEFAULT_MODEL),
+            input: &req.payload,
+            voice: &req.voice,
+            response_format: req.format.ext(),
+            speed: req.speed,
+            instructions: req.instructions.as_deref(),
+        }
+    }
+
+    fn log_request(&self, body: &SpeechRequest<'_>, cached: bool) {
+        if let Some(logger) = &self.logger
+            && logger.is_active()
+            && let Ok(json) = serde_json::to_string_pretty(body)
+        {
+            logger.log_tts_request(&json, cached);
         }
     }
 }
@@ -51,16 +81,14 @@ impl TtsProvider for OpenAiTtsProvider {
         RenderProfile::PlainText
     }
 
+    fn log_cache_hit(&self, req: &SynthesisRequest) {
+        self.log_request(&self.request_body(req), true);
+    }
+
     fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {
         let url = format!("{}/audio/speech", self.base_url);
-        let body = SpeechRequest {
-            model: req.model.as_deref().unwrap_or(DEFAULT_MODEL),
-            input: &req.payload,
-            voice: &req.voice,
-            response_format: req.format.ext(),
-            speed: req.speed,
-            instructions: req.instructions.as_deref(),
-        };
+        let body = self.request_body(req);
+        self.log_request(&body, false);
 
         let mut request = self
             .agent
@@ -142,7 +170,11 @@ mod tests {
                     .unwrap();
                 serde_json::from_slice::<serde_json::Value>(&body).unwrap()
             });
-            let provider = OpenAiTtsProvider::new(None, Some(base));
+            let logs = tempfile::tempdir().unwrap();
+            let log_path = logs.path().join("requests.log");
+            let logger = Arc::new(LlmLogger::file_only(&log_path));
+            let provider = OpenAiTtsProvider::new(Some("secret-test-key".into()), Some(base))
+                .with_logger(Some(logger));
             let req = SynthesisRequest {
                 payload: "v".into(),
                 provider_id: "openai".into(),
@@ -156,6 +188,32 @@ mod tests {
             };
             assert_eq!(provider.synthesize(&req).unwrap(), b"audio");
             let body = server.join().unwrap();
+            let logged = std::fs::read_to_string(&log_path).unwrap();
+            let json = logged
+                .split("--- TTS REQUEST (POST /audio/speech) ---\n")
+                .nth(1)
+                .unwrap()
+                .trim();
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(json).unwrap(),
+                body
+            );
+            assert!(!logged.contains("secret-test-key"));
+            assert!(!logged.contains("Authorization"));
+            assert!(!logged.contains("CACHE HIT"));
+
+            provider.log_cache_hit(&req);
+            let logged = std::fs::read_to_string(&log_path).unwrap();
+            assert_eq!(logged.matches("--- TTS REQUEST").count(), 1);
+            let cached = logged
+                .split("--- TTS CACHE HIT (no HTTP request) ---\n")
+                .nth(1)
+                .unwrap()
+                .trim();
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(cached).unwrap(),
+                body
+            );
             assert_eq!(body["input"], "v");
             assert_eq!(body["model"], DEFAULT_MODEL);
             match instructions {

@@ -4,12 +4,13 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Logger for raw LLM prompts and responses. Thread-safe via internal mutex.
+/// Logger for raw LLM prompts/responses and OpenAI TTS requests.
+/// Thread-safe via internal mutex.
 ///
 /// Supports three output modes (all can be active simultaneously):
 /// - Automatic: always writes to `~/.local/state/anki-llm/logs/<timestamp>.log`
-/// - `--log <path>`: append each prompt/response pair to a user-specified file
-/// - `--very-verbose`: print each prompt/response pair to stderr
+/// - `--log <path>`: append entries to a user-specified file
+/// - `--very-verbose`: print entries to stderr
 pub struct LlmLogger {
     /// User-specified log file (--log flag).
     file: Option<Mutex<File>>,
@@ -40,6 +41,15 @@ impl LlmLogger {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn file_only(path: &Path) -> Self {
+        Self {
+            file: Some(Mutex::new(File::create(path).unwrap())),
+            auto_file: None,
+            very_verbose: false,
+        }
+    }
+
     pub fn is_active(&self) -> bool {
         self.file.is_some() || self.auto_file.is_some() || self.very_verbose
     }
@@ -68,6 +78,20 @@ impl LlmLogger {
             .unwrap_or(0);
         let entry = format!("[{ts}]\n--- PROMPT ---\n{prompt}\n--- ERROR ---\n{error}\n\n");
         self.write(&entry);
+    }
+
+    /// Record the JSON body of an OpenAI speech request, never headers or audio.
+    pub fn log_tts_request(&self, body: &str, cached: bool) {
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let label = if cached {
+            "TTS CACHE HIT (no HTTP request)"
+        } else {
+            "TTS REQUEST (POST /audio/speech)"
+        };
+        self.write(&format!("[{ts}]\n--- {label} ---\n{body}\n\n"));
     }
 
     fn write(&self, entry: &str) {

@@ -1430,6 +1430,9 @@ Usage: anki-llm tts [OPTIONS] [DECK]
 
 **Options**
 
+* **`--log <LOG>`**: Append OpenAI TTS request JSON to a log file
+* **`--very-verbose`**: Print OpenAI TTS request JSON to stderr
+  * Default: `false`
 * **`-q, --query <QUERY>`**: Anki search query (e.g. “tag:leech”, “deck:Japanese -Audio:”)
 * **`--prompt <PROMPT>`**: Path to a generate prompt YAML; reads its `tts:` block instead of taking deck-design flags on the CLI
 * **`--field <FIELD>`**: Target field to write \[sound:…] into (flag mode; required)
@@ -3959,6 +3962,21 @@ tts:
 Define `wort` in the prompt’s `field_map`. Instructions are literal text, not a field template, and are sent separately from the spoken input. They work with `gpt-4o-mini-tts` (the default model), but not `tts-1`, `tts-1-hd`, or other providers. Compatible custom endpoints must support this parameter themselves. There is no instructions flag or global configuration setting.
 
 The setting applies to both `tts --prompt` and generation audio. Changing it changes the audio cache identity. To replace audio already present in Anki, run `anki-llm tts --prompt czech.md --force`. Omitting instructions preserves existing behavior and cache entries. Pronunciation guidance does not guarantee a particular pronunciation, so preview the audio before importing.
+
+### Debugging OpenAI requests
+
+[Section titled “Debugging OpenAI requests”](#debugging-openai-requests)
+
+OpenAI TTS request JSON, including `instructions`, is automatically written to `~/.local/state/anki-llm/logs/<timestamp>.log`, just like LLM logging. During `generate`, speech requests use the same session log and logging options as the LLM. Standalone `tts` also supports these options:
+
+```sh
+anki-llm tts --prompt czech.md --log tts.log
+anki-llm tts --prompt czech.md --very-verbose
+```
+
+`--log` appends to the specified file; `--very-verbose` also prints to stderr. Entries labeled `TTS REQUEST` contain the JSON body sent to `/audio/speech`. `TTS CACHE HIT (no HTTP request)` entries describe reused audio, not an API call. Each retry logs another request. Dry runs do not send or log speech requests. Notes with populated audio fields are skipped unless you pass `--force`, which allows replacing the field but does not bypass the audio cache.
+
+Authorization headers, endpoint URLs, and audio response bytes are not logged. Logs do contain spoken text and instructions, so treat them as private card data. This request logging covers OpenAI and OpenAI-compatible TTS, not other providers.
 
 ## Azure Neural TTS
 

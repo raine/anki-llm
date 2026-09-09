@@ -95,6 +95,8 @@ pub struct SynthesisRequest {
 pub trait TtsProvider: Send + Sync {
     fn id(&self) -> &'static str;
     fn render_profile(&self) -> RenderProfile;
+    /// Report reused audio without implying a synthesis request was sent.
+    fn log_cache_hit(&self, _req: &SynthesisRequest) {}
     fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError>;
 }
 
@@ -125,11 +127,18 @@ pub enum ProviderSelection {
 }
 
 pub fn build(selection: ProviderSelection) -> Arc<dyn TtsProvider> {
+    build_with_logger(selection, None)
+}
+
+pub fn build_with_logger(
+    selection: ProviderSelection,
+    logger: Option<Arc<crate::llm::logger::LlmLogger>>,
+) -> Arc<dyn TtsProvider> {
     match selection {
         ProviderSelection::OpenAi {
             api_key,
             api_base_url,
-        } => Arc::new(openai::OpenAiTtsProvider::new(api_key, api_base_url)),
+        } => Arc::new(openai::OpenAiTtsProvider::new(api_key, api_base_url).with_logger(logger)),
         ProviderSelection::Azure {
             subscription_key,
             region,

@@ -21,7 +21,7 @@ use crate::template::frontmatter::parse_prompt_file;
 use super::cache::TtsCache;
 use super::media::AnkiMediaStore;
 use super::process_row::{TtsProcessConfig, build_tts_process_fn};
-use super::provider::build as build_provider;
+use super::provider::build_with_logger as build_provider;
 use super::runtime::{TtsRuntimeArgs, build_tts_runtime};
 use super::spec::{CliOverrides, ResolvedProvider, ResolvedTtsSpec, resolve as resolve_tts_spec};
 use super::template::TemplateSource;
@@ -593,7 +593,11 @@ fn run_with_resolved(inputs: ResolvedRunInputs<'_>) -> Result<()> {
     }
 
     let endpoint_identity = resolved.provider.endpoint_identity();
-    let provider = build_provider(resolved.provider.clone().into_selection());
+    let logger = Arc::new(crate::llm::logger::LlmLogger::new(
+        args.log.as_deref(),
+        args.very_verbose,
+    )?);
+    let provider = build_provider(resolved.provider.clone().into_selection(), Some(logger));
 
     let cache_dir = TtsCache::default_dir()
         .context("failed to locate cache directory (home dir unavailable)")?;

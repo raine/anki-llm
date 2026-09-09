@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use crate::anki::client::{AnkiClient, anki_client};
 use crate::data::Row;
+use crate::llm::logger::LlmLogger;
 use crate::template::frontmatter::TtsSpec;
 
 use super::cache::TtsCache;
@@ -15,7 +16,7 @@ use super::error::TtsError;
 use super::ir::parse_furigana;
 use super::media::AnkiMediaStore;
 use super::provider::{
-    AudioFormat, RenderProfile, SynthesisRequest, TtsProvider, build as build_provider,
+    AudioFormat, RenderProfile, SynthesisRequest, TtsProvider, build_with_logger as build_provider,
 };
 use super::render::{render_edge_ssml, render_plain_text, render_ssml};
 use super::spec::{CliOverrides, resolve as resolve_tts_spec};
@@ -178,6 +179,7 @@ impl TtsService {
     /// Never uploads.
     pub fn ensure_cached(&self, prepared: &PreparedSynthesis) -> Result<Vec<u8>, TtsError> {
         if let Some(bytes) = self.cache.load(&prepared.request) {
+            self.provider.log_cache_hit(&prepared.request);
             return Ok(bytes);
         }
         let bytes = self.provider.synthesize(&prepared.request)?;
@@ -227,6 +229,7 @@ pub struct TtsBundle {
 /// threads.
 pub struct SessionTts {
     spec: TtsSpec,
+    logger: Option<Arc<LlmLogger>>,
     bundle: OnceCell<TtsBundle>,
 }
 
@@ -234,8 +237,14 @@ impl SessionTts {
     pub fn new(spec: TtsSpec) -> Self {
         Self {
             spec,
+            logger: None,
             bundle: OnceCell::new(),
         }
+    }
+
+    pub fn with_logger(mut self, logger: Arc<LlmLogger>) -> Self {
+        self.logger = Some(logger);
+        self
     }
 
     /// Return the cached `TtsBundle`, building it on first call.
@@ -251,7 +260,10 @@ impl SessionTts {
         let built = build_bundle(
             &self.spec,
             anki_client(),
-            TtsBundleOptions { azure_region: None },
+            TtsBundleOptions {
+                azure_region: None,
+                logger: self.logger.clone(),
+            },
         )?;
         // Single-threaded OnceCell — nothing else can beat us to `set`.
         let _ = self.bundle.set(built);
@@ -267,7 +279,11 @@ impl SessionTts {
     pub fn with_bundle(spec: TtsSpec, bundle: TtsBundle) -> Self {
         let cell = OnceCell::new();
         let _ = cell.set(bundle);
-        Self { spec, bundle: cell }
+        Self {
+            spec,
+            bundle: cell,
+            logger: None,
+        }
     }
 }
 
@@ -280,6 +296,7 @@ impl SessionTts {
 /// credentials now resolve exclusively through env vars and
 /// `~/.config/anki-llm/config.json`'s `tts_*` fields via `spec::resolve`.
 pub struct TtsBundleOptions<'a> {
+    pub logger: Option<Arc<LlmLogger>>,
     pub azure_region: Option<&'a str>,
 }
 
@@ -314,7 +331,7 @@ pub fn build_bundle(
     let resolved = resolve_tts_spec(spec, &overrides)?;
 
     let endpoint_identity = resolved.provider.endpoint_identity();
-    let provider = build_provider(resolved.provider.clone().into_selection());
+    let provider = build_provider(resolved.provider.clone().into_selection(), opts.logger);
 
     let cache_dir = TtsCache::default_dir()
         .context("failed to locate cache directory (home dir unavailable)")?;
@@ -385,6 +402,7 @@ mod tests {
         id: &'static str,
         render_profile: RenderProfile,
         calls: Mutex<Vec<SynthesisRequest>>,
+        cache_hits: Mutex<Vec<SynthesisRequest>>,
     }
 
     impl MockProvider {
@@ -393,6 +411,7 @@ mod tests {
                 id,
                 render_profile,
                 calls: Mutex::new(Vec::new()),
+                cache_hits: Mutex::new(Vec::new()),
             }
         }
 
@@ -408,6 +427,10 @@ mod tests {
 
         fn render_profile(&self) -> RenderProfile {
             self.render_profile
+        }
+
+        fn log_cache_hit(&self, req: &SynthesisRequest) {
+            self.cache_hits.lock().unwrap().push(req.clone());
         }
 
         fn synthesize(&self, req: &SynthesisRequest) -> Result<Vec<u8>, TtsError> {
@@ -485,7 +508,11 @@ mod tests {
         assert_eq!(guided.spoken_chars, 1);
         assert_ne!(plain.filename, guided.filename);
         svc.ensure_cached(&guided).unwrap();
+        assert!(provider.cache_hits.lock().unwrap().is_empty());
         svc.ensure_cached(&guided).unwrap();
+        let hits = provider.cache_hits.lock().unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].instructions, svc.instructions);
         assert_eq!(provider.call_count(), 2);
         assert_eq!(
             provider.calls.lock().unwrap()[1].instructions,
@@ -725,7 +752,10 @@ mod tests {
         let bundle = build_bundle(
             &tts_spec("edge"),
             anki_client(),
-            TtsBundleOptions { azure_region: None },
+            TtsBundleOptions {
+                azure_region: None,
+                logger: None,
+            },
         )
         .unwrap();
         assert_eq!(bundle.service.provider_id(), "edge");

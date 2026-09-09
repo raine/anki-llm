@@ -91,6 +91,29 @@ changes the audio cache identity. To replace audio already present in Anki, run
 behavior and cache entries. Pronunciation guidance does not guarantee a particular
 pronunciation, so preview the audio before importing.
 
+### Debugging OpenAI requests
+
+OpenAI TTS request JSON, including `instructions`, is automatically written to
+`~/.local/state/anki-llm/logs/<timestamp>.log`, just like LLM logging. During
+`generate`, speech requests use the same session log and logging options as the
+LLM. Standalone `tts` also supports these options:
+
+```sh
+anki-llm tts --prompt czech.md --log tts.log
+anki-llm tts --prompt czech.md --very-verbose
+```
+
+`--log` appends to the specified file; `--very-verbose` also prints to stderr.
+Entries labeled `TTS REQUEST` contain the JSON body sent to `/audio/speech`.
+`TTS CACHE HIT (no HTTP request)` entries describe reused audio, not an API call.
+Each retry logs another request. Dry runs do not send or log speech requests.
+Notes with populated audio fields are skipped unless you pass `--force`, which
+allows replacing the field but does not bypass the audio cache.
+
+Authorization headers, endpoint URLs, and audio response bytes are not logged.
+Logs do contain spoken text and instructions, so treat them as private card data.
+This request logging covers OpenAI and OpenAI-compatible TTS, not other providers.
+
 ## Azure Neural TTS
 
 Azure needs a Speech subscription key and region.
