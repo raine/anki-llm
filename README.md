@@ -19,6 +19,17 @@
   <img src="https://anki-llm.raine.dev/anki-llm-generate.webp" alt="anki-llm generation TUI" width="830">
 </p>
 
+<a href="https://aventasks.dev/">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://aventasks.dev/readme/aven-banner-dark.webp">
+    <img src="https://aventasks.dev/readme/aven-banner-light.webp" alt="aven: one task queue for you and your coding agents" width="100%">
+  </picture>
+</a>
+
+<sub>Also from the author of anki-llm: <a href="https://aventasks.dev/"><b>aven</b></a>, one
+queue for every project, with a keyboard-driven TUI for you and a CLI for your
+agents.</sub>
+
 ## What people say
 
 - *"What's next get AI to answer your flashcards for you?"* - grei_earl on Reddit
