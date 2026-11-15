@@ -60,6 +60,9 @@ ammonia = "4"
 # its transitive dep `named-item` requires a nightly-only feature.
 jsonrepair = "0.1"
 
+# Fallback LLM pricing for models not in the built-in table
+llm-prices = "1.1"
+
 # TTS audio hashing and media upload
 sha2 = "0.11"
 base64 = "0.22"

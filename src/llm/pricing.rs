@@ -5,7 +5,23 @@ pub struct ModelPricing {
 }
 
 /// Returns pricing for a known model, or `None` for unknown models.
+///
+/// Models in the table below use these rates. Anything else falls back to the
+/// `llm-prices` table, which covers Claude models, newer OpenAI and Gemini
+/// models, and provider-prefixed ids such as `anthropic/claude-sonnet-4-6`.
 pub fn model_pricing(model: &str) -> Option<ModelPricing> {
+    table_pricing(model).or_else(|| fallback_pricing(model))
+}
+
+fn fallback_pricing(model: &str) -> Option<ModelPricing> {
+    let price = llm_prices::lookup(model)?;
+    Some(ModelPricing {
+        input_cost_per_million: price.input?,
+        output_cost_per_million: price.output?,
+    })
+}
+
+fn table_pricing(model: &str) -> Option<ModelPricing> {
     let (input, output) = match model {
         // GPT-4.1 family
         "gpt-4.1" => (2.0, 8.0),
@@ -115,6 +131,31 @@ mod tests {
     #[test]
     fn format_cost_small() {
         assert_eq!(format_cost(0.001), "$0.0010");
+    }
+
+    #[test]
+    fn table_rates_take_precedence_over_fallback() {
+        // llm-prices maps this id to a different row; the local rate must win.
+        let p = model_pricing("deepseek-v4-flash").unwrap();
+        assert_eq!(p.input_cost_per_million, 0.14);
+        assert_eq!(p.output_cost_per_million, 0.28);
+    }
+
+    #[test]
+    fn calculate_cost_falls_back_for_models_not_in_table() {
+        for model in [
+            "claude-sonnet-4-6",
+            "anthropic/claude-sonnet-4-6",
+            "gpt-5.5",
+        ] {
+            assert!(
+                calculate_cost(model, 1000, 500) > 0.0,
+                "no fallback pricing for {model}"
+            );
+        }
+        let cost = calculate_cost("claude-sonnet-4-6", 1000, 500);
+        let expected = (1000.0 / 1_000_000.0) * 3.0 + (500.0 / 1_000_000.0) * 15.0;
+        assert!((cost - expected).abs() < 1e-12);
     }
 
     #[test]
